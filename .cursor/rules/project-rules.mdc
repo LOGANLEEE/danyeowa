@@ -27,22 +27,79 @@ alwaysApply: true
 ```
 app/                    # Expo Router pages (file-based routing)
 ├── (tabs)/            # Tab navigation screens
+│   ├── home.tsx       # Home screen
+│   └── schedule.tsx   # Schedule/calendar screen
 ├── auth/              # Authentication screens
+│   ├── login.tsx      # Login screen
+│   ├── signup.tsx     # Signup screen
+│   ├── verify-otp.tsx # OTP verification
+│   └── welcome.tsx    # Welcome screen
+├── onboarding/        # Onboarding flow
+│   ├── welcome.tsx    # Onboarding welcome
+│   ├── feature-tour.tsx # Feature tour
+│   └── profile-setup.tsx # Profile setup
+├── schedule/          # Schedule-related screens
+│   └── add-monthly.tsx # Add monthly rosters
 ├── _layout.tsx        # Root layout
-└── index.tsx          # Entry point
+├── index.tsx          # Entry point
+└── modal.tsx          # Modal screen
 
 components/            # Reusable UI components
 ├── ui/                # Base UI components
-└── ThemedText.tsx     # Themed components
+│   ├── CalendarWrapper.tsx
+│   ├── FlightTypeToggle.tsx
+│   ├── MonthNavigation.tsx
+│   ├── Numpad.tsx
+│   ├── ThemedButton.tsx
+│   ├── ThemedInput.tsx
+│   └── icon-symbol*.tsx
+├── add-monthly.components.tsx # Monthly roster components
+├── AnimatedWelcomeBackground.tsx
+├── CoffeeIcon.tsx
+├── FloatingTabBar.tsx
+├── haptic-tab.tsx
+├── OfflineIndicator.tsx
+├── ThemedHeader.tsx
+├── ThemedLoader.tsx
+├── ThemedText.tsx
+└── ThemedView.tsx
 
 stores/                # Zustand state stores
+├── use-auth-store.ts
+├── use-connections-store.ts
+├── use-notifications-store.ts
+├── use-rosters-store.ts
+└── use-shared-rosters-store.ts
+
 lib/                   # Utilities and configurations
 ├── supabase/         # Supabase client and types
-└── secure-storage.ts  # Secure storage utilities
+│   ├── client.ts
+│   └── types.ts
+├── offline-storage.ts      # Offline caching
+├── offline-sync-manager.ts # Auto-sync manager
+├── secure-storage.ts       # Secure storage utilities
+└── sync-service.ts         # Sync service
 
 hooks/                 # Custom React hooks
+├── add-monthly.hooks.ts
+├── use-biometric.ts
+├── use-color-scheme.ts
+├── use-network-status.ts
+├── use-notifications.ts
+└── use-theme-color.ts
+
 utils/                 # Helper functions
+├── add-monthly.utils.ts
+├── animations.ts
+├── country-flags.ts
+└── flight-calculations.ts
+
+services/             # Business logic services
+└── notification-scheduler.ts
+
 constants/             # App constants
+└── theme.ts
+
 __tests__/             # Test files
 ```
 
@@ -122,9 +179,11 @@ export default function ComponentName({ ... }: Props) {
 - Mock Expo modules in `jest.setup.js`
 
 ### Test Commands
-- `npm test` - Run all tests once
-- `npm run test:watch` - Watch mode for development
-- `npm run test:coverage` - Generate coverage report
+- `npm test` or `yarn test` - Run all tests once (exits immediately, no watch mode)
+- `npm run test:watch` or `yarn test:watch` - Watch mode for development
+- `npm run test:coverage` or `yarn test:coverage` - Generate coverage report
+
+**CRITICAL**: The default `test` script runs once and exits. Watch mode is separate to prevent hanging tests.
 
 ### Test Requirements
 - Write tests for:
@@ -341,6 +400,29 @@ The app supports **ONLY** two authentication methods:
 - Biometric preferences stored securely
 - All data cleared on sign out
 
+### Onboarding Flow
+- **Route**: `app/onboarding/`
+- **Screens**:
+  1. `welcome.tsx` - Welcome screen with animated background
+  2. `profile-setup.tsx` - User profile setup (name, avatar)
+  3. `feature-tour.tsx` - Feature introduction tour
+- **Completion**: Stored in secure storage via `saveOnboardingCompleted()`
+- **Navigation**: After completion, redirects to `/(tabs)/home`
+- **Layout**: Uses Stack navigator with no headers
+
+### Monthly Roster Entry
+- **Route**: `app/schedule/add-monthly.tsx`
+- **Features**:
+  - Calendar-based interface for selecting dates
+  - Flight code prefix management (saved per user)
+  - Depart/Return flight type toggle
+  - Time input via numpad component
+  - Bulk save for multiple rosters
+  - Validation before saving
+- **Components**: `components/add-monthly.components.tsx`
+- **Hooks**: `hooks/add-monthly.hooks.ts`
+- **Utils**: `utils/add-monthly.utils.ts`
+
 ---
 
 ## 🗄️ Supabase Database Architecture
@@ -394,9 +476,18 @@ The app supports **ONLY** two authentication methods:
 
 #### 6. `notification_preferences` Table
 - **Purpose**: User preferences for notification types and timing
-- **Connection**: `notification_preferences.user_id` → `profiles.id` (UNIQUE)
+- **Connection**: `notification_preferences.user_id` → `auth.users.id` (UNIQUE, ON DELETE CASCADE)
 - **RLS**: Users can only view/update their own preferences
-- **Fields**: id, user_id, flight_departure_enabled, flight_arrival_enabled, hours_before_departure (INTEGER array), hours_before_arrival (INTEGER array), roster_update_enabled, connection_request_enabled, push_token, created_at, updated_at
+- **Fields**: 
+  - id, user_id, push_token
+  - flight_departure_enabled, hours_before_departure (INTEGER array)
+  - flight_arrival_enabled, hours_before_arrival (INTEGER array)
+  - flight_countdown_enabled, countdown_interval_hours
+  - roster_created_enabled, roster_updated_enabled, roster_deleted_enabled
+  - connection_request_enabled, connection_accepted_enabled, connection_declined_enabled
+  - roster_shared_enabled, roster_unshared_enabled
+  - push_enabled, email_enabled, sms_enabled
+  - created_at, updated_at
 - **Auto-creation**: Trigger creates default preferences on profile creation
 
 ### Database Connections
@@ -445,16 +536,28 @@ The app supports **ONLY** two authentication methods:
   - Uses roaster colors: #D2691E (light), #DEB887 (dark)
   - Usage: `<ThemedLoader fullScreen message="Loading..." />`
 
-- **GlobalLoader**: Context-based global loading provider
-  - Available via `useGlobalLoader()` hook
-  - Shows modal overlay for app-wide loading states
-  - Already integrated in root layout
+- **ThemedText**: Theme-aware text component
+  - Automatically adapts to light/dark mode
+  - Supports all Text props
+
+- **ThemedView**: Theme-aware view component
+  - Automatically adapts to light/dark mode
+  - Supports all View props
+
+- **ThemedHeader**: Custom header component
+  - Used for consistent header styling across screens
+
+- **OfflineIndicator**: Network status indicator
+  - Shows when app is offline
+  - Integrated in root layout
+  - Uses `useNetworkStatus()` hook
 
 ### Component Guidelines
 - Use ThemedText and ThemedView for theme-aware components
 - Support both light and dark modes
 - Use NativeWind (Tailwind CSS) for styling
 - Prefer className over StyleSheet
+- All components should handle loading, error, and empty states
 
 ---
 
@@ -466,6 +569,11 @@ The app supports **ONLY** two authentication methods:
 - **Queries**: RLS automatically includes user's own rosters AND shared rosters
 - **Shared Rosters**: Fetched via `shared_rosters` table join (handled by RLS policies)
 - **Indexes**: Optimized for user_id, flight_date, status queries
+- **Offline Support**: 
+  - Cached in `OfflineStorage` (AsyncStorage)
+  - Queue system for offline mutations
+  - Auto-sync on network reconnect via `OfflineSyncManager`
+  - Sync service handles conflict resolution
 
 ### Profile Data
 - **Type**: `Profile` from `lib/supabase/types.ts`
@@ -489,11 +597,71 @@ The app supports **ONLY** two authentication methods:
 ### Notifications Data
 - **Type**: `Notification` and `NotificationPreferences` from `lib/supabase/types.ts`
 - **Store**: `stores/use-notifications-store.ts` - Complete notification management
+- **Hook**: `hooks/use-notifications.ts` - Notification permissions and scheduling
 - **Service**: `services/notification-scheduler.ts` - Schedules notifications based on flight times
-- **Features**: Departure/arrival notifications, countdown notifications, customizable timing
+- **Features**: 
+  - Departure/arrival notifications (customizable hours before)
+  - Flight countdown notifications (interval-based)
+  - Roster update notifications
+  - Connection request notifications
+  - Push notification support via Expo Notifications
 - **Preferences**: User-configurable notification settings per type
+- **Scheduling**: Automatic scheduling when rosters are created/updated
 
 ---
+
+## 🪝 Custom Hooks
+
+### Available Hooks
+- **`use-biometric.ts`**: Biometric authentication hook
+  - Checks if biometric is available
+  - Handles biometric authentication flow
+  
+- **`use-color-scheme.ts`**: Color scheme detection
+  - Detects system color scheme (light/dark)
+  - Returns 'light' | 'dark' | 'auto'
+  
+- **`use-network-status.ts`**: Network connectivity monitoring
+  - Returns real-time network status
+  - Monitors connection type and reachability
+  - Used by `OfflineIndicator` component
+  
+- **`use-notifications.ts`**: Notification permissions and scheduling
+  - Manages notification permissions
+  - Registers for push notifications
+  - Schedules and cancels notifications
+  - Handles notification badges
+  
+- **`use-theme-color.ts`**: Theme color utilities
+  - Provides theme-aware color values
+  
+- **`add-monthly.hooks.ts`**: Monthly roster entry hooks
+  - Manages monthly roster entry state
+  - Handles prefix loading and updates
+  - Loads rosters for selected month
+
+## 🛠️ Utility Functions
+
+### Available Utils
+- **`add-monthly.utils.ts`**: Monthly roster utilities
+  - Generates calendar days for month
+  - Handles flight entry validation
+  - Processes bulk roster creation
+  
+- **`animations.ts`**: Animation utilities
+  - Reusable animation configurations
+  - Works with `react-native-reanimated`
+  
+- **`country-flags.ts`**: Country flag utilities
+  - Country code to flag emoji mapping
+  - Route parsing utilities
+  
+- **`flight-calculations.ts`**: Flight time calculations
+  - `calculateFlightTimeInfo()`: Calculates flight status and countdowns
+  - `shouldSendNotification()`: Determines if notification should be sent
+  - Handles timezone conversions
+  - Calculates hours/minutes until departure/arrival
+  - Determines flight status: 'upcoming' | 'departing_soon' | 'in_flight' | 'landing_soon' | 'landed' | 'cancelled'
 
 ## 🔧 Critical Implementation Details
 
@@ -510,6 +678,18 @@ The app supports **ONLY** two authentication methods:
 - Auto-refresh via Supabase client
 - Cleared on sign out
 
+### Offline Support Architecture
+- **Network Detection**: `hooks/use-network-status.ts` - Monitors connectivity
+- **Storage Layer**: `lib/offline-storage.ts` - Caches data and manages queue
+- **Sync Manager**: `lib/offline-sync-manager.ts` - Auto-syncs on reconnect
+- **Sync Service**: `lib/sync-service.ts` - Processes queued operations
+- **UI Component**: `components/OfflineIndicator.tsx` - Shows network status
+- **Integration**: Initialized in root layout when authenticated
+- **Data Flow**: 
+  - Online: Action → Store → Supabase → Cache → UI
+  - Offline: Action → Store → Queue → Cache → UI
+  - Sync: Network restored → SyncManager → SyncService → Supabase → Cache → UI
+
 ### Error Handling
 - Always handle loading, success, and error states
 - Never ignore promise rejections
@@ -525,6 +705,7 @@ The app supports **ONLY** two authentication methods:
 - **Grade**: A- (85/100)
 - **Features**: All core features implemented and functional
 - **Social Features**: ✅ Complete (connections, sharing, notifications)
+- **Offline Support**: ✅ Complete (caching, queue, auto-sync)
 - **Database**: ✅ All migrations ready (apply via MIGRATION_GUIDE.md)
 
 ### Production Readiness
@@ -539,11 +720,18 @@ The app supports **ONLY** two authentication methods:
 - ✅ Roster management (CRUD)
 - ✅ Calendar view with visual indicators
 - ✅ Social features (connections, sharing)
-- ✅ Notification infrastructure
+- ✅ Notification infrastructure (push notifications, scheduling)
 - ✅ Flight calculations and timezone handling
 - ✅ Connection management (max 5 connections)
 - ✅ Roster sharing (single/week/month/all_future)
 - ✅ Notification scheduling and preferences
+- ✅ Offline support (caching, queue, auto-sync)
+- ✅ Monthly roster bulk entry (`app/schedule/add-monthly.tsx`)
+  - Calendar-based interface for adding multiple rosters
+  - Flight code prefix management
+  - Depart/Return flight type toggle
+  - Bulk save functionality
+- ✅ Onboarding flow (welcome, feature tour, profile setup)
 
 ### Known Limitations (Future Enhancements)
 - ⚠️ Email/SMS sending requires backend service (Supabase Edge Functions recommended)
@@ -551,10 +739,62 @@ The app supports **ONLY** two authentication methods:
 - ⚠️ Background notification scheduling requires Expo TaskManager (can be added)
 - ⚠️ Weather API integration (placeholder exists, needs real API)
 
+### Offline Support Status
+- ✅ **Offline Storage**: Implemented via `OfflineStorage` class
+  - Caches rosters, profile, and connections
+  - Uses AsyncStorage for persistence
+- ✅ **Offline Queue**: Implemented for mutations
+  - Queues create/update/delete operations when offline
+  - Retry logic with exponential backoff
+- ✅ **Auto-Sync**: Implemented via `OfflineSyncManager`
+  - Monitors network status via `useNetworkStatus()` hook
+  - Automatically syncs when connection restored
+  - Integrated in root layout
+- ✅ **Sync Service**: Complete sync implementation
+  - Handles conflict resolution
+  - Progress tracking
+  - Error handling and retry
+- ✅ **UI Indicators**: `OfflineIndicator` component shows network status
+
 ---
 
 **Last Updated**: 2024
 **Project Version**: 1.0.0
 **Expo SDK**: 54.0.30
+**React**: 19.1.0
+**React Native**: 0.81.5
+**Package Manager**: Yarn 4.12.0
+
+## 🔧 Key Dependencies
+
+### Core
+- `expo`: ~54.0.30
+- `expo-router`: ~6.0.21 (file-based routing)
+- `react`: 19.1.0
+- `react-native`: 0.81.5
+- `zustand`: ^5.0.9 (state management)
+
+### UI & Styling
+- `nativewind`: ^4.2.1 (Tailwind CSS for React Native)
+- `@shopify/flash-list`: 2.0.2 (performant list rendering)
+- `@marceloterreiro/flash-calendar`: ^1.6.0 (calendar component)
+- `react-native-reanimated`: ~4.1.1 (animations)
+
+### Backend & Storage
+- `@supabase/supabase-js`: ^2.89.0
+- `expo-secure-store`: ~15.0.8 (secure storage)
+- `@react-native-async-storage/async-storage`: 2.2.0 (offline caching)
+- `expo-sqlite`: ~16.0.10 (local database)
+
+### Features
+- `expo-local-authentication`: ~17.0.8 (biometric auth)
+- `expo-notifications`: ~0.32.15 (push notifications)
+- `@react-native-community/netinfo`: 11.4.1 (network status)
+- `luxon`: ^3.7.2 (date/time handling)
+
+### Testing
+- `jest`: ~29.7.0
+- `jest-expo`: ~54.0.16
+- `@testing-library/react-native`: ^13.3.3
 
 

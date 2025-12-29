@@ -1,12 +1,26 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import React from 'react';
-import { View } from 'react-native';
+import { TouchableOpacity, View } from 'react-native';
 
 import { FloatingTabBar } from '@/components/FloatingTabBar';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
+
+function AddMonthlyButton() {
+  const router = useRouter();
+  const colorScheme = useColorScheme();
+  const themeColors = Colors[colorScheme ?? 'light'];
+
+  return (
+    <TouchableOpacity
+      onPress={() => router.push('/schedule/add-monthly')}
+      className="mr-4 p-2 rounded-full bg-[#800020]/10 dark:bg-[#A0002A]/20 border border-[#800020]/30 dark:border-[#A0002A]/40">
+      <Ionicons name="add-circle-outline" size={24} color={themeColors.tint} />
+    </TouchableOpacity>
+  );
+}
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -43,6 +57,7 @@ export default function TabLayout() {
               </ThemedText>
             </View>
           ),
+          headerRight: () => <AddMonthlyButton />,
         }}
       />
     </Tabs>

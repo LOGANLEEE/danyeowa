@@ -1,0 +1,8 @@
+{
+  "worktrees": [
+    { "name": "planner", "path": "../planner", "role": "planner" },
+    { "name": "designer", "path": "../designer", "role": "designer" },
+    { "name": "developer", "path": "../developer", "role": "developer" },
+    { "name": "tester", "path": "../tester", "role": "tester" }
+  ]
+}

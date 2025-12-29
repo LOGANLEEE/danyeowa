@@ -31,6 +31,11 @@ LANGUAGE & STYLE
 - Prefer early returns over deeply nested logic.
 - Use descriptive variable and function names; no abbreviations unless universally obvious.
 
+CODE FORMATTING
+- **ALWAYS format code with Prettier when writing or editing files.**
+- Use the project's Prettier configuration (`.prettierrc.js`) for all code formatting.
+- Ensure all written code follows the project's formatting standards before saving.
+
 FRONTEND (React / React Native)
 - Prefer functional components and hooks.
 - Avoid unnecessary re-renders; use memoization intentionally.

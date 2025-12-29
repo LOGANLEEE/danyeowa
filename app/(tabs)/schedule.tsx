@@ -2,6 +2,8 @@ import { CoffeeIcon } from '@/components/CoffeeIcon';
 import { ThemedLoader } from '@/components/ThemedLoader';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { FlightTypeToggle } from '@/components/ui/FlightTypeToggle';
+import { RosterCalendar } from '@/components/ui/RosterCalendar';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { Colors } from '@/constants/theme';
@@ -10,7 +12,7 @@ import { getFlightCodePrefix } from '@/lib/secure-storage';
 import { Roster } from '@/lib/supabase/types';
 import { useRostersStore } from '@/stores/use-rosters-store';
 import { Ionicons } from '@expo/vector-icons';
-import { Calendar, CalendarTheme, fromDateId, toDateId } from '@marceloterreiro/flash-calendar';
+import { fromDateId, toDateId } from '@marceloterreiro/flash-calendar';
 import { DateTime } from 'luxon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -25,17 +27,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// Helper functions for month navigation using Luxon
+// Helper function for month navigation
 const getFirstDayOfMonth = (dateTime: DateTime): DateTime => {
   return dateTime.startOf('month');
-};
-
-const addMonths = (dateTime: DateTime, months: number): DateTime => {
-  return dateTime.plus({months});
-};
-
-const formatMonthYear = (dateTime: DateTime): string => {
-  return dateTime.toFormat('MMMM yyyy');
 };
 
 // Helper function to get status color
@@ -63,6 +57,17 @@ export default function ScheduleScreen() {
   const now = DateTime.now();
   const [selectedDate, setSelectedDate] = useState<string | null>(toDateId(now.toJSDate()));
   const [currentMonth, setCurrentMonth] = useState<DateTime>(getFirstDayOfMonth(now));
+  
+  // Convert selectedDate (dateId) to ISO format for dateHasFlights comparison
+  const selectedDateISO = useMemo(() => {
+    if (!selectedDate) return null;
+    try {
+      const dateObj = fromDateId(selectedDate);
+      return DateTime.fromJSDate(dateObj).toISODate();
+    } catch {
+      return null;
+    }
+  }, [selectedDate]);
   const [isInputMode, setIsInputMode] = useState(false);
   const [departureDate, setDepartureDate] = useState<string | null>(null);
   const [flightCode, setFlightCode] = useState('');
@@ -112,24 +117,43 @@ export default function ScheduleScreen() {
 
   // Get rosters for selected date
   const selectedDateRosters = useMemo(() => {
-    if (!selectedDate) return [];
-    return rosters.filter((roster) => roster.flight_date === selectedDate);
-  }, [rosters, selectedDate]);
+    if (!selectedDateISO) return [];
+    return rosters.filter((roster) => roster.flight_date === selectedDateISO);
+  }, [rosters, selectedDateISO]);
 
-  // Get all dates with rosters for calendar active ranges
+  // Get all dates with rosters for calendar active ranges (in dateId format)
   const calendarActiveDateRanges = useMemo(() => {
     const dateSet = new Set<string>();
     rosters.forEach((roster) => {
       dateSet.add(roster.flight_date);
     });
 
-    return Array.from(dateSet).map((dateId) => ({
-      startId: dateId,
-      endId: dateId,
-    }));
+    return Array.from(dateSet).map((dateId) => {
+      // Convert ISO date to dateId format
+      try {
+        const date = DateTime.fromISO(dateId);
+        if (date.isValid) {
+          const dateIdFormatted = toDateId(date.toJSDate());
+          return {
+            startId: dateIdFormatted,
+            endId: dateIdFormatted,
+          };
+        }
+      } catch {
+        // If already in dateId format, use as-is
+        return {
+          startId: dateId,
+          endId: dateId,
+        };
+      }
+      return {
+        startId: dateId,
+        endId: dateId,
+      };
+    });
   }, [rosters]);
 
-  // Check if a date has flights
+  // Check if a date has flights (in ISO format for RosterCalendar)
   const dateHasFlights = useMemo(() => {
     const dateSet = new Set<string>();
     rosters.forEach((roster) => {
@@ -137,113 +161,6 @@ export default function ScheduleScreen() {
     });
     return dateSet;
   }, [rosters]);
-
-  // Create custom theme with roaster colors - enhanced for better visibility
-  const calendarTheme: CalendarTheme = useMemo(
-    () => ({
-      rowMonth: {
-        container: {
-          display: 'none',
-        },
-        content: {
-          display: 'none',
-        },
-      },
-      rowWeek: {
-        container: {
-          borderBottomWidth: 1,
-          borderBottomColor: colorScheme === 'dark' ? '#3A3A3A' : '#E5E5E5',
-          paddingVertical: 4,
-        },
-      },
-      itemWeekName: {
-        content: {
-          color: colorScheme === 'dark' ? '#9BA1A6' : '#687076',
-          fontWeight: '600',
-          fontSize: 13,
-        },
-      },
-      itemDayContainer: {
-        activeDayFiller: {
-          backgroundColor: themeColors.tint,
-        },
-      },
-      itemDay: {
-        idle: ({isToday, id}) => {
-          const hasFlights = dateHasFlights.has(id);
-          return {
-            container: {
-              backgroundColor: isToday
-                ? themeColors.tint + '20'
-                : hasFlights
-                  ? themeColors.tint + '10'
-                  : 'transparent',
-              borderRadius: 10,
-              borderWidth: hasFlights && !isToday ? 1 : 0,
-              borderColor: hasFlights && !isToday ? themeColors.tint + '40' : 'transparent',
-            },
-            content: {
-              color: isToday
-                ? themeColors.tint
-                : hasFlights
-                  ? colorScheme === 'dark'
-                    ? '#ECEDEE'
-                    : '#11181C'
-                  : colorScheme === 'dark'
-                    ? '#ECEDEE'
-                    : '#11181C',
-              fontWeight: isToday || hasFlights ? '600' : '400',
-              fontSize: 15,
-            },
-          };
-        },
-        today: ({isPressed}) => ({
-          container: {
-            borderWidth: 2.5,
-            borderColor: themeColors.tint,
-            borderRadius: 10,
-            backgroundColor: isPressed ? themeColors.tint : 'transparent',
-            shadowColor: themeColors.tint,
-            shadowOffset: {width: 0, height: 2},
-            shadowOpacity: 0.2,
-            shadowRadius: 4,
-            elevation: 3,
-          },
-          content: {
-            color: isPressed ? '#FFFFFF' : themeColors.tint,
-            fontWeight: '700',
-            fontSize: 15,
-          },
-        }),
-        active: () => ({
-          container: {
-            backgroundColor: themeColors.tint,
-            borderRadius: 10,
-            shadowColor: themeColors.tint,
-            shadowOffset: {width: 0, height: 2},
-            shadowOpacity: 0.3,
-            shadowRadius: 4,
-            elevation: 4,
-          },
-          content: {
-            color: '#FFFFFF',
-            fontWeight: '700',
-            fontSize: 15,
-          },
-        }),
-        disabled: () => ({
-          container: {
-            backgroundColor: 'transparent',
-          },
-          content: {
-            color: colorScheme === 'dark' ? '#4A4A4A' : '#CCCCCC',
-            fontWeight: '400',
-          },
-        }),
-      },
-    }),
-    [colorScheme, themeColors.tint, dateHasFlights],
-  );
 
   const handleDayPress = useCallback(
     (dateId: string) => {
@@ -275,12 +192,7 @@ export default function ScheduleScreen() {
         const selectedDateObj = fromDateId(dateId);
         const selectedDateTime = DateTime.fromJSDate(selectedDateObj);
         const selectedMonth = getFirstDayOfMonth(selectedDateTime);
-        setCurrentMonth((prevMonth) => {
-          if (!selectedMonth.hasSame(prevMonth, 'month')) {
-            return selectedMonth;
-          }
-          return prevMonth;
-        });
+        setCurrentMonth(selectedMonth);
 
         // Reset double tap detection
         lastTapRef.current = {dateId: null, timestamp: 0};
@@ -294,12 +206,7 @@ export default function ScheduleScreen() {
       const selectedDateObj = fromDateId(dateId);
       const selectedDateTime = DateTime.fromJSDate(selectedDateObj);
       const selectedMonth = getFirstDayOfMonth(selectedDateTime);
-      setCurrentMonth((prevMonth) => {
-        if (!selectedMonth.hasSame(prevMonth, 'month')) {
-          return selectedMonth;
-        }
-        return prevMonth;
-      });
+      setCurrentMonth(selectedMonth);
 
       // Update last tap info
       lastTapRef.current = {dateId, timestamp: now};
@@ -393,18 +300,8 @@ export default function ScheduleScreen() {
     }
   };
 
-  const handlePreviousMonth = () => {
-    setCurrentMonth((prev) => addMonths(prev, -1));
-  };
-
-  const handleNextMonth = () => {
-    setCurrentMonth((prev) => addMonths(prev, 1));
-  };
-
-  const handleToday = () => {
-    const today = getFirstDayOfMonth(DateTime.now());
-    setCurrentMonth(today);
-    setSelectedDate(toDateId(DateTime.now().toJSDate()));
+  const handleMonthChange = (month: DateTime) => {
+    setCurrentMonth(month);
   };
 
   return (
@@ -419,71 +316,16 @@ export default function ScheduleScreen() {
           keyboardShouldPersistTaps="handled">
           <ThemedView className="min-h-full px-6 py-6">
             {/* Calendar - Single Month View */}
-            <ThemedView
-              animated
-              delay={0}
-              className="rounded-3xl p-6 border-2 border-[#800020]/30 dark:border-[#A0002A]/40 bg-gradient-to-br from-[#800020]/10 to-[#A0002A]/5 dark:from-[#A0002A]/20 dark:to-[#800020]/10 shadow-lg mb-8">
-              {/* Month Navigation */}
-              <View className="flex-row items-center justify-between mb-6">
-                <TouchableOpacity
-                  onPress={handlePreviousMonth}
-                  className="p-2 rounded-full bg-white dark:bg-gray-700 shadow-sm">
-                  <Ionicons
-                    name="chevron-back"
-                    size={24}
-                    color={colorScheme === 'dark' ? '#ECEDEE' : '#11181C'}
-                  />
-                </TouchableOpacity>
-
-                <View className="flex-1 items-center">
-                  <ThemedText className="text-xl font-bold">
-                    {formatMonthYear(currentMonth)}
-                  </ThemedText>
-                  <TouchableOpacity onPress={handleToday} className="mt-1">
-                    <ThemedText className="text-xs text-gray-500 dark:text-gray-400">
-                      Today
-                    </ThemedText>
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity
-                  onPress={handleNextMonth}
-                  className="p-2 rounded-full bg-white dark:bg-gray-700 shadow-sm">
-                  <Ionicons
-                    name="chevron-forward"
-                    size={24}
-                    color={colorScheme === 'dark' ? '#ECEDEE' : '#11181C'}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              {/* Single Month Calendar */}
-              <Calendar
-                calendarActiveDateRanges={[
-                  ...calendarActiveDateRanges.filter((range) => {
-                    const rangeDate = fromDateId(range.startId);
-                    const rangeDateTime = DateTime.fromJSDate(rangeDate);
-                    const rangeMonth = getFirstDayOfMonth(rangeDateTime);
-                    return rangeMonth.hasSame(currentMonth, 'month');
-                  }),
-                  ...(selectedDate
-                    ? [
-                        {
-                          startId: selectedDate,
-                          endId: selectedDate,
-                        },
-                      ]
-                    : []),
-                ]}
-                calendarMonthId={toDateId(currentMonth.startOf('month').toJSDate())}
-                onCalendarDayPress={handleDayPress}
-                calendarDayHeight={50}
-                calendarMonthHeaderHeight={0}
-                calendarRowVerticalSpacing={12}
-                calendarRowHorizontalSpacing={12}
-                theme={calendarTheme}
+            <View className="mb-8">
+              <RosterCalendar
+                selectedDate={selectedDate}
+                onDayPress={handleDayPress}
+                activeDateRanges={calendarActiveDateRanges}
+                dateHasFlights={dateHasFlights}
+                currentMonth={currentMonth}
+                onMonthChange={handleMonthChange}
               />
-            </ThemedView>
+            </View>
 
             {/* Flight Code Input Modal */}
             <Modal
@@ -503,7 +345,14 @@ export default function ScheduleScreen() {
                         </ThemedText>
                         <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
                           {departureDate
-                            ? DateTime.fromISO(departureDate).toFormat('EEEE, MMMM d, yyyy')
+                            ? (() => {
+                                try {
+                                  const dateObj = fromDateId(departureDate);
+                                  return DateTime.fromJSDate(dateObj).toFormat('EEEE, MMMM d, yyyy');
+                                } catch {
+                                  return DateTime.fromISO(departureDate).toFormat('EEEE, MMMM d, yyyy');
+                                }
+                              })()
                             : ''}
                         </ThemedText>
                       </View>
@@ -550,70 +399,11 @@ export default function ScheduleScreen() {
                     {/* Flight Type Toggle */}
                     <View className="mb-6">
                       <ThemedText className="text-sm font-semibold mb-3">Flight Type</ThemedText>
-                      <View className="flex-row gap-3">
-                        <TouchableOpacity
-                          onPress={() => setFlightType('Depart')}
-                          disabled={isSaving}
-                          className={`flex-1 py-3 px-4 rounded-xl border-2 ${
-                            flightType === 'Depart'
-                              ? 'border-[#800020] dark:border-[#A0002A] bg-[#800020]/10 dark:bg-[#A0002A]/20'
-                              : 'border-gray-300 dark:border-gray-600 bg-transparent'
-                          }`}>
-                          <View className="flex-row items-center justify-center gap-2">
-                            <Ionicons
-                              name="airplane-outline"
-                              size={20}
-                              color={
-                                flightType === 'Depart'
-                                  ? themeColors.tint
-                                  : colorScheme === 'dark'
-                                    ? '#9BA1A6'
-                                    : '#687076'
-                              }
-                            />
-                            <ThemedText
-                              className={`font-semibold ${
-                                flightType === 'Depart' ? '' : 'text-gray-500 dark:text-gray-400'
-                              }`}
-                              style={
-                                flightType === 'Depart' ? {color: themeColors.tint} : undefined
-                              }>
-                              Depart
-                            </ThemedText>
-                          </View>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => setFlightType('Return')}
-                          disabled={isSaving}
-                          className={`flex-1 py-3 px-4 rounded-xl border-2 ${
-                            flightType === 'Return'
-                              ? 'border-[#800020] dark:border-[#A0002A] bg-[#800020]/10 dark:bg-[#A0002A]/20'
-                              : 'border-gray-300 dark:border-gray-600 bg-transparent'
-                          }`}>
-                          <View className="flex-row items-center justify-center gap-2">
-                            <Ionicons
-                              name="airplane"
-                              size={20}
-                              color={
-                                flightType === 'Return'
-                                  ? themeColors.tint
-                                  : colorScheme === 'dark'
-                                    ? '#9BA1A6'
-                                    : '#687076'
-                              }
-                            />
-                            <ThemedText
-                              className={`font-semibold ${
-                                flightType === 'Return' ? '' : 'text-gray-500 dark:text-gray-400'
-                              }`}
-                              style={
-                                flightType === 'Return' ? {color: themeColors.tint} : undefined
-                              }>
-                              Return
-                            </ThemedText>
-                          </View>
-                        </TouchableOpacity>
-                      </View>
+                      <FlightTypeToggle
+                        value={flightType}
+                        onChange={setFlightType}
+                        disabled={isSaving}
+                      />
                     </View>
 
                     <View className="flex-row gap-3">
@@ -651,7 +441,9 @@ export default function ScheduleScreen() {
                       : 'No Flights'}
                   </ThemedText>
                   <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
-                    {DateTime.fromISO(selectedDate).toFormat('EEEE, MMMM d, yyyy')}
+                    {selectedDateISO
+                      ? DateTime.fromISO(selectedDateISO).toFormat('EEEE, MMMM d, yyyy')
+                      : ''}
                   </ThemedText>
                 </View>
 

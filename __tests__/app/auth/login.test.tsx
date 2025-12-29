@@ -53,9 +53,13 @@ describe('LoginScreen', () => {
     fireEvent.changeText(emailInput, 'invalid-email');
     fireEvent.press(continueButton);
 
-    await waitFor(() => {
-      expect(mockSendOtp).not.toHaveBeenCalled();
-    });
+    // Use waitFor with timeout to prevent hanging
+    await waitFor(
+      () => {
+        expect(mockSendOtp).not.toHaveBeenCalled();
+      },
+      { timeout: 3000 }
+    );
   });
 
   it('should send OTP on valid email', async () => {
@@ -67,13 +71,16 @@ describe('LoginScreen', () => {
     fireEvent.changeText(emailInput, 'test@example.com');
     fireEvent.press(continueButton);
 
-    await waitFor(() => {
-      expect(mockSendOtp).toHaveBeenCalledWith('test@example.com');
-      expect(mockRouter.push).toHaveBeenCalledWith({
-        pathname: '/auth/verify-otp',
-        params: { email: 'test@example.com' },
-      });
-    });
+    await waitFor(
+      () => {
+        expect(mockSendOtp).toHaveBeenCalledWith('test@example.com');
+        expect(mockRouter.push).toHaveBeenCalledWith({
+          pathname: '/auth/verify-otp',
+          params: { email: 'test@example.com' },
+        });
+      },
+      { timeout: 3000 }
+    );
   });
 
   it('should show error alert on OTP send failure', async () => {
@@ -86,9 +93,12 @@ describe('LoginScreen', () => {
     fireEvent.changeText(emailInput, 'test@example.com');
     fireEvent.press(continueButton);
 
-    await waitFor(() => {
-      expect(Alert.alert).toHaveBeenCalledWith('Error', 'Failed to send OTP');
-    });
+    await waitFor(
+      () => {
+        expect(Alert.alert).toHaveBeenCalledWith('Error', 'Failed to send OTP');
+      },
+      { timeout: 3000 }
+    );
   });
 
   it('should disable button when email is empty', () => {

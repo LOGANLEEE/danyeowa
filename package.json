@@ -15,11 +15,15 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "sitemap": "npx expo-router-sitemap",
-    "test": "jest --watchAll",
+    "test": "jest",
+    "test:watch": "jest --watchAll",
     "test:coverage": "jest --coverage",
     "migrate": "node scripts/apply-migrations.js",
     "migrate:manual": "bash scripts/migrate.sh",
-    "check:production": "node scripts/check-production-readiness.js"
+    "check:production": "node scripts/check-production-readiness.js",
+    "agents": "EXECUTION_MODE=sequential node runAgents.js",
+    "agents:parallel": "EXECUTION_MODE=parallel node runAgents.js",
+    "agents:sequential": "EXECUTION_MODE=sequential node runAgents.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
