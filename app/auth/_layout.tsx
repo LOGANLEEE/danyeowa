@@ -1,15 +1,30 @@
 import { Stack } from 'expo-router';
-import React from 'react';
-
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function AuthLayout() {
-  const colorScheme = useColorScheme();
-
   return (
     <Stack>
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="signup" options={{ headerShown: false }} />
+      <Stack.Screen name="welcome" options={{headerShown: false}} />
+      <Stack.Screen
+        name="login"
+        options={{
+          headerShown: false,
+          title: 'Sign In',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="signup"
+        options={{
+          title: 'Create Account',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <Stack.Screen
+        name="verify-otp"
+        options={{
+          title: 'Verify Code',
+        }}
+      />
     </Stack>
   );
 }

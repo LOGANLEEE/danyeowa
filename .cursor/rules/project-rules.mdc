@@ -1,0 +1,560 @@
+---
+alwaysApply: true
+---
+## 📦 Package Installation Rules
+
+### CRITICAL: Always Use Expo Install
+- **ALWAYS use `npx expo install <package-name>`** when installing ANY library or dependency
+- This ensures Expo-compatible versions are installed automatically
+- **NEVER use** `npm install`, `yarn add`, or `pnpm add` directly for dependencies
+- Example: `npx expo install react-test-renderer@19.1.0`
+
+### When to Use Expo Install
+- All React Native packages
+- All Expo packages
+- React and React Native related dependencies
+- Testing libraries that depend on React Native versions
+
+### Exception
+- Dev-only tools (like TypeScript, ESLint, Prettier) can use regular package manager
+- But prefer `npx expo install` when in doubt
+
+---
+
+## 🏗️ Code Architecture Rules
+
+### File Structure
+```
+app/                    # Expo Router pages (file-based routing)
+├── (tabs)/            # Tab navigation screens
+├── auth/              # Authentication screens
+├── _layout.tsx        # Root layout
+└── index.tsx          # Entry point
+
+components/            # Reusable UI components
+├── ui/                # Base UI components
+└── ThemedText.tsx     # Themed components
+
+stores/                # Zustand state stores
+lib/                   # Utilities and configurations
+├── supabase/         # Supabase client and types
+└── secure-storage.ts  # Secure storage utilities
+
+hooks/                 # Custom React hooks
+utils/                 # Helper functions
+constants/             # App constants
+__tests__/             # Test files
+```
+
+### State Management
+- Use **Zustand** for global state (auth, user data)
+- Keep state stores in `stores/` directory
+- Use local state (useState) for component-specific state
+- Avoid prop drilling - use stores for shared state
+
+### Authentication
+- All auth logic in `stores/use-auth-store.ts`
+- Use secure storage for session persistence
+- Session validation happens on app initialization
+- Protected routes use `Stack.Protected` with guard functions
+
+---
+
+## 💻 Code Style & Conventions
+
+### TypeScript
+- **Strict mode enabled** - no `any` types unless absolutely necessary
+- Use proper type definitions for all functions and components
+- Import types from Supabase: `import { User, Session } from '@supabase/supabase-js'`
+- Use path aliases: `@/components`, `@/stores`, `@/lib`, etc.
+
+### Component Structure
+```typescript
+// 1. Imports (external first, then internal)
+import { View } from 'react-native';
+import { ThemedText } from '@/components/ThemedText';
+
+// 2. Types/Interfaces
+type Props = { ... };
+
+// 3. Component
+export default function ComponentName({ ... }: Props) {
+  // Hooks
+  // State
+  // Effects
+  // Handlers
+  // Render
+}
+```
+
+### Naming Conventions
+- **Components**: PascalCase (`ThemedText`, `HomeScreen`)
+- **Files**: Match component name (`ThemedText.tsx`)
+- **Hooks**: camelCase starting with `use` (`useAuth`, `useColorScheme`)
+- **Stores**: camelCase with `use` prefix (`useAuthStore`)
+- **Utils**: camelCase (`animations.ts`, `secure-storage.ts`)
+- **Constants**: PascalCase (`Colors`, `Theme`)
+
+### Styling
+- Use **NativeWind** (Tailwind CSS) for styling
+- Prefer className over StyleSheet when possible
+- Use ThemedText and ThemedView for theme-aware components
+- Dark mode support is required for all screens
+
+### Imports Order
+1. External libraries (React, React Native, Expo)
+2. Third-party libraries (@expo, @react-navigation)
+3. Internal components (@/components)
+4. Internal hooks (@/hooks)
+5. Internal stores (@/stores)
+6. Internal utils (@/lib, @/utils)
+7. Types
+8. Constants
+
+---
+
+## 🧪 Testing Rules
+
+### Test Structure
+- Test files in `__tests__/` directories or `.test.ts`/`.spec.ts` extensions
+- Use Jest with `jest-expo` preset
+- Use React Native Testing Library for component tests
+- Mock Expo modules in `jest.setup.js`
+
+### Test Commands
+- `npm test` - Run all tests once
+- `npm run test:watch` - Watch mode for development
+- `npm run test:coverage` - Generate coverage report
+
+### Test Requirements
+- Write tests for:
+  - **Store actions and state changes** (auth, data management)
+  - **Complex business logic** (calculations, validations, transformations)
+  - **Critical user flows** (authentication, data fetching, error handling)
+  - **Security-sensitive functions** (secure storage, session validation)
+- **DO NOT test:**
+  - Simple animation wrappers (just library function calls)
+  - Pure UI components without business logic
+  - Simple utility functions that just wrap library APIs
+  - Constants or configuration objects
+- Focus on testing **behavior and outcomes**, not implementation details
+- Mock external dependencies (Supabase, SecureStore, etc.)
+
+### Test Naming
+- Test files: `*.test.ts` or `*.spec.ts`
+- Test suites: `describe('ComponentName', () => { ... })`
+- Test cases: `it('should do something', () => { ... })`
+
+---
+
+## 🔒 Security & Best Practices
+
+### Authentication
+- Never store sensitive data in plain text
+- Use `expo-secure-store` for session tokens
+- Validate session expiration on app initialization
+- Clear secure storage on sign out
+
+### Supabase
+- Use Row Level Security (RLS) for database access
+- Never expose service role keys in client code
+- Use environment variables for Supabase credentials
+- Client communicates directly with Supabase (no custom backend)
+
+### Code Quality
+- Remove console.log statements in production code
+- Keep console.error for error handling
+- Remove unused imports and dead code
+- Follow ESLint rules (run `npm run lint`)
+
+---
+
+## 🎨 UI/UX Guidelines
+
+### Design System
+- Use theme colors from `constants/theme.ts`
+- Support both light and dark modes
+- Use consistent spacing and typography
+- Follow mobile-first design principles
+
+### Animations
+- Use `react-native-reanimated` for smooth animations
+- Animation utilities in `utils/animations.ts`
+- Keep animations subtle and performant
+- Test animations on both iOS and Android
+
+### Accessibility
+- Use semantic HTML elements where possible
+- Add proper labels and hints
+- Support screen readers
+- Test with accessibility tools
+
+---
+
+## 📝 Git & Version Control
+
+### Commit Messages
+- Use clear, descriptive commit messages
+- Follow conventional commits when possible
+- Reference issues/PRs when applicable
+
+### Branch Strategy
+- `main` - Production-ready code
+- Feature branches for new features
+- Keep commits focused and atomic
+
+---
+
+## 🤖 AI Assistant Roles & Responsibilities
+
+### Primary Roles
+
+1. **Code Architect**
+   - Ensure code follows project architecture patterns
+   - Maintain consistency across the codebase
+   - Suggest improvements to structure and organization
+
+2. **TypeScript Specialist**
+   - Enforce strict typing
+   - Catch type errors before runtime
+   - Suggest better type definitions
+
+3. **Expo Expert**
+   - Ensure Expo compatibility for all packages
+   - Use `npx expo install` for dependencies
+   - Follow Expo best practices and conventions
+
+4. **Testing Advocate**
+   - Write meaningful tests for business logic and critical paths
+   - Focus on testing behavior, not implementation details
+   - Avoid testing simple wrappers or library functions
+   - Maintain test quality and readability
+
+5. **Code Reviewer**
+   - Review code for bugs and issues
+   - Suggest performance optimizations
+   - Identify security vulnerabilities
+
+6. **Documentation Maintainer**
+   - Keep code comments up to date
+   - Document complex logic
+   - Maintain README and setup guides
+
+### Responsibilities
+
+- **Always** use `npx expo install` for package installations
+- **Always** follow TypeScript strict mode rules
+- **Always** write tests for business logic and critical features
+- **Always** remove unused code and imports
+- **Always** support both light and dark themes
+- **Never** commit console.log statements (except for errors)
+- **Never** use `any` type without justification
+- **Never** bypass security measures (secure storage, RLS)
+- **Never** break existing functionality without tests
+
+### Code Quality Standards
+
+- ✅ All tests passing
+- ✅ No TypeScript errors
+- ✅ No ESLint warnings
+- ✅ No unused imports
+- ✅ Proper error handling
+- ✅ Dark mode support
+- ✅ Responsive design
+- ✅ Accessibility considerations
+
+---
+
+## 🚀 Development Workflow
+
+1. **Before Starting**
+   - Check existing code patterns
+   - Review related files
+   - Understand the feature requirements
+
+2. **During Development**
+   - Write code following conventions
+   - Write tests alongside code
+   - Test on both iOS and Android
+   - Check dark mode support
+
+3. **Before Committing**
+   - Run `npm test` - all tests must pass
+   - Run `npm run lint` - fix all warnings
+   - Remove console.log statements
+   - Remove unused code
+   - Update documentation if needed
+
+---
+
+## 📚 Additional Resources
+
+- [Expo Documentation](https://docs.expo.dev/)
+- [Expo Router Docs](https://docs.expo.dev/router/introduction/)
+- [NativeWind Docs](https://www.nativewind.dev/)
+- [Zustand Docs](https://docs.pmnd.rs/zustand/)
+- [Supabase Docs](https://supabase.com/docs)
+- [React Native Testing Library](https://callstack.github.io/react-native-testing-library/)
+
+---
+
+## ⚠️ Important Notes
+
+- This project uses **Yarn 4.12.0** as the package manager
+- Always check Expo compatibility before adding new packages
+- Keep dependencies up to date with Expo SDK version
+- Test on both iOS and Android before deploying
+- Maintain backward compatibility when possible
+
+---
+
+## 🔐 Authentication System
+
+### Login Methods (EXACTLY TWO - NO EXCEPTIONS)
+
+The app supports **ONLY** two authentication methods:
+
+1. **Biometric Authentication**
+   - iOS: Face ID or Touch ID
+   - Android: Fingerprint, Face, or Iris
+   - Requires: Device hardware, user enrollment, previous OTP login
+   - Flow: Tap button → Biometric prompt → Session restored from secure storage
+   - Implementation: `stores/use-auth-store.ts::loginWithBiometric()`
+
+2. **OTP Verification**
+   - Platform Support: All platforms
+   - Flow: Email → OTP sent → Code verification → Login
+   - Implementation: `stores/use-auth-store.ts::sendOtp()` and `verifyOtp()`
+   - After verification: Option to enable biometric for future logins
+
+### NOT Supported (DO NOT IMPLEMENT)
+- ❌ Password-based authentication
+- ❌ Social login (Google, Apple, etc.)
+- ❌ Magic links
+- ❌ SMS verification
+- ❌ Any other authentication methods
+
+### Authentication Flow
+- All auth logic in `stores/use-auth-store.ts`
+- Session stored in `expo-secure-store` (device-level encryption)
+- Profile automatically fetched after login
+- Biometric preferences stored securely
+- All data cleared on sign out
+
+---
+
+## 🗄️ Supabase Database Architecture
+
+### Tables
+
+#### 1. `profiles` Table
+- **Purpose**: Extends `auth.users` with additional user information
+- **Connection**: `profiles.id` → `auth.users.id` (ON DELETE CASCADE)
+- **Auto-creation**: Trigger `on_auth_user_created` creates profile on user signup
+- **RLS**: Users can only view/update their own profile
+- **Fields**: id, email, full_name, avatar_url, created_at, updated_at
+
+#### 2. `rosters` Table
+- **Purpose**: Stores flight roster/schedule information
+- **Connection**: `rosters.user_id` → `profiles.id` (ON DELETE CASCADE)
+- **RLS**: Users can access their own rosters AND rosters shared with them
+- **Fields**: 
+  - id (UUID, primary key)
+  - user_id (UUID, foreign key to profiles)
+  - flight_code (TEXT, e.g., "SQ 321")
+  - route (TEXT, e.g., "SIN → LHR")
+  - origin (TEXT, nullable)
+  - destination (TEXT)
+  - flight_date (DATE)
+  - departure_time (TIME)
+  - arrival_time (TIME)
+  - aircraft_type (TEXT, nullable)
+  - status (TEXT: 'Scheduled' | 'Confirmed' | 'Delayed' | 'Cancelled' | 'Completed')
+  - created_at, updated_at (TIMESTAMPTZ)
+
+#### 3. `connections` Table
+- **Purpose**: Tracks relationships between users (cabin crew and family/friends)
+- **Connection**: `connections.user_id` → `profiles.id`, `connections.connected_user_id` → `profiles.id`
+- **RLS**: Users can view connections where they are user_id or connected_user_id
+- **Fields**: id, user_id, connected_user_id, status ('pending' | 'accepted' | 'blocked' | 'declined'), role ('family' | 'friend' | 'colleague'), invitation_token, invitation_method, invitation_expires_at, created_at, updated_at
+- **Constraints**: Unique connection per user pair, no self-connections, max 5 connections per user
+
+#### 4. `shared_rosters` Table
+- **Purpose**: Tracks which rosters are shared with which users
+- **Connection**: `shared_rosters.roster_id` → `rosters.id`, `shared_rosters.shared_with_user_id` → `profiles.id`
+- **RLS**: Users can view shared rosters where they are the owner or recipient
+- **Fields**: id, roster_id, shared_with_user_id, can_edit (BOOLEAN), shared_at, created_at, updated_at
+
+#### 5. `notifications` Table
+- **Purpose**: Stores notification history
+- **Connection**: `notifications.user_id` → `profiles.id`
+- **RLS**: Users can only view their own notifications
+- **Fields**: id, user_id, type, title, body, data (JSONB), read (BOOLEAN), created_at
+- **Types**: 'flight_departure' | 'flight_arrival' | 'roster_update' | 'connection_request' | etc.
+
+#### 6. `notification_preferences` Table
+- **Purpose**: User preferences for notification types and timing
+- **Connection**: `notification_preferences.user_id` → `profiles.id` (UNIQUE)
+- **RLS**: Users can only view/update their own preferences
+- **Fields**: id, user_id, flight_departure_enabled, flight_arrival_enabled, hours_before_departure (INTEGER array), hours_before_arrival (INTEGER array), roster_update_enabled, connection_request_enabled, push_token, created_at, updated_at
+- **Auto-creation**: Trigger creates default preferences on profile creation
+
+### Database Connections
+
+#### Auth → Profile Connection
+- **Trigger**: `on_auth_user_created` fires AFTER INSERT on `auth.users`
+- **Function**: `handle_new_user()` creates profile row
+- **Auth Store**: `fetchProfile()` called after login with retry logic (3 attempts)
+- **Fallback**: Creates profile manually if trigger fails
+- **State**: Profile stored in `useAuthStore().profile`
+
+#### Profile → Rosters Connection
+- **Foreign Key**: `rosters.user_id` references `profiles.id`
+- **Cascade Delete**: Deleting profile deletes all user's rosters
+- **RLS Policies**: Users can access own rosters AND rosters shared with them (via shared_rosters table)
+
+#### Social Features Connections
+- **Connections**: `connections` table links users (bidirectional relationships)
+- **Sharing**: `shared_rosters` table links rosters to users (many-to-many)
+- **Notifications**: `notifications` table stores notification history per user
+- **Preferences**: `notification_preferences` table stores user notification settings
+
+### Row Level Security (RLS)
+- **Always enabled** on all tables
+- **Policies**: Use `auth.uid() = user_id` pattern OR check shared_rosters for shared access
+- **Never bypass RLS** - all queries automatically respect policies
+- **Shared Rosters**: RLS policies allow users to view rosters shared with them via `shared_rosters` table
+
+### Supabase Client Usage
+- **Client**: `lib/supabase/client.ts`
+- **Types**: `lib/supabase/types.ts` (includes all table types: Profile, Roster, Connection, SharedRoster, Notification, NotificationPreferences)
+- **Direct Communication**: Client → Supabase (no custom backend)
+- **Environment Variables**: 
+  - `EXPO_PUBLIC_SUPABASE_URL`
+  - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+  - `EXPO_PUBLIC_PROJECT_ID` (for Expo push notifications)
+
+---
+
+## 🎨 UI Components
+
+### Themed Components
+- **ThemedLoader**: Global loader with roaster theme colors
+  - Supports fullScreen and inline modes
+  - Auto-adapts to light/dark mode
+  - Uses roaster colors: #D2691E (light), #DEB887 (dark)
+  - Usage: `<ThemedLoader fullScreen message="Loading..." />`
+
+- **GlobalLoader**: Context-based global loading provider
+  - Available via `useGlobalLoader()` hook
+  - Shows modal overlay for app-wide loading states
+  - Already integrated in root layout
+
+### Component Guidelines
+- Use ThemedText and ThemedView for theme-aware components
+- Support both light and dark modes
+- Use NativeWind (Tailwind CSS) for styling
+- Prefer className over StyleSheet
+
+---
+
+## 📊 Data Management
+
+### Rosters Data
+- **Type**: `Roster` from `lib/supabase/types.ts`
+- **Store**: `stores/use-rosters-store.ts` - Complete CRUD operations
+- **Queries**: RLS automatically includes user's own rosters AND shared rosters
+- **Shared Rosters**: Fetched via `shared_rosters` table join (handled by RLS policies)
+- **Indexes**: Optimized for user_id, flight_date, status queries
+
+### Profile Data
+- **Type**: `Profile` from `lib/supabase/types.ts`
+- **Store**: `useAuthStore().profile`
+- **Updates**: Use `updateProfile()` from auth store
+- **Auto-fetch**: Called after login, initialization, biometric login
+
+### Connections Data
+- **Type**: `Connection` from `lib/supabase/types.ts`
+- **Store**: `stores/use-connections-store.ts` - Complete connection management
+- **Features**: Send invitations (email/SMS/in-app/link), accept/decline, remove, block
+- **Limits**: Max 5 connections per user (enforced by database function)
+- **Roles**: 'family' | 'friend' | 'colleague'
+
+### Shared Rosters Data
+- **Type**: `SharedRoster` from `lib/supabase/types.ts`
+- **Store**: `stores/use-shared-rosters-store.ts` - Complete sharing operations
+- **Features**: Share single/week/month/all_future rosters, unshare, bulk sharing
+- **Permissions**: `can_edit` boolean controls edit access
+
+### Notifications Data
+- **Type**: `Notification` and `NotificationPreferences` from `lib/supabase/types.ts`
+- **Store**: `stores/use-notifications-store.ts` - Complete notification management
+- **Service**: `services/notification-scheduler.ts` - Schedules notifications based on flight times
+- **Features**: Departure/arrival notifications, countdown notifications, customizable timing
+- **Preferences**: User-configurable notification settings per type
+
+---
+
+## 🔧 Critical Implementation Details
+
+### Profile Creation Flow
+1. User verifies OTP → Supabase creates user in `auth.users`
+2. Trigger `on_auth_user_created` fires → Creates profile in `profiles` table
+3. `fetchProfile()` called with retry logic (handles trigger delay)
+4. If profile missing after retries → Manual creation as fallback
+5. Profile stored in Zustand state
+
+### Session Management
+- Sessions stored in `expo-secure-store`
+- Validation on app initialization
+- Auto-refresh via Supabase client
+- Cleared on sign out
+
+### Error Handling
+- Always handle loading, success, and error states
+- Never ignore promise rejections
+- Log errors with context (use `[ComponentName]` prefix)
+- Graceful fallbacks for critical operations
+
+---
+
+## 🎯 Project Status
+
+### Current State
+- **Status**: 🟢 **Production Ready** (with monitoring recommendations)
+- **Grade**: A- (85/100)
+- **Features**: All core features implemented and functional
+- **Social Features**: ✅ Complete (connections, sharing, notifications)
+- **Database**: ✅ All migrations ready (apply via MIGRATION_GUIDE.md)
+
+### Production Readiness
+- ✅ Core features complete
+- ✅ Security in place (RLS, secure storage)
+- ✅ Good UX with dark mode support
+- ✅ Scalable architecture
+- ⚠️ Recommended: Add error boundaries, error tracking (Sentry), more tests
+
+### Key Features Implemented
+- ✅ Authentication (OTP + Biometric)
+- ✅ Roster management (CRUD)
+- ✅ Calendar view with visual indicators
+- ✅ Social features (connections, sharing)
+- ✅ Notification infrastructure
+- ✅ Flight calculations and timezone handling
+- ✅ Connection management (max 5 connections)
+- ✅ Roster sharing (single/week/month/all_future)
+- ✅ Notification scheduling and preferences
+
+### Known Limitations (Future Enhancements)
+- ⚠️ Email/SMS sending requires backend service (Supabase Edge Functions recommended)
+- ⚠️ Real-time roster updates require Supabase Realtime subscriptions (can be added)
+- ⚠️ Background notification scheduling requires Expo TaskManager (can be added)
+- ⚠️ Weather API integration (placeholder exists, needs real API)
+
+---
+
+**Last Updated**: 2024
+**Project Version**: 1.0.0
+**Expo SDK**: 54.0.30
+
+
