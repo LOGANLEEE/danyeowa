@@ -9,18 +9,12 @@ let runMission;
  */
 const missions = [
   {
-    id: 'empty-state-component',
-    goal: 'EmptyState 재사용 가능한 컴포넌트 개발',
-    description: '빈 상태를 표시하는 재사용 가능한 컴포넌트 (로스터 없음, 연결 없음 등)',
-    priority: 'medium',
+    id: 'avatar-profile-menu',
+    goal: '홈 화면 아바타 클릭 시 프로필 메뉴 구현',
+    description: 'home.tsx의 아바타(592-628줄)를 탭 가능하게 만들고, 프로필 메뉴 모달 컴포넌트를 생성하여 사용자 정보 표시 및 로그아웃 기능 추가',
+    priority: 'high',
   },
   // Add more missions here as needed
-  // {
-  //   id: 'login-screen',
-  //   goal: 'Roster-me 로그인 화면 개발',
-  //   description: 'OTP 및 생체인증 로그인 화면 구현',
-  //   priority: 'high',
-  // },
 ];
 
 /**

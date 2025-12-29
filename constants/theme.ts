@@ -5,61 +5,55 @@
 
 import { Platform } from 'react-native';
 
-// Burgundy color palette (matching AnimatedWelcomeBackground)
-export const BURGUNDY_PRIMARY = '#800020';
-export const BURGUNDY_DARK = '#5C0015';
-export const BURGUNDY_LIGHT = '#A0002A';
-export const BURGUNDY_ACCENT = '#B80035';
-export const BURGUNDY_DEEP = '#4A0010';
+// Luxury dark palette
+export const OBSIDIAN = '#0F1115'; // Primary background
+export const CHARCOAL = '#1A1D23'; // Secondary background / cards
+export const GRAPHITE = '#2A2E36'; // Borders / dividers
+export const PLATINUM = '#E5E7EB'; // Primary text
+export const SILVER = '#9CA3AF'; // Secondary text
+export const GOLD = '#C9A24D'; // Accent / CTA
+export const GOLD_SOFT = '#E6C878'; // Highlight
+export const EMERALD = '#10B981'; // Success
+export const RUBY = '#EF4444'; // Destructive
+export const SAPPHIRE = '#3B82F6'; // Info
 
-// Coffee accent colors (playful roaster theme)
-export const COFFEE_MEDIUM = '#A9745B'; // Medium Coffee Brown
-export const COFFEE_LATTE = '#C68642'; // Latte Tone
-
-// Status colors
-export const STATUS_SCHEDULED = '#3B82F6'; // Blue
-export const STATUS_CONFIRMED = BURGUNDY_ACCENT; // Burgundy tint
-export const STATUS_COMPLETED = '#10B981'; // Green
-
-const tintColorLight = BURGUNDY_PRIMARY; // Burgundy primary
-const tintColorDark = BURGUNDY_LIGHT; // Lighter burgundy for dark mode
+const tintColorLight = GOLD;
+const tintColorDark = GOLD;
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
+    text: '#0B0D12',
+    background: '#FFFFFF',
+    surface: '#F7F7F8',
+    border: '#E5E7EB',
     tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+    icon: '#6B7280',
+    tabIconDefault: '#9CA3AF',
     tabIconSelected: tintColorLight,
-    burgundy: BURGUNDY_PRIMARY,
-    burgundyLight: BURGUNDY_LIGHT,
-    burgundyDark: BURGUNDY_DARK,
-    burgundyAccent: BURGUNDY_ACCENT,
-    burgundyDeep: BURGUNDY_DEEP,
-    coffeeMedium: COFFEE_MEDIUM,
-    coffeeLatte: COFFEE_LATTE,
-    statusScheduled: STATUS_SCHEDULED,
-    statusConfirmed: STATUS_CONFIRMED,
-    statusCompleted: STATUS_COMPLETED,
+
+    // Luxury accents
+    primary: GOLD,
+    primarySoft: GOLD_SOFT,
+    success: EMERALD,
+    danger: RUBY,
+    info: SAPPHIRE,
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#2A2A2A',
+    text: PLATINUM,
+    background: OBSIDIAN,
+    surface: CHARCOAL,
+    border: GRAPHITE,
     tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    icon: SILVER,
+    tabIconDefault: SILVER,
     tabIconSelected: tintColorDark,
-    burgundy: BURGUNDY_LIGHT,
-    burgundyLight: BURGUNDY_ACCENT,
-    burgundyDark: BURGUNDY_PRIMARY,
-    burgundyAccent: BURGUNDY_ACCENT,
-    burgundyDeep: BURGUNDY_DARK,
-    coffeeMedium: COFFEE_MEDIUM,
-    coffeeLatte: COFFEE_LATTE,
-    statusScheduled: STATUS_SCHEDULED,
-    statusConfirmed: STATUS_CONFIRMED,
-    statusCompleted: STATUS_COMPLETED,
+
+    // Luxury accents
+    primary: GOLD,
+    primarySoft: GOLD_SOFT,
+    success: EMERALD,
+    danger: RUBY,
+    info: SAPPHIRE,
   },
 };
 

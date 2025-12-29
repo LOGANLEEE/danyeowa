@@ -28,7 +28,7 @@ const executeTask = async (task, designOutputs = {}) => {
         const designOutput = task.dependsOn 
           ? designOutputs[task.dependsOn]?.design 
           : null;
-        code = developerAgent(task, designOutput);
+        code = await developerAgent(task, designOutput);
         result = { code, taskId: task.id };
       } else if (task.role === "tester") {
         // Get code output if this task depends on a developer task

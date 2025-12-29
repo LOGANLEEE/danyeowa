@@ -38,6 +38,16 @@ export const plannerAgent = (goal) => {
     ];
   }
 
+  // Task breakdown for avatar profile menu
+  if (goal.includes('아바타') || goal.includes('avatar') || goal.includes('프로필 메뉴')) {
+    return [
+      { id: 1, desc: "프로필 메뉴 UI/UX 설계 (모달 레이아웃, 메뉴 항목, 애니메이션)", role: "designer" },
+      { id: 2, desc: "ProfileMenu 컴포넌트 개발 (components/ProfileMenu.tsx 생성)", role: "developer", dependsOn: 1 },
+      { id: 3, desc: "home.tsx 아바타에 TouchableOpacity 추가 및 모달 연동", role: "developer", dependsOn: 2 },
+      { id: 4, desc: "프로필 메뉴 테스트 (탭 동작, 모달 표시, 로그아웃 기능)", role: "tester", dependsOn: 3 },
+    ];
+  }
+
   // Default task breakdown for other goals
   return [
     { id: 1, desc: "UI 설계", role: "designer" },

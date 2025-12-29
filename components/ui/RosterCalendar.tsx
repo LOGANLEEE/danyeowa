@@ -1,6 +1,8 @@
+import { ThemedView } from '@/components/ThemedView';
 import { CalendarWrapper } from '@/components/ui/CalendarWrapper';
 import { MonthNavigation } from '@/components/ui/MonthNavigation';
-import { ThemedView } from '@/components/ThemedView';
+import { Roster } from '@/lib/supabase/types';
+import { getCountryFlag } from '@/utils/country-flags';
 import { fromDateId, toDateId, type CalendarActiveDateRange } from '@marceloterreiro/flash-calendar';
 import { DateTime } from 'luxon';
 import { useCallback, useMemo, useState } from 'react';
@@ -25,6 +27,10 @@ type RosterCalendarProps = {
    * Used for visual indicators on calendar
    */
   dateHasFlights?: Set<string>;
+  /**
+   * Rosters data to extract country flags from destinations
+   */
+  rosters?: Roster[];
   /**
    * Initial month to display (defaults to current month)
    */
@@ -57,6 +63,7 @@ export function RosterCalendar({
   onDayPress,
   activeDateRanges,
   dateHasFlights,
+  rosters,
   initialMonth,
   currentMonth: controlledCurrentMonth,
   onMonthChange,
@@ -66,12 +73,12 @@ export function RosterCalendar({
   // Normalize selectedDate to dateId format for CalendarWrapper
   const selectedDateId = useMemo(() => {
     if (!selectedDate) return null;
-    
+
     // Check if it's already in dateId format (8 digits, no dashes)
     if (/^\d{8}$/.test(selectedDate)) {
       return selectedDate;
     }
-    
+
     // Assume it's ISO format (YYYY-MM-DD) and convert
     try {
       const date = DateTime.fromISO(selectedDate);
@@ -81,7 +88,7 @@ export function RosterCalendar({
     } catch {
       // Invalid date format
     }
-    
+
     return null;
   }, [selectedDate]);
 
@@ -90,16 +97,16 @@ export function RosterCalendar({
   // If it's in dateId format, we convert it to ISO
   const dateHasFlightsISO = useMemo(() => {
     if (!dateHasFlights) return undefined;
-    
+
     // Check if the first entry is in dateId format (8 digits) or ISO format
     const firstEntry = Array.from(dateHasFlights)[0];
     if (!firstEntry) return dateHasFlights;
-    
+
     // If it's already in ISO format (has dashes), use as-is
     if (firstEntry.includes('-')) {
       return dateHasFlights;
     }
-    
+
     // Convert from dateId format to ISO format
     const isoSet = new Set<string>();
     dateHasFlights.forEach((dateId) => {
@@ -116,18 +123,41 @@ export function RosterCalendar({
     return isoSet;
   }, [dateHasFlights]);
 
-  // Internal state for uncontrolled mode
-  const [internalCurrentMonth, setInternalCurrentMonth] = useState<DateTime>(
-    () => initialMonth || getFirstDayOfMonth(DateTime.now())
-  );
+  // Create a map of dates (ISO format) to country flags
+  const dateToFlags = useMemo(() => {
+    if (!rosters || rosters.length === 0) return new Map<string, string[]>();
 
-  // Use controlled or uncontrolled month
-  const currentMonth = controlledCurrentMonth ?? internalCurrentMonth;
+    const flagsMap = new Map<string, string[]>();
+
+    rosters.forEach((roster) => {
+      const date = roster.flight_date;
+      if (!date) return;
+
+      const flag = getCountryFlag(roster.destination);
+      // Replace fallback flag (✈️) with checkered flag (🏁) when no country data
+      const displayFlag = flag === '✈️' ? '🏁' : flag;
+
+      const existingFlags = flagsMap.get(date) || [];
+      if (!existingFlags.includes(displayFlag)) {
+        flagsMap.set(date, [...existingFlags, displayFlag]);
+      }
+    });
+
+    return flagsMap;
+  }, [rosters]);
 
   // Helper functions
   const getFirstDayOfMonth = (dateTime: DateTime): DateTime => {
     return dateTime.startOf('month');
   };
+
+  // Internal state for uncontrolled mode
+  const [internalCurrentMonth, setInternalCurrentMonth] = useState<DateTime>(
+    () => initialMonth || getFirstDayOfMonth(DateTime.now()),
+  );
+
+  // Use controlled or uncontrolled month
+  const currentMonth = controlledCurrentMonth ?? internalCurrentMonth;
 
   const addMonths = (dateTime: DateTime, months: number): DateTime => {
     return dateTime.plus({months});
@@ -156,34 +186,45 @@ export function RosterCalendar({
       setInternalCurrentMonth(today);
     }
     onMonthChange?.(today);
-    
+
     // Also select today's date
     const todayDateId = toDateId(DateTime.now().toJSDate());
-    onDayPress(todayDateId);
+    if (todayDateId) {
+      onDayPress(todayDateId);
+    }
   }, [controlledCurrentMonth, onMonthChange, onDayPress]);
 
   // Convert activeDateRanges to ensure they're in dateId format
   const normalizedActiveDateRanges = useMemo(() => {
     return activeDateRanges.map((range) => {
+      // Ensure startId and endId exist
+      if (!range.startId || !range.endId) {
+        return range;
+      }
+
       // If startId/endId are already in dateId format, use them
       if (/^\d{8}$/.test(range.startId) && /^\d{8}$/.test(range.endId)) {
         return range;
       }
-      
+
       // Try to convert from ISO format
       try {
         const startDate = DateTime.fromISO(range.startId);
         const endDate = DateTime.fromISO(range.endId);
         if (startDate.isValid && endDate.isValid) {
-          return {
-            startId: toDateId(startDate.toJSDate()),
-            endId: toDateId(endDate.toJSDate()),
-          };
+          const startId = toDateId(startDate.toJSDate());
+          const endId = toDateId(endDate.toJSDate());
+          if (startId && endId) {
+            return {
+              startId,
+              endId,
+            };
+          }
         }
       } catch {
         // Invalid format, return as-is
       }
-      
+
       return range;
     });
   }, [activeDateRanges]);
@@ -202,6 +243,7 @@ export function RosterCalendar({
         activeDateRanges={normalizedActiveDateRanges}
         onDayPress={onDayPress}
         dateHasFlights={dateHasFlightsISO}
+        dateToFlags={dateToFlags}
       />
     </>
   );
@@ -222,4 +264,3 @@ export function RosterCalendar({
     </ThemedView>
   );
 }
-

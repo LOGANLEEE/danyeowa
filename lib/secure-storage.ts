@@ -274,3 +274,26 @@ export async function getFlightCodePrefix(): Promise<string | null> {
   }
 }
 
+/**
+ * Clear all app-specific data stored in SecureStore.
+ * This removes session, user, onboarding, biometric, and flightCodePrefix data.
+ * Always await this before critical flows like sign-out.
+ */
+export async function clearAllSecureStore(): Promise<void> {
+  try {
+    // Add new keys here if more app-specific SecureStore items are introduced
+    const keysToClear = [
+      SESSION_STORAGE_KEY,
+      USER_STORAGE_KEY,
+      BIOMETRIC_ENABLED_KEY,
+      BIOMETRIC_EMAIL_KEY,
+      ONBOARDING_COMPLETED_KEY,
+      FLIGHT_CODE_PREFIX_KEY,
+    ];
+
+    await Promise.all(keysToClear.map(key => SecureStore.deleteItemAsync(key)));
+  } catch (error) {
+    console.error('[SecureStorage] Failed to clear all SecureStore data:', error);
+    throw error;
+  }
+}

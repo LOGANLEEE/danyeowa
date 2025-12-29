@@ -1,9 +1,12 @@
 -- ============================================
--- ROASTER ME - ALL MIGRATIONS (003-008)
+-- ROASTER ME - COMPLETE DATABASE SETUP
 -- Apply this file in Supabase SQL Editor
 -- ============================================
 -- 
--- This file combines all new migrations for social features:
+-- This file contains ALL migrations in order:
+-- - Profiles (user profiles extending auth.users)
+-- - Rosters (flight rosters/schedules)
+-- - Flight Type Column (roster enhancement)
 -- - Connections (user relationships)
 -- - Shared Rosters (roster sharing)
 -- - Notifications (notification history)
@@ -11,8 +14,151 @@
 -- - Connection Limits (5 max connections)
 -- - RLS Updates (shared roster access)
 --
--- Run this in order, or apply individual migration files
+-- Run this file once to set up your entire database schema
 -- ============================================
+
+-- ============================================
+-- MIGRATION 001: Create Profiles Table
+-- ============================================
+-- Create user profiles table
+-- This table extends Supabase's auth.users with additional user information
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  email TEXT,
+  full_name TEXT,
+  avatar_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
+);
+
+-- Enable Row Level Security
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Create policies
+-- Users can view their own profile
+CREATE POLICY "Users can view own profile"
+  ON public.profiles
+  FOR SELECT
+  USING (auth.uid() = id);
+
+-- Users can update their own profile
+CREATE POLICY "Users can update own profile"
+  ON public.profiles
+  FOR UPDATE
+  USING (auth.uid() = id);
+
+-- Users can insert their own profile
+CREATE POLICY "Users can insert own profile"
+  ON public.profiles
+  FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
+-- Create function to automatically create profile on user signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', '')
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Create trigger to call the function when a new user is created
+CREATE OR REPLACE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Create function to automatically update updated_at timestamp
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = TIMEZONE('utc', NOW());
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to update updated_at on profile updates
+CREATE TRIGGER on_profile_updated
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Create index on email for faster lookups
+CREATE INDEX IF NOT EXISTS profiles_email_idx ON public.profiles(email);
+
+-- Add comment to table
+COMMENT ON TABLE public.profiles IS 'User profiles extending auth.users with additional information';
+
+-- ============================================
+-- MIGRATION 001b: Create Rosters Table
+-- ============================================
+-- Create rosters table
+-- Stores flight roster/schedule information for users
+
+CREATE TABLE IF NOT EXISTS public.rosters (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  flight_code TEXT NOT NULL,
+  route TEXT NOT NULL,
+  origin TEXT,
+  destination TEXT NOT NULL,
+  flight_date DATE NOT NULL,
+  departure_time TIME WITHOUT TIME ZONE NOT NULL,
+  arrival_time TIME WITHOUT TIME ZONE NOT NULL,
+  aircraft_type TEXT,
+  flight_type TEXT DEFAULT 'Depart' CHECK (flight_type IN ('Depart', 'Return')) NOT NULL,
+  status TEXT DEFAULT 'Scheduled' CHECK (status IN ('Scheduled', 'Confirmed', 'Delayed', 'Cancelled', 'Completed')) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
+);
+
+-- Enable Row Level Security
+ALTER TABLE public.rosters ENABLE ROW LEVEL SECURITY;
+
+-- Create indexes for faster queries
+CREATE INDEX IF NOT EXISTS rosters_user_id_idx ON public.rosters(user_id);
+CREATE INDEX IF NOT EXISTS rosters_flight_date_idx ON public.rosters(flight_date);
+CREATE INDEX IF NOT EXISTS rosters_flight_type_idx ON public.rosters(flight_type);
+CREATE INDEX IF NOT EXISTS rosters_status_idx ON public.rosters(status);
+
+-- RLS Policies
+
+-- Users can view their own rosters
+CREATE POLICY "Users can view own rosters"
+  ON public.rosters
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Users can create their own rosters
+CREATE POLICY "Users can create own rosters"
+  ON public.rosters
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Users can update their own rosters
+CREATE POLICY "Users can update own rosters"
+  ON public.rosters
+  FOR UPDATE
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Users can delete their own rosters
+CREATE POLICY "Users can delete own rosters"
+  ON public.rosters
+  FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- Create trigger to update updated_at on roster updates
+CREATE TRIGGER on_roster_updated
+  BEFORE UPDATE ON public.rosters
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- Add comment to table
+COMMENT ON TABLE public.rosters IS 'Flight rosters/schedules for users';
 
 -- ============================================
 -- MIGRATION 003: Create Connections Table
@@ -443,6 +589,19 @@ COMMENT ON FUNCTION public.check_connection_limit() IS 'Enforces maximum of 5 ac
 -- Update rosters RLS policies to allow viewing shared rosters
 -- This enables users to see rosters that have been shared with them
 
+-- Create a SECURITY DEFINER function to check roster ownership
+-- This bypasses RLS to avoid infinite recursion when checking policies
+CREATE OR REPLACE FUNCTION public.user_owns_roster(roster_uuid UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 
+    FROM public.rosters 
+    WHERE id = roster_uuid AND user_id = auth.uid()
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Drop existing select policy (we'll create a new one that includes shared rosters)
 DROP POLICY IF EXISTS "Users can view own rosters" ON public.rosters;
 
@@ -463,9 +622,54 @@ CREATE POLICY "Users can view own and shared rosters"
     )
   );
 
+-- Update shared_rosters policies to use the SECURITY DEFINER function
+-- This breaks the circular dependency
+
+-- Drop and recreate the policy that checks roster ownership
+DROP POLICY IF EXISTS "Users can view sharing of own rosters" ON public.shared_rosters;
+CREATE POLICY "Users can view sharing of own rosters"
+  ON public.shared_rosters
+  FOR SELECT
+  USING (
+    auth.uid() = shared_by_user_id OR
+    public.user_owns_roster(roster_id)
+  );
+
+-- Update INSERT policy
+DROP POLICY IF EXISTS "Users can share own rosters" ON public.shared_rosters;
+CREATE POLICY "Users can share own rosters"
+  ON public.shared_rosters
+  FOR INSERT
+  WITH CHECK (
+    auth.uid() = shared_by_user_id AND
+    public.user_owns_roster(roster_id)
+  );
+
+-- Update UPDATE policy
+DROP POLICY IF EXISTS "Users can update sharing of own rosters" ON public.shared_rosters;
+CREATE POLICY "Users can update sharing of own rosters"
+  ON public.shared_rosters
+  FOR UPDATE
+  USING (
+    auth.uid() = shared_by_user_id OR
+    public.user_owns_roster(roster_id)
+  );
+
+-- Update DELETE policy
+DROP POLICY IF EXISTS "Users can unshare own rosters" ON public.shared_rosters;
+CREATE POLICY "Users can unshare own rosters"
+  ON public.shared_rosters
+  FOR DELETE
+  USING (
+    auth.uid() = shared_by_user_id OR
+    public.user_owns_roster(roster_id)
+  );
+
 -- Add comment
 COMMENT ON POLICY "Users can view own and shared rosters" ON public.rosters IS 
   'Allows users to view their own rosters and rosters shared with them via shared_rosters table';
+COMMENT ON FUNCTION public.user_owns_roster(UUID) IS 
+  'SECURITY DEFINER function to check roster ownership without triggering RLS recursion';
 
 -- ============================================
 -- MIGRATION COMPLETE
@@ -478,4 +682,3 @@ COMMENT ON POLICY "Users can view own and shared rosters" ON public.rosters IS
 -- 3. Test triggers: Create a connection and verify limit enforcement
 -- 4. Test functions: Call mark_all_notifications_read() as a user
 -- ============================================
-

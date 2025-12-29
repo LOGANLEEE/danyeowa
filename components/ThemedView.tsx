@@ -83,7 +83,7 @@ export function ThemedView({
   }, [exit, opacity, scale]);
 
   const animatedStyle = useAnimatedStyle(() => {
-    const transforms: Array<{translateY?: number; translateX?: number; scale?: number; rotate?: string}> = [];
+    const transforms: {translateY?: number; translateX?: number; scale?: number; rotate?: string}[] = [];
     
     if (animationType === 'slide' || animationType === 'combined') {
       transforms.push({ translateY: translateY.value });

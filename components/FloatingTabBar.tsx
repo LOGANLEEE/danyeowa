@@ -1,10 +1,12 @@
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { LayoutChangeEvent, Platform, StyleSheet, View } from 'react-native';
 import Animated, {
+  Easing,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,20 +16,60 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { HapticTab } from './haptic-tab';
 
-export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+export function FloatingTabBar({state, descriptors, navigation}: BottomTabBarProps) {
   const colorScheme = useColorScheme();
   const themeColors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
 
   const backgroundColor =
-    colorScheme === 'dark'
-      ? 'rgba(42, 42, 42, 0.95)'
-      : 'rgba(255, 255, 255, 0.95)';
+    colorScheme === 'dark' ? 'rgba(42, 42, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)';
 
-  const borderColor =
+  const borderColor = colorScheme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+
+  // Liquid blob animation values
+  const blobPosition = useSharedValue(0);
+  const blobWidth = useSharedValue(0);
+  const tabPositions = React.useRef<number[]>([]);
+  const tabWidths = React.useRef<number[]>([]);
+
+  // Update blob position when active tab changes
+  React.useEffect(() => {
+    const activeIndex = state.index;
+    if (tabPositions.current[activeIndex] !== undefined) {
+      blobPosition.value = withTiming(tabPositions.current[activeIndex], {
+        duration: 400,
+        easing: Easing.bezier(0.4, 0.0, 0.2, 1), // Smooth liquid easing
+      });
+    }
+    if (tabWidths.current[activeIndex] !== undefined) {
+      blobWidth.value = withTiming(tabWidths.current[activeIndex], {
+        duration: 400,
+        easing: Easing.bezier(0.4, 0.0, 0.2, 1),
+      });
+    }
+  }, [state.index, blobPosition, blobWidth]);
+
+  const handleTabLayout = (index: number) => (event: LayoutChangeEvent) => {
+    const {x, width} = event.nativeEvent.layout;
+    tabPositions.current[index] = x;
+    tabWidths.current[index] = width;
+    
+    // Initialize blob position on first layout
+    if (index === state.index) {
+      blobPosition.value = x;
+      blobWidth.value = width;
+    }
+  };
+
+  const blobAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{translateX: blobPosition.value}],
+    width: blobWidth.value,
+  }));
+
+  const liquidBlobColor =
     colorScheme === 'dark'
-      ? 'rgba(255, 255, 255, 0.1)'
-      : 'rgba(0, 0, 0, 0.1)';
+      ? 'rgba(201, 162, 77, 0.2)' // GOLD with opacity
+      : 'rgba(201, 162, 77, 0.15)'; // GOLD with opacity
 
   return (
     <View
@@ -46,8 +88,19 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
             shadowColor: colorScheme === 'dark' ? '#000' : '#000',
           },
         ]}>
+        {/* Liquid blob background */}
+        <Animated.View
+          style={[
+            styles.liquidBlob,
+            {
+              backgroundColor: liquidBlobColor,
+            },
+            blobAnimatedStyle,
+          ]}
+        />
+        
         {state.routes.map((route, index) => {
-          const { options } = descriptors[route.key];
+          const {options} = descriptors[route.key];
           const label =
             options.tabBarLabel !== undefined
               ? options.tabBarLabel
@@ -82,12 +135,13 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
             <HapticTab
               key={route.key}
               accessibilityRole="button"
-              accessibilityState={isFocused ? { selected: true } : {}}
+              accessibilityState={isFocused ? {selected: true} : {}}
               accessibilityLabel={options.tabBarAccessibilityLabel}
               testID={options.tabBarButtonTestID ?? `tab-${route.name}`}
               onPress={onPress}
               onLongPress={onLongPress}
-              style={styles.tabButton}>
+              style={styles.tabButton}
+              onLayout={handleTabLayout(index)}>
               <TabIcon
                 iconName={iconName}
                 isFocused={isFocused}
@@ -128,7 +182,7 @@ function TabIcon({
   }, [isFocused, scale, opacity]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{scale: scale.value}],
     opacity: opacity.value,
   }));
 
@@ -141,15 +195,12 @@ function TabIcon({
   );
 }
 
-function getIconName(
-  routeName: string,
-  isFocused: boolean,
-): keyof typeof Ionicons.glyphMap {
+function getIconName(routeName: string, isFocused: boolean): keyof typeof Ionicons.glyphMap {
   switch (routeName) {
     case 'home':
-      return isFocused ? 'home' : 'home-outline';
+      return isFocused ? 'rocket' : 'rocket-outline';
     case 'schedule':
-      return isFocused ? 'calendar' : 'calendar-outline';
+      return isFocused ? 'calendar-sharp' : 'calendar-outline';
     default:
       return 'ellipse-outline';
   }
@@ -167,15 +218,18 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    height: 64,
+    height: 42,
     borderRadius: 28,
     paddingHorizontal: 12,
     paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'space-around',
+    alignSelf: 'center',
+    maxWidth: 180,
+    overflow: 'hidden',
     ...Platform.select({
       ios: {
-        shadowOffset: { width: 0, height: 8 },
+        shadowOffset: {width: 0, height: 8},
         shadowOpacity: 0.2,
         shadowRadius: 16,
       },
@@ -185,15 +239,32 @@ const styles = StyleSheet.create({
     }),
     borderWidth: StyleSheet.hairlineWidth,
   },
+  liquidBlob: {
+    position: 'absolute',
+    height: 26,
+    borderRadius: 20,
+    top: 8,
+    left: 0,
+    ...Platform.select({
+      ios: {
+        shadowOffset: {width: 0, height: 2},
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
   tabButton: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     height: '100%',
+    zIndex: 1,
   },
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
 });
-

@@ -1,5 +1,5 @@
-import { DateTime } from 'luxon';
 import { Roster } from '@/lib/supabase/types';
+import { DateTime } from 'luxon';
 
 export type FlightStatus = 'upcoming' | 'departing_soon' | 'in_flight' | 'landing_soon' | 'landed' | 'cancelled';
 
@@ -41,7 +41,7 @@ export function calculateFlightTimeInfo(
   const isPast = arrivalDateTime < now;
   
   // Calculate time differences
-  const departureDiff = departureDateTime.diff(now, ['hours', 'minutes']);
+  const departureDiff = departureTime.diff(now, ['hours', 'minutes']);
   const arrivalDiff = arrivalDateTime.diff(now, ['hours', 'minutes']);
   
   const hoursUntilDeparture = departureDiff.hours > 0 ? Math.floor(departureDiff.hours) : null;
@@ -77,7 +77,7 @@ export function calculateFlightTimeInfo(
     minutesUntilArrival,
     isToday,
     isPast,
-    departureDateTime,
+    departureDateTime: departureTime,
     arrivalDateTime,
     formattedTimeRemaining,
     formattedArrivalTimeRemaining,

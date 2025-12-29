@@ -216,3 +216,4 @@ export function getFlagsForDestinations(destinations: (string | null | undefined
   return Array.from(new Set(flags));
 }
 
+

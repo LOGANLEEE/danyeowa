@@ -1,12 +1,9 @@
 import { useEffect } from 'react';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
 import { View, type ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/ThemedText';
-import { entranceAnimation, textEntranceAnimation, staggerDelay } from '@/utils/animations';
+import { easingCurves, staggerDelay, viewSpringConfig } from '@/utils/animations';
 import { type ReactNode } from 'react';
 
 export type ThemedHeaderProps = {
@@ -88,7 +85,7 @@ export function ThemedHeader({
   const isOverlay = variant === 'overlay';
   const hasCustomLayout = left !== undefined || center !== undefined || right !== undefined;
 
-  // Animation values
+  // Animation shared values
   const containerOpacity = useSharedValue(animated ? 0 : 1);
   const containerTranslateY = useSharedValue(animated ? -10 : 0);
   const leftOpacity = useSharedValue(animated && left ? 0 : 1);
@@ -99,13 +96,12 @@ export function ThemedHeader({
   // Container animation
   useEffect(() => {
     if (animated) {
-      const timer = setTimeout(() => {
-        const animations = entranceAnimation(delay);
-        containerOpacity.value = animations.opacity;
-        containerTranslateY.value = animations.translateY;
-      }, delay);
-
-      return () => clearTimeout(timer);
+      containerOpacity.value = delay > 0
+        ? withDelay(delay, withTiming(1, { duration: 450, easing: easingCurves.easeOut }))
+        : withTiming(1, { duration: 450, easing: easingCurves.easeOut });
+      containerTranslateY.value = delay > 0
+        ? withDelay(delay, withSpring(0, viewSpringConfig))
+        : withSpring(0, viewSpringConfig);
     }
   }, [animated, delay, containerOpacity, containerTranslateY]);
 
@@ -113,13 +109,12 @@ export function ThemedHeader({
   useEffect(() => {
     if (animated && left) {
       const leftDelay = staggerChildren ? delay + staggerDelay(0, 50) : delay;
-      const timer = setTimeout(() => {
-        const animations = entranceAnimation(leftDelay);
-        leftOpacity.value = animations.opacity;
-        leftTranslateX.value = animations.translateY;
-      }, leftDelay);
-
-      return () => clearTimeout(timer);
+      leftOpacity.value = leftDelay > 0
+        ? withDelay(leftDelay, withTiming(1, { duration: 450, easing: easingCurves.easeOut }))
+        : withTiming(1, { duration: 450, easing: easingCurves.easeOut });
+      leftTranslateX.value = leftDelay > 0
+        ? withDelay(leftDelay, withSpring(0, viewSpringConfig))
+        : withSpring(0, viewSpringConfig);
     }
   }, [animated, left, delay, staggerChildren, leftOpacity, leftTranslateX]);
 
@@ -127,13 +122,12 @@ export function ThemedHeader({
   useEffect(() => {
     if (animated && right) {
       const rightDelay = staggerChildren ? delay + staggerDelay(1, 50) : delay;
-      const timer = setTimeout(() => {
-        const animations = entranceAnimation(rightDelay);
-        rightOpacity.value = animations.opacity;
-        rightTranslateX.value = -animations.translateY; // Slide from right
-      }, rightDelay);
-
-      return () => clearTimeout(timer);
+      rightOpacity.value = rightDelay > 0
+        ? withDelay(rightDelay, withTiming(1, { duration: 450, easing: easingCurves.easeOut }))
+        : withTiming(1, { duration: 450, easing: easingCurves.easeOut });
+      rightTranslateX.value = rightDelay > 0
+        ? withDelay(rightDelay, withSpring(0, viewSpringConfig))
+        : withSpring(0, viewSpringConfig);
     }
   }, [animated, right, delay, staggerChildren, rightOpacity, rightTranslateX]);
 
@@ -214,31 +208,26 @@ export function ThemedHeader({
   // If custom layout is provided, use flex row layout
   if (hasCustomLayout) {
     return (
-      <Animated.View 
-        className={`${containerClasses} flex-row items-center`} 
-        style={[animated ? containerAnimatedStyle : undefined, { overflow: 'visible' }, style]}
-      >
+      <Animated.View
+        className={`${containerClasses} flex-row items-center`}
+        style={[animated ? containerAnimatedStyle : undefined, {overflow: 'visible'}, style]}>
         {/* Left section */}
         {left && (
-          <Animated.View 
-            className="flex-shrink-0"
-            style={animated ? leftAnimatedStyle : undefined}
-          >
+          <Animated.View className="flex-shrink-0" style={animated ? leftAnimatedStyle : undefined}>
             {left}
           </Animated.View>
         )}
 
         {/* Center section */}
-        <View className="flex-1 mx-3" style={{ minWidth: 0 }}>
+        <View className="flex-1 mx-3" style={{minWidth: 0}}>
           {center !== undefined ? center : renderDefaultContent()}
         </View>
 
         {/* Right section */}
         {right && (
-          <Animated.View 
+          <Animated.View
             className="flex-shrink-0"
-            style={[animated ? rightAnimatedStyle : undefined, { zIndex: 10 }]}
-          >
+            style={[animated ? rightAnimatedStyle : undefined, {zIndex: 10}]}>
             {right}
           </Animated.View>
         )}
@@ -248,10 +237,9 @@ export function ThemedHeader({
 
   // Default vertical layout (backward compatible)
   return (
-    <Animated.View 
-      className={containerClasses} 
-      style={[animated ? containerAnimatedStyle : undefined, style]}
-    >
+    <Animated.View
+      className={containerClasses}
+      style={[animated ? containerAnimatedStyle : undefined, style]}>
       {renderDefaultContent()}
     </Animated.View>
   );

@@ -1,55 +1,59 @@
 import { CoffeeIcon } from '@/components/CoffeeIcon';
+import { ThemedHeader } from '@/components/ThemedHeader';
 import { ThemedLoader } from '@/components/ThemedLoader';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { FlightTypeToggle } from '@/components/ui/FlightTypeToggle';
+import { ModalContainer } from '@/components/ui/ModalContainer';
 import { RosterCalendar } from '@/components/ui/RosterCalendar';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { SectionHeader } from '@/components/ui/SectionHeader';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getFlightCodePrefix } from '@/lib/secure-storage';
-import { Roster } from '@/lib/supabase/types';
 import { useRostersStore } from '@/stores/use-rosters-store';
 import { Ionicons } from '@expo/vector-icons';
 import { fromDateId, toDateId } from '@marceloterreiro/flash-calendar';
+import { useRouter } from 'expo-router';
 import { DateTime } from 'luxon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Platform, TouchableOpacity, View } from 'react-native';
 
 // Helper function for month navigation
 const getFirstDayOfMonth = (dateTime: DateTime): DateTime => {
   return dateTime.startOf('month');
 };
 
-// Helper function to get status color
-const getStatusColor = (status: Roster['status'], colorScheme: 'light' | 'dark'): string => {
-  const themeColors = Colors[colorScheme];
-  switch (status) {
-    case 'Scheduled':
-      return colorScheme === 'dark' ? '#3B82F6' : '#2563EB'; // Blue
-    case 'Confirmed':
-      return themeColors.tint; // Roaster color
-    case 'Delayed':
-      return colorScheme === 'dark' ? '#F59E0B' : '#D97706'; // Amber
-    case 'Cancelled':
-      return colorScheme === 'dark' ? '#EF4444' : '#DC2626'; // Red
-    case 'Completed':
-      return colorScheme === 'dark' ? '#10B981' : '#059669'; // Green
-    default:
-      return themeColors.tint;
-  }
-};
+function AddMonthlyButton() {
+  const router = useRouter();
+  const colorScheme = useColorScheme();
+  const themeColors = Colors[colorScheme ?? 'light'];
+
+  return (
+    <TouchableOpacity
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel="Add monthly roster"
+      testID="add-monthly-button"
+      onPress={() => router.push('/schedule/add-monthly')}
+      className="mr-4 p-2 rounded-full bg-[#800020]/10 dark:bg-[#A0002A]/20 border border-[#800020]/30 dark:border-[#A0002A]/40"
+      activeOpacity={0.7}>
+      <Ionicons
+        name="add-circle-outline"
+        size={24}
+        color={themeColors.tint}
+        testID="add-monthly-icon"
+        accessibilityElementsHidden={false}
+        accessibilityLabel="Add monthly roster"
+        importantForAccessibility="yes"
+      />
+    </TouchableOpacity>
+  );
+}
 
 export default function ScheduleScreen() {
   const colorScheme = useColorScheme();
@@ -57,7 +61,7 @@ export default function ScheduleScreen() {
   const now = DateTime.now();
   const [selectedDate, setSelectedDate] = useState<string | null>(toDateId(now.toJSDate()));
   const [currentMonth, setCurrentMonth] = useState<DateTime>(getFirstDayOfMonth(now));
-  
+
   // Convert selectedDate (dateId) to ISO format for dateHasFlights comparison
   const selectedDateISO = useMemo(() => {
     if (!selectedDate) return null;
@@ -305,293 +309,224 @@ export default function ScheduleScreen() {
   };
 
   return (
-    <SafeAreaView edges={[]} className="flex-1">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1">
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          className="flex-1"
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled">
-          <ThemedView className="min-h-full px-6 py-6">
-            {/* Calendar - Single Month View */}
-            <View className="mb-8">
-              <RosterCalendar
-                selectedDate={selectedDate}
-                onDayPress={handleDayPress}
-                activeDateRanges={calendarActiveDateRanges}
-                dateHasFlights={dateHasFlights}
-                currentMonth={currentMonth}
-                onMonthChange={handleMonthChange}
+    <ScreenContainer
+      edges={[]}
+      scrollable={false}
+      enableKeyboardAvoiding={true}
+      keyboardBehavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ThemedView className="flex-1 px-6 py-6 pt-10">
+        <ThemedHeader
+          title="Schedule"
+          right={<AddMonthlyButton />}
+        />
+        {/* Calendar - Single Month View */}
+        <View className="mb-8">
+          <RosterCalendar
+            selectedDate={selectedDate}
+            onDayPress={handleDayPress}
+            activeDateRanges={calendarActiveDateRanges}
+            dateHasFlights={dateHasFlights}
+            rosters={rosters}
+            currentMonth={currentMonth}
+            onMonthChange={handleMonthChange}
+          />
+        </View>
+
+        {/* Flight Code Input Modal */}
+        <ModalContainer
+          visible={isInputMode && departureDate !== null}
+          onClose={handleCloseModal}
+          title="Add Flight"
+          subtitle={
+            departureDate
+              ? (() => {
+                  try {
+                    const dateObj = fromDateId(departureDate);
+                    return DateTime.fromJSDate(dateObj).toFormat('EEEE, MMMM d, yyyy');
+                  } catch {
+                    return DateTime.fromISO(departureDate).toFormat('EEEE, MMMM d, yyyy');
+                  }
+                })()
+              : undefined
+          }>
+          <View className="mb-6">
+            <ThemedInput
+              label="Flight Code"
+              placeholder={flightPrefix ? `e.g., ${flightPrefix} 321 or full code` : 'e.g., SQ 321'}
+              value={flightCode}
+              onChangeText={(text) => {
+                setFlightCode(text);
+                if (saveError) setSaveError(null);
+              }}
+              error={saveError || undefined}
+              autoCapitalize="characters"
+              autoFocus
+              onSubmitEditing={handleFlightCodeSubmit}
+              returnKeyType="done"
+              editable={!isSaving}
+            />
+            {flightPrefix && !flightCode.includes(' ') && (
+              <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Tip: Enter just the number (e.g., "321") and it will become "{flightPrefix} 321"
+              </ThemedText>
+            )}
+            {saveError && (
+              <ThemedText className="text-red-600 dark:text-red-400 text-sm mt-2">
+                {saveError}
+              </ThemedText>
+            )}
+          </View>
+
+          {/* Flight Type Toggle */}
+          <View className="mb-6">
+            <ThemedText className="text-sm font-semibold mb-3">Flight Type</ThemedText>
+            <FlightTypeToggle value={flightType} onChange={setFlightType} disabled={isSaving} />
+          </View>
+
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <ThemedButton
+                title="Cancel"
+                onPress={handleCloseModal}
+                variant="secondary"
+                fullWidth
+                disabled={isSaving}
               />
             </View>
+            <View className="flex-1">
+              <ThemedButton
+                title={isSaving ? 'Saving...' : 'Save'}
+                onPress={handleFlightCodeSubmit}
+                disabled={!flightCode.trim() || isSaving}
+                isLoading={isSaving}
+                fullWidth
+              />
+            </View>
+          </View>
+        </ModalContainer>
 
-            {/* Flight Code Input Modal */}
-            <Modal
-              visible={isInputMode && departureDate !== null}
-              transparent
-              animationType="slide"
-              onRequestClose={handleCloseModal}>
-              <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                className="flex-1">
-                <View className="flex-1 bg-black/50 justify-end">
-                  <ThemedView className="rounded-t-3xl p-6 pb-8">
-                    <View className="flex-row items-center justify-between mb-6">
-                      <View className="flex-1">
-                        <ThemedText type="subtitle" className="text-xl font-semibold mb-1">
-                          Add Flight
-                        </ThemedText>
-                        <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
-                          {departureDate
-                            ? (() => {
-                                try {
-                                  const dateObj = fromDateId(departureDate);
-                                  return DateTime.fromJSDate(dateObj).toFormat('EEEE, MMMM d, yyyy');
-                                } catch {
-                                  return DateTime.fromISO(departureDate).toFormat('EEEE, MMMM d, yyyy');
-                                }
-                              })()
-                            : ''}
-                        </ThemedText>
-                      </View>
-                      <TouchableOpacity onPress={handleCloseModal} className="p-2">
-                        <Ionicons
-                          name="close"
-                          size={28}
-                          color={colorScheme === 'dark' ? '#9BA1A6' : '#687076'}
-                        />
-                      </TouchableOpacity>
-                    </View>
+        {/* Selected Date Rosters - Show when not in input mode */}
+        {selectedDate && !isInputMode && (
+          <View className="mb-6">
+            <SectionHeader
+              title={
+                selectedDateRosters.length > 0
+                  ? `${selectedDateRosters.length} Flight${selectedDateRosters.length > 1 ? 's' : ''}`
+                  : 'No Flights'
+              }
+              subtitle={
+                selectedDateISO
+                  ? DateTime.fromISO(selectedDateISO).toFormat('EEEE, MMMM d, yyyy')
+                  : undefined
+              }
+            />
 
-                    <View className="mb-6">
-                      <ThemedInput
-                        label="Flight Code"
-                        placeholder={
-                          flightPrefix ? `e.g., ${flightPrefix} 321 or full code` : 'e.g., SQ 321'
-                        }
-                        value={flightCode}
-                        onChangeText={(text) => {
-                          setFlightCode(text);
-                          if (saveError) setSaveError(null);
-                        }}
-                        error={saveError || undefined}
-                        autoCapitalize="characters"
-                        autoFocus
-                        onSubmitEditing={handleFlightCodeSubmit}
-                        returnKeyType="done"
-                        editable={!isSaving}
-                      />
-                      {flightPrefix && !flightCode.includes(' ') && (
-                        <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                          Tip: Enter just the number (e.g., "321") and it will become "
-                          {flightPrefix} 321"
-                        </ThemedText>
-                      )}
-                      {saveError && (
-                        <ThemedText className="text-red-600 dark:text-red-400 text-sm mt-2">
-                          {saveError}
-                        </ThemedText>
-                      )}
-                    </View>
-
-                    {/* Flight Type Toggle */}
-                    <View className="mb-6">
-                      <ThemedText className="text-sm font-semibold mb-3">Flight Type</ThemedText>
-                      <FlightTypeToggle
-                        value={flightType}
-                        onChange={setFlightType}
-                        disabled={isSaving}
-                      />
-                    </View>
-
-                    <View className="flex-row gap-3">
-                      <View className="flex-1">
-                        <ThemedButton
-                          title="Cancel"
-                          onPress={handleCloseModal}
-                          variant="secondary"
-                          fullWidth
-                          disabled={isSaving}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <ThemedButton
-                          title={isSaving ? 'Saving...' : 'Save'}
-                          onPress={handleFlightCodeSubmit}
-                          disabled={!flightCode.trim() || isSaving}
-                          isLoading={isSaving}
-                          fullWidth
-                        />
-                      </View>
-                    </View>
-                  </ThemedView>
-                </View>
-              </KeyboardAvoidingView>
-            </Modal>
-
-            {/* Selected Date Rosters - Show when not in input mode */}
-            {selectedDate && !isInputMode && (
-              <View className="mb-6">
-                <View className="flex-row items-center justify-between mb-4">
-                  <ThemedText type="subtitle" className="text-lg font-semibold">
-                    {selectedDateRosters.length > 0
-                      ? `${selectedDateRosters.length} Flight${selectedDateRosters.length > 1 ? 's' : ''}`
-                      : 'No Flights'}
-                  </ThemedText>
-                  <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
-                    {selectedDateISO
-                      ? DateTime.fromISO(selectedDateISO).toFormat('EEEE, MMMM d, yyyy')
-                      : ''}
-                  </ThemedText>
-                </View>
-
-                {selectedDateRosters.length === 0 ? (
+            {selectedDateRosters.length === 0 ? (
+              <EmptyState
+                icon="airplane-outline"
+                iconSize={40}
+                message="No flights scheduled for this date… maybe grab a ☕?"
+              />
+            ) : (
+              <View className="gap-3">
+                {selectedDateRosters.map((roster, index) => (
                   <ThemedView
+                    key={roster.id}
                     animated
-                    delay={0}
-                    className="rounded-2xl p-6 border-2 border-[#800020]/20 dark:border-[#A0002A]/30 bg-[#800020]/5 dark:bg-[#A0002A]/10">
-                    <View className="items-center">
-                      <View className="flex-row items-center justify-center mb-2">
-                        <Ionicons
-                          name="airplane-outline"
-                          size={40}
-                          color={colorScheme === 'dark' ? '#A0002A' : '#800020'}
-                        />
-                        <CoffeeIcon size={32} color={themeColors.coffeeMedium} animated />
+                    delay={index * 50}
+                    className="rounded-xl p-4 border-2 border-[#800020]/30 dark:border-[#A0002A]/40 shadow-sm bg-[#800020]/5 dark:bg-[#A0002A]/10">
+                    <View className="flex-row items-start justify-between mb-3">
+                      <View className="flex-1">
+                        <View className="flex-row items-center mb-2 flex-wrap gap-2">
+                          <ThemedText
+                            className="text-2xl font-bold"
+                            style={{color: themeColors.tint}}>
+                            {roster.flight_code}
+                          </ThemedText>
+                          <CoffeeIcon size={16} color={themeColors.tint} animated />
+                          <View
+                            className="px-2 py-1 rounded-full"
+                            style={{
+                              backgroundColor: themeColors.tint + '20',
+                            }}>
+                            <View className="flex-row items-center gap-1">
+                              <Ionicons
+                                name={
+                                  roster.flight_type === 'Depart' ? 'airplane-outline' : 'airplane'
+                                }
+                                size={12}
+                                color={themeColors.tint}
+                              />
+                              <ThemedText
+                                className="text-xs font-semibold"
+                                style={{
+                                  color: themeColors.tint,
+                                }}>
+                                {roster.flight_type}
+                              </ThemedText>
+                            </View>
+                          </View>
+                          <StatusBadge status={roster.status} />
+                        </View>
+                        <ThemedText className="text-base mb-1">{roster.route}</ThemedText>
+                        {roster.aircraft_type && (
+                          <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
+                            {roster.aircraft_type}
+                          </ThemedText>
+                        )}
                       </View>
-                      <ThemedText
-                        animated
-                        delay={100}
-                        className="text-gray-500 dark:text-gray-400 text-sm text-center mt-4">
-                        No flights scheduled for this date… maybe grab a ☕?
-                      </ThemedText>
+                    </View>
+
+                    <View className="flex-row justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
+                      <View className="flex-1">
+                        <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                          Departure
+                        </ThemedText>
+                        <View className="flex-row items-center">
+                          <Ionicons name="time-outline" size={14} color={themeColors.icon} />
+                          <ThemedText className="text-sm font-semibold ml-1">
+                            {roster.departure_time}
+                          </ThemedText>
+                        </View>
+                        {roster.origin && (
+                          <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {roster.origin}
+                          </ThemedText>
+                        )}
+                      </View>
+
+                      <View className="flex-1 items-end">
+                        <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                          Arrival
+                        </ThemedText>
+                        <View className="flex-row items-center">
+                          <Ionicons name="time-outline" size={14} color={themeColors.icon} />
+                          <ThemedText className="text-sm font-semibold ml-1">
+                            {roster.arrival_time}
+                          </ThemedText>
+                        </View>
+                        <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {roster.destination}
+                        </ThemedText>
+                      </View>
                     </View>
                   </ThemedView>
-                ) : (
-                  <View className="gap-3">
-                    {selectedDateRosters.map((roster, index) => (
-                      <ThemedView
-                        key={roster.id}
-                        animated
-                        delay={index * 50}
-                        className="rounded-xl p-4 border-2 border-[#800020]/30 dark:border-[#A0002A]/40 shadow-sm bg-[#800020]/5 dark:bg-[#A0002A]/10">
-                        <View className="flex-row items-start justify-between mb-3">
-                          <View className="flex-1">
-                            <View className="flex-row items-center mb-2 flex-wrap gap-2">
-                              <ThemedText
-                                className="text-2xl font-bold"
-                                style={{color: themeColors.tint}}>
-                                {roster.flight_code}
-                              </ThemedText>
-                              <CoffeeIcon size={16} color={themeColors.coffeeMedium} animated />
-                              <View
-                                className="px-2 py-1 rounded-full"
-                                style={{
-                                  backgroundColor: themeColors.tint + '20',
-                                }}>
-                                <View className="flex-row items-center gap-1">
-                                  <Ionicons
-                                    name={
-                                      roster.flight_type === 'Depart'
-                                        ? 'airplane-outline'
-                                        : 'airplane'
-                                    }
-                                    size={12}
-                                    color={themeColors.tint}
-                                  />
-                                  <ThemedText
-                                    className="text-xs font-semibold"
-                                    style={{
-                                      color: themeColors.tint,
-                                    }}>
-                                    {roster.flight_type}
-                                  </ThemedText>
-                                </View>
-                              </View>
-                              <View
-                                className="px-2 py-1 rounded-full"
-                                style={{
-                                  backgroundColor:
-                                    getStatusColor(roster.status, colorScheme ?? 'light') + '20',
-                                }}>
-                                <ThemedText
-                                  className="text-xs font-semibold"
-                                  style={{
-                                    color: getStatusColor(roster.status, colorScheme ?? 'light'),
-                                  }}>
-                                  {roster.status}
-                                </ThemedText>
-                              </View>
-                            </View>
-                            <ThemedText className="text-base mb-1">{roster.route}</ThemedText>
-                            {roster.aircraft_type && (
-                              <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
-                                {roster.aircraft_type}
-                              </ThemedText>
-                            )}
-                          </View>
-                        </View>
-
-                        <View className="flex-row justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
-                          <View className="flex-1">
-                            <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                              Departure
-                            </ThemedText>
-                            <View className="flex-row items-center">
-                              <Ionicons name="time-outline" size={14} color={themeColors.icon} />
-                              <ThemedText className="text-sm font-semibold ml-1">
-                                {roster.departure_time}
-                              </ThemedText>
-                            </View>
-                            {roster.origin && (
-                              <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                {roster.origin}
-                              </ThemedText>
-                            )}
-                          </View>
-
-                          <View className="flex-1 items-end">
-                            <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                              Arrival
-                            </ThemedText>
-                            <View className="flex-row items-center">
-                              <Ionicons name="time-outline" size={14} color={themeColors.icon} />
-                              <ThemedText className="text-sm font-semibold ml-1">
-                                {roster.arrival_time}
-                              </ThemedText>
-                            </View>
-                            <ThemedText className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                              {roster.destination}
-                            </ThemedText>
-                          </View>
-                        </View>
-                      </ThemedView>
-                    ))}
-                  </View>
-                )}
+                ))}
               </View>
             )}
+          </View>
+        )}
 
-            {/* Loading State */}
-            {isLoading && rosters.length === 0 && (
-              <ThemedView
-                animated
-                delay={0}
-                className="rounded-2xl p-6 border-2 border-[#800020]/20 dark:border-[#A0002A]/30 bg-[#800020]/5 dark:bg-[#A0002A]/10">
-                <ThemedLoader size="small" message="Loading your roster..." />
-              </ThemedView>
-            )}
+        {/* Loading State */}
+        {isLoading && rosters.length === 0 && (
+          <ThemedView
+            animated
+            delay={0}
+            className="rounded-2xl p-6 border-2 border-[#800020]/20 dark:border-[#A0002A]/30 bg-[#800020]/5 dark:bg-[#A0002A]/10">
+            <ThemedLoader size="small" message="Loading your roster..." />
           </ThemedView>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        )}
+      </ThemedView>
+    </ScreenContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  scrollContent: {
-    flexGrow: 1,
-  },
-});

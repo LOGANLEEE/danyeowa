@@ -9,6 +9,7 @@ import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { ThemedLoader } from '@/components/ThemedLoader';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { OfflineSyncManager } from '@/lib/offline-sync-manager';
+import { clearAllSecureStore } from '@/lib/secure-storage';
 import { useAuthStore } from '@/stores/use-auth-store';
 
 export const unstable_settings = {
@@ -16,6 +17,7 @@ export const unstable_settings = {
 };
 
 function RootLayoutNav() {
+  clearAllSecureStore()
   const {isAuthenticated, isLoading, initialized} = useAuthStore();
   const colorScheme = useColorScheme();
 
