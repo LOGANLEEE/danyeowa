@@ -81,3 +81,6 @@ export function BarChart({data, labels, color, maxValue, height = 80, delay = 0}
 }
 
 
+
+
+

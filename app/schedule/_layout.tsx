@@ -7,8 +7,7 @@ export default function ScheduleLayout() {
       screenOptions={{
         headerShown: false,
       }}>
-      <Stack.Screen name="add-monthly" />
+      <Stack.Screen name="add-monthly" options={{headerShown: false}}/>
     </Stack>
   );
 }
-

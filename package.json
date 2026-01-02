@@ -2,7 +2,7 @@
   "name": "roaster-me",
   "main": "expo-router/entry",
   "version": "1.0.0",
-  "packageManager": "yarn@4.12.0",
+  "packageManager": "yarn@4.9.4",
   "scripts": {
     "start": "expo start -c",
     "reset-project": "node ./scripts/reset-project.js",
@@ -69,6 +69,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@expo/cli": "^54.0.20",
     "@testing-library/react-native": "^13.3.3",
     "@types/jest": "29.5.14",
     "@types/luxon": "^3",
