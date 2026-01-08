@@ -315,10 +315,7 @@ export default function ScheduleScreen() {
       enableKeyboardAvoiding={true}
       keyboardBehavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ThemedView className="flex-1 px-6 py-6 pt-10">
-        <ThemedHeader
-          title="Schedule"
-          right={<AddMonthlyButton />}
-        />
+        <ThemedHeader title="Schedule" right={<AddMonthlyButton />} />
         {/* Calendar - Single Month View */}
         <View className="mb-8">
           <RosterCalendar
@@ -411,7 +408,9 @@ export default function ScheduleScreen() {
             <SectionHeader
               title={
                 selectedDateRosters.length > 0
-                  ? `${selectedDateRosters.length} Flight${selectedDateRosters.length > 1 ? 's' : ''}`
+                  ? `${selectedDateRosters.length} Flight${
+                      selectedDateRosters.length > 1 ? 's' : ''
+                    }`
                   : 'No Flights'
               }
               subtitle={

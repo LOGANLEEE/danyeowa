@@ -6,9 +6,9 @@
 import { Platform } from 'react-native';
 
 // Luxury dark palette
-export const OBSIDIAN = '#0F1115'; // Primary background
-export const CHARCOAL = '#1A1D23'; // Secondary background / cards
-export const GRAPHITE = '#2A2E36'; // Borders / dividers
+export const OBSIDIAN = '#1A1D27'; // Primary background
+export const CHARCOAL = '#252932'; // Secondary background / cards
+export const GRAPHITE = '#3A3F47'; // Borders / dividers
 export const PLATINUM = '#E5E7EB'; // Primary text
 export const SILVER = '#9CA3AF'; // Secondary text
 export const GOLD = '#C9A24D'; // Accent / CTA

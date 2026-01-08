@@ -22,6 +22,7 @@ export default function AuthLayout() {
       <Stack.Screen
         name="verify-otp"
         options={{
+          headerShown: false,
           title: 'Verify Code',
         }}
       />

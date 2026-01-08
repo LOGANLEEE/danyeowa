@@ -49,18 +49,14 @@ export default function OnboardingWelcomeScreen() {
                   textShadowOffset: {width: 1, height: 1},
                   textShadowRadius: 2,
                 }}>
-                Your personal flight roster manager. Keep track of your schedules, routes, and flights all in one place.
+                Your personal flight roster manager. Keep track of your schedules, routes, and
+                flights all in one place.
               </ThemedText>
             </View>
 
             {/* Action Button */}
             <View className="pb-4">
-              <ThemedButton
-                title="Get Started"
-                variant="primary"
-                fullWidth
-                onPress={handleNext}
-              />
+              <ThemedButton title="Get Started" variant="primary" fullWidth onPress={handleNext} />
             </View>
           </View>
         </ScrollView>
@@ -68,8 +64,3 @@ export default function OnboardingWelcomeScreen() {
     </SafeAreaView>
   );
 }
-
-
-
-
-

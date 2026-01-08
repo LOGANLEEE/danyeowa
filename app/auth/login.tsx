@@ -2,6 +2,7 @@ import { AnimatedWelcomeBackground } from '@/components/AnimatedWelcomeBackgroun
 import { ThemedHeader } from '@/components/ThemedHeader';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { ThemedButton } from '@/components/ui/ThemedButton';
 import { ThemedInput } from '@/components/ui/ThemedInput';
 import { useBiometric } from '@/hooks/use-biometric';
@@ -9,15 +10,7 @@ import { useAuthStore } from '@/stores/use-auth-store';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Platform, TouchableOpacity, View } from 'react-native';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState(__DEV__ ? 'dlfjgkssk1@naver.com' : '');
@@ -116,186 +109,182 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1">
+    <ScreenContainer
+      edges={[]}
+      scrollable={false}
+      keyboardBehavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardShouldPersistTaps="handled"
+      showScrollIndicator={false}>
       {/* Animated Background */}
       <AnimatedWelcomeBackground />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1">
-        <ScrollView
-          contentContainerClassName="flex-grow"
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled">
-          <View className="flex-1 px-6 py-8">
-            {/* Header */}
-            <ThemedHeader
-              title={biometricAvailable && biometricEmail ? 'Welcome Back' : 'Get Started'}
-              subtitle={
-                biometricAvailable && biometricEmail
-                  ? `Sign in with ${getBiometricName()} or enter your email`
-                  : 'Enter your email to continue. We\'ll create your account automatically.'
-              }
-              variant="overlay"
-            />
+      <View className="flex-1 px-6 py-8 mt-5">
+        {/* Header */}
+        <ThemedHeader
+          title={biometricAvailable && biometricEmail ? 'Welcome Back' : 'Get Started'}
+          subtitle={
+            biometricAvailable && biometricEmail
+              ? `Sign in with ${getBiometricName()} or enter your email`
+              : "Enter your email to continue. We'll create your account automatically."
+          }
+          variant="overlay"
+        />
 
-            {/* Form */}
-            <View className="flex-1 justify-center">
-              {/* Method 1: Biometric Login */}
-              {biometricAvailable && biometricEmail && !biometricLoading && (
-                <View className="mb-6">
-                  <ThemedText
-                    animated
-                    delay={0}
-                    className="text-sm font-semibold mb-3 uppercase tracking-wide"
-                    lightColor="rgba(255, 255, 255, 0.9)"
-                    darkColor="rgba(255, 255, 255, 0.9)"
-                    style={{
-                      textShadowColor: 'rgba(0, 0, 0, 0.3)',
-                      textShadowOffset: {width: 1, height: 1},
-                      textShadowRadius: 2,
-                    }}>
-                    Method 1: Biometric Authentication
-                  </ThemedText>
-                  <ThemedView
-                    animated
-                    delay={50}
-                    className="rounded-xl border-2 border-white/30 bg-white/20 dark:bg-white/30 backdrop-blur-sm">
-                    <TouchableOpacity
-                      onPress={handleBiometricLogin}
-                      disabled={isLoading || authLoading}
-                      className="flex-row items-center justify-center gap-3 py-4 px-6 active:opacity-70">
-                    <Ionicons
-                      name={Platform.OS === 'ios' ? 'lock-closed' : 'lock-closed'}
-                      size={24}
-                      color="#FFFFFF"
-                    />
-                    <View className="flex-1">
-                      <ThemedText
-                        animated
-                        delay={100}
-                        className="text-base font-semibold"
-                        lightColor="#FFFFFF"
-                        darkColor="#FFFFFF"
-                        style={{
-                          textShadowColor: 'rgba(0, 0, 0, 0.3)',
-                          textShadowOffset: {width: 1, height: 1},
-                          textShadowRadius: 2,
-                        }}>
-                        Sign in with {getBiometricName()}
-                      </ThemedText>
-                      <ThemedText
-                        animated
-                        delay={150}
-                        className="text-xs mt-0.5"
-                        lightColor="rgba(255, 255, 255, 0.8)"
-                        darkColor="rgba(255, 255, 255, 0.8)">
-                        {biometricEmail}
-                      </ThemedText>
-                    </View>
-                    </TouchableOpacity>
-                  </ThemedView>
-                  <View className="flex-row items-center my-4">
-                    <View className="flex-1 h-px bg-white/30" />
+        {/* Form */}
+        <View className="flex-1 justify-center">
+          {/* Method 1: Biometric Login */}
+          {biometricAvailable && biometricEmail && !biometricLoading && (
+            <View className="mb-6">
+              <ThemedText
+                animated
+                delay={0}
+                className="text-sm font-semibold mb-3 uppercase tracking-wide"
+                lightColor="rgba(255, 255, 255, 0.9)"
+                darkColor="rgba(255, 255, 255, 0.9)"
+                style={{
+                  textShadowColor: 'rgba(0, 0, 0, 0.3)',
+                  textShadowOffset: {width: 1, height: 1},
+                  textShadowRadius: 2,
+                }}>
+                Method 1: Biometric Authentication
+              </ThemedText>
+              <ThemedView
+                animated
+                delay={50}
+                className="rounded-xl border-2 border-white/30 bg-white/20 dark:bg-white/30 backdrop-blur-sm">
+                <TouchableOpacity
+                  onPress={handleBiometricLogin}
+                  disabled={isLoading || authLoading}
+                  className="flex-row items-center justify-center gap-3 py-4 px-6 active:opacity-70">
+                  <Ionicons
+                    name={Platform.OS === 'ios' ? 'lock-closed' : 'lock-closed'}
+                    size={24}
+                    color="#FFFFFF"
+                  />
+                  <View className="flex-1">
                     <ThemedText
                       animated
-                      delay={200}
-                      className="mx-4 text-sm"
-                      lightColor="rgba(255, 255, 255, 0.7)"
-                      darkColor="rgba(255, 255, 255, 0.7)">
-                      OR
+                      delay={100}
+                      className="text-base font-semibold"
+                      lightColor="#FFFFFF"
+                      darkColor="#FFFFFF"
+                      style={{
+                        textShadowColor: 'rgba(0, 0, 0, 0.3)',
+                        textShadowOffset: {width: 1, height: 1},
+                        textShadowRadius: 2,
+                      }}>
+                      Sign in with {getBiometricName()}
                     </ThemedText>
-                    <View className="flex-1 h-px bg-white/30" />
+                    <ThemedText
+                      animated
+                      delay={150}
+                      className="text-xs mt-0.5"
+                      lightColor="rgba(255, 255, 255, 0.8)"
+                      darkColor="rgba(255, 255, 255, 0.8)">
+                      {biometricEmail}
+                    </ThemedText>
                   </View>
-                </View>
-              )}
-
-              {/* Method 2: OTP Login */}
-              <View className="mb-6">
-                {biometricAvailable && biometricEmail && (
-                  <ThemedText
-                    animated
-                    delay={biometricAvailable && biometricEmail ? 250 : 0}
-                    className="text-sm font-semibold mb-3 uppercase tracking-wide"
-                    lightColor="rgba(255, 255, 255, 0.9)"
-                    darkColor="rgba(255, 255, 255, 0.9)"
-                    style={{
-                      textShadowColor: 'rgba(0, 0, 0, 0.3)',
-                      textShadowOffset: {width: 1, height: 1},
-                      textShadowRadius: 2,
-                    }}>
-                    Method 2: OTP Verification
-                  </ThemedText>
-                )}
-                {(!biometricAvailable || !biometricEmail) && (
-                  <ThemedText
-                    animated
-                    delay={0}
-                    className="text-sm font-semibold mb-3 uppercase tracking-wide"
-                    lightColor="rgba(255, 255, 255, 0.9)"
-                    darkColor="rgba(255, 255, 255, 0.9)"
-                    style={{
-                      textShadowColor: 'rgba(0, 0, 0, 0.3)',
-                      textShadowOffset: {width: 1, height: 1},
-                      textShadowRadius: 2,
-                    }}>
-                    OTP Verification
-                  </ThemedText>
-                )}
-                <View>
-                  <ThemedText
-                    animated
-                    delay={biometricAvailable && biometricEmail ? 300 : 50}
-                    className="mb-3 text-sm font-semibold tracking-wide uppercase"
-                    lightColor="rgba(255, 255, 255, 0.9)"
-                    darkColor="rgba(255, 255, 255, 0.9)"
-                    style={{
-                      textShadowColor: 'rgba(0, 0, 0, 0.3)',
-                      textShadowOffset: {width: 1, height: 1},
-                      textShadowRadius: 2,
-                    }}>
-                    Email
-                  </ThemedText>
-                  <ThemedInput
-                    animated
-                    delay={biometricAvailable && biometricEmail ? 350 : 100}
-                    placeholder="your.email@example.com"
-                    value={email}
-                    onChangeText={(text) => {
-                      setEmail(text);
-                      if (error) setError('');
-                    }}
-                    error={error}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    textContentType="emailAddress"
-                    onSubmitEditing={handleSendOtp}
-                    returnKeyType="send"
-                    autoFocus={!biometricAvailable || !biometricEmail}
-                  />
-                </View>
+                </TouchableOpacity>
+              </ThemedView>
+              <View className="flex-row items-center my-4">
+                <View className="flex-1 h-px bg-white/30" />
                 <ThemedText
-                  className="text-xs mt-2"
-                  lightColor="rgba(255, 255, 255, 0.8)"
-                  darkColor="rgba(255, 255, 255, 0.8)">
-                  We'll send a 6-digit code to your email. If you're new, we'll create your account automatically.
+                  animated
+                  delay={200}
+                  className="mx-4 text-sm"
+                  lightColor="rgba(255, 255, 255, 0.7)"
+                  darkColor="rgba(255, 255, 255, 0.7)">
+                  OR
                 </ThemedText>
+                <View className="flex-1 h-px bg-white/30" />
               </View>
+            </View>
+          )}
 
-              <ThemedButton
-                title="Send OTP Code"
-                variant="primary"
-                fullWidth
-                onPress={handleSendOtp}
-                isLoading={isLoading || authLoading}
-                disabled={!email.trim() || isLoading || authLoading}
+          {/* Method 2: OTP Login */}
+          <View className="mb-6">
+            {biometricAvailable && biometricEmail && (
+              <ThemedText
+                animated
+                delay={biometricAvailable && biometricEmail ? 250 : 0}
+                className="text-sm font-semibold mb-3 uppercase tracking-wide"
+                lightColor="rgba(255, 255, 255, 0.9)"
+                darkColor="rgba(255, 255, 255, 0.9)"
+                style={{
+                  textShadowColor: 'rgba(0, 0, 0, 0.3)',
+                  textShadowOffset: {width: 1, height: 1},
+                  textShadowRadius: 2,
+                }}>
+                Method 2: OTP Verification
+              </ThemedText>
+            )}
+            {(!biometricAvailable || !biometricEmail) && (
+              <ThemedText
+                animated
+                delay={0}
+                className="text-sm font-semibold mb-3 uppercase tracking-wide"
+                lightColor="rgba(255, 255, 255, 0.9)"
+                darkColor="rgba(255, 255, 255, 0.9)"
+                style={{
+                  textShadowColor: 'rgba(0, 0, 0, 0.3)',
+                  textShadowOffset: {width: 1, height: 1},
+                  textShadowRadius: 2,
+                }}>
+                OTP Verification
+              </ThemedText>
+            )}
+            <View>
+              <ThemedText
+                animated
+                delay={biometricAvailable && biometricEmail ? 300 : 50}
+                className="mb-3 text-sm font-semibold tracking-wide uppercase"
+                lightColor="rgba(255, 255, 255, 0.9)"
+                darkColor="rgba(255, 255, 255, 0.9)"
+                style={{
+                  textShadowColor: 'rgba(0, 0, 0, 0.3)',
+                  textShadowOffset: {width: 1, height: 1},
+                  textShadowRadius: 2,
+                }}>
+                Email
+              </ThemedText>
+              <ThemedInput
+                animated
+                delay={biometricAvailable && biometricEmail ? 350 : 100}
+                placeholder="your.email@example.com"
+                value={email}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (error) setError('');
+                }}
+                error={error}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                textContentType="emailAddress"
+                onSubmitEditing={handleSendOtp}
+                returnKeyType="send"
+                autoFocus={!biometricAvailable || !biometricEmail}
               />
             </View>
-
+            <ThemedText
+              className="text-xs mt-2"
+              lightColor="rgba(255, 255, 255, 0.8)"
+              darkColor="rgba(255, 255, 255, 0.8)">
+              We'll send a 6-digit code to your email. If you're new, we'll create your account
+              automatically.
+            </ThemedText>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+          <ThemedButton
+            title="Send OTP Code"
+            variant="primary"
+            fullWidth
+            onPress={handleSendOtp}
+            isLoading={isLoading || authLoading}
+            disabled={!email.trim() || isLoading || authLoading}
+          />
+        </View>
+      </View>
+    </ScreenContainer>
   );
 }

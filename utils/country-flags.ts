@@ -220,3 +220,4 @@ export function getFlagsForDestinations(destinations: (string | null | undefined
 
 
 
+
