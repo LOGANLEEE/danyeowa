@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Roster } from '@/lib/supabase/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const STORAGE_KEYS = {
   ROSTERS_CACHE: '@roaster_me:rosters_cache',

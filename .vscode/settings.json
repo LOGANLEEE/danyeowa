@@ -5,7 +5,11 @@
     "source.sortMembers": "explicit"
   },
   "cSpell.words": [
+    "appbar",
+    "Appbar",
+    "dismissable",
     "marceloterreiro",
+    "nativewind",
     "supabase",
     "worktrees"
   ]

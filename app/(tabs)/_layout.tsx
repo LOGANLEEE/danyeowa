@@ -12,7 +12,7 @@ export default function TabLayout() {
   return (
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} />}
-      initialRouteName="schedule"
+      initialRouteName="calendar"
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
@@ -26,9 +26,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="schedule"
+        name="calendar"
         options={{
-          title: 'Schedule',
+          title: 'Calendar',
           tabBarIcon: ({color}) => <Ionicons name="calendar-outline" size={28} color={color} />,
         }}
       />

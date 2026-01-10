@@ -1,19 +1,25 @@
 import { AnimatedWelcomeBackground } from '@/components/AnimatedWelcomeBackground';
 import { ThemedHeader } from '@/components/ThemedHeader';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { ThemedButton } from '@/components/ui/ThemedButton';
-import { ThemedInput } from '@/components/ui/ThemedInput';
 import { useBiometric } from '@/hooks/use-biometric';
 import { useAuthStore } from '@/stores/use-auth-store';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Platform, TouchableOpacity, View } from 'react-native';
+import { Alert, Platform, StyleSheet, View } from 'react-native';
+import { Button, Card, HelperText, TextInput, useTheme } from 'react-native-paper';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState(__DEV__ ? 'dlfjgkssk1@naver.com' : '');
+  const [email, setEmail] = useState(
+    __DEV__
+      ? Platform.select({
+          ios: 'dlfjgkssk1@naver.com',
+          android: 'dlfjgkssk1@gmail.com',
+          default: '',
+        })
+      : '',
+  );
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const {sendOtp, isLoading: authLoading, loginWithBiometric, getBiometricEmail} = useAuthStore();
@@ -24,6 +30,7 @@ export default function LoginScreen() {
     getBiometricName,
   } = useBiometric();
   const [biometricEmail, setBiometricEmail] = useState<string | null>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     // Check if biometric login is available
@@ -124,8 +131,8 @@ export default function LoginScreen() {
           title={biometricAvailable && biometricEmail ? 'Welcome Back' : 'Get Started'}
           subtitle={
             biometricAvailable && biometricEmail
-              ? `Sign in with ${getBiometricName()} or enter your email`
-              : "Enter your email to continue. We'll create your account automatically."
+              ? `Sign in instantly with ${getBiometricName()} below, or enter your email to verify your account.`
+              : "Enter your email below and we'll send you a secure one-time sign-in link. If you don't have an account, we'll create one for you automatically—no password needed."
           }
           variant="overlay"
         />
@@ -148,20 +155,25 @@ export default function LoginScreen() {
                 }}>
                 Method 1: Biometric Authentication
               </ThemedText>
-              <ThemedView
-                animated
-                delay={50}
-                className="rounded-xl border-2 border-white/30 bg-white/20 dark:bg-white/30 backdrop-blur-sm">
-                <TouchableOpacity
-                  onPress={handleBiometricLogin}
-                  disabled={isLoading || authLoading}
-                  className="flex-row items-center justify-center gap-3 py-4 px-6 active:opacity-70">
+              <Card
+                mode="contained"
+                style={[
+                  styles.biometricCard,
+                  {
+                    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                    borderWidth: 2,
+                    borderColor: 'rgba(255, 255, 255, 0.3)',
+                  },
+                ]}
+                onPress={handleBiometricLogin}
+                disabled={isLoading || authLoading}>
+                <Card.Content style={styles.biometricCardContent}>
                   <Ionicons
                     name={Platform.OS === 'ios' ? 'lock-closed' : 'lock-closed'}
                     size={24}
                     color="#FFFFFF"
                   />
-                  <View className="flex-1">
+                  <View className="flex-1 ml-3">
                     <ThemedText
                       animated
                       delay={100}
@@ -184,8 +196,8 @@ export default function LoginScreen() {
                       {biometricEmail}
                     </ThemedText>
                   </View>
-                </TouchableOpacity>
-              </ThemedView>
+                </Card.Content>
+              </Card>
               <View className="flex-row items-center my-4">
                 <View className="flex-1 h-px bg-white/30" />
                 <ThemedText
@@ -234,29 +246,15 @@ export default function LoginScreen() {
               </ThemedText>
             )}
             <View>
-              <ThemedText
-                animated
-                delay={biometricAvailable && biometricEmail ? 300 : 50}
-                className="mb-3 text-sm font-semibold tracking-wide uppercase"
-                lightColor="rgba(255, 255, 255, 0.9)"
-                darkColor="rgba(255, 255, 255, 0.9)"
-                style={{
-                  textShadowColor: 'rgba(0, 0, 0, 0.3)',
-                  textShadowOffset: {width: 1, height: 1},
-                  textShadowRadius: 2,
-                }}>
-                Email
-              </ThemedText>
-              <ThemedInput
-                animated
-                delay={biometricAvailable && biometricEmail ? 350 : 100}
-                placeholder="your.email@example.com"
+              <TextInput
+                focusable={true}
+                label="Email"
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
                   if (error) setError('');
                 }}
-                error={error}
+                mode="outlined"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
@@ -264,7 +262,26 @@ export default function LoginScreen() {
                 onSubmitEditing={handleSendOtp}
                 returnKeyType="send"
                 autoFocus={!biometricAvailable || !biometricEmail}
+                error={!!error}
+                placeholder="your.email@example.com"
+                style={styles.textInput}
+                contentStyle={styles.textInputContent}
+                outlineStyle={styles.textInputOutline}
+                theme={{
+                  ...theme,
+                  colors: {
+                    ...theme.colors,
+                    primary: theme.colors.primary,
+                    error: theme.colors.error,
+                    onSurface: 'rgba(255, 255, 255, 0.9)',
+                    onSurfaceVariant: 'rgba(255, 255, 255, 0.7)',
+                    outline: 'rgba(255, 255, 255, 0.5)',
+                  },
+                }}
               />
+              <HelperText type="error" visible={!!error} style={styles.helperText}>
+                {error}
+              </HelperText>
             </View>
             <ThemedText
               className="text-xs mt-2"
@@ -275,16 +292,56 @@ export default function LoginScreen() {
             </ThemedText>
           </View>
 
-          <ThemedButton
-            title="Send OTP Code"
-            variant="primary"
-            fullWidth
+          <Button
+            mode="contained"
             onPress={handleSendOtp}
-            isLoading={isLoading || authLoading}
+            loading={isLoading || authLoading}
             disabled={!email.trim() || isLoading || authLoading}
-          />
+            style={styles.button}
+            contentStyle={styles.buttonContent}
+            labelStyle={styles.buttonLabel}>
+            Send OTP Code
+          </Button>
         </View>
       </View>
     </ScreenContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  biometricCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  biometricCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  textInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  textInputContent: {
+    backgroundColor: 'transparent',
+  },
+  textInputOutline: {
+    borderWidth: 2,
+  },
+  helperText: {
+    marginTop: 4,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  button: {
+    borderRadius: 12,
+    minHeight: 60,
+  },
+  buttonContent: {
+    paddingVertical: 8,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+});

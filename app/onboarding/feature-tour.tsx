@@ -1,13 +1,19 @@
 import { AnimatedWelcomeBackground } from '@/components/AnimatedWelcomeBackground';
 import { ThemedHeader } from '@/components/ThemedHeader';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { ThemedButton } from '@/components/ui/ThemedButton';
 import { saveOnboardingCompleted } from '@/lib/secure-storage';
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { Button, Surface, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { easingCurves, viewSpringConfig } from '@/utils/animations';
 
 const features = [
   {
@@ -26,6 +32,57 @@ const features = [
     description: 'Get notified about schedule changes and important updates',
   },
 ];
+
+function AnimatedFeatureCard({
+  feature,
+  index,
+}: {
+  feature: (typeof features)[0];
+  index: number;
+}) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(30);
+  const scale = useSharedValue(0.92);
+
+  useEffect(() => {
+    const delay = index * 100;
+    opacity.value = delay > 0
+      ? withDelay(delay, withTiming(1, { duration: 450, easing: easingCurves.easeOut }))
+      : withTiming(1, { duration: 450, easing: easingCurves.easeOut });
+    translateY.value = delay > 0
+      ? withDelay(delay, withSpring(0, viewSpringConfig))
+      : withSpring(0, viewSpringConfig);
+    scale.value = delay > 0
+      ? withDelay(delay, withSpring(1, viewSpringConfig))
+      : withSpring(1, viewSpringConfig);
+  }, [index, opacity, translateY, scale]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [
+      { translateY: translateY.value },
+      { scale: scale.value },
+    ],
+  }));
+
+  return (
+    <Animated.View style={[styles.featureCardContainer, animatedStyle]}>
+      <Surface elevation={0} style={styles.featureCard}>
+        <View style={styles.featureContent}>
+          <Text style={styles.featureIcon}>{feature.icon}</Text>
+          <View style={styles.featureTextContainer}>
+            <Text variant="titleLarge" style={styles.featureTitle}>
+              {feature.title}
+            </Text>
+            <Text variant="bodyLarge" style={styles.featureDescription}>
+              {feature.description}
+            </Text>
+          </View>
+        </View>
+      </Surface>
+    </Animated.View>
+  );
+}
 
 export default function FeatureTourScreen() {
   const [isLoading, setIsLoading] = useState(false);
@@ -47,18 +104,18 @@ export default function FeatureTourScreen() {
   };
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} className="flex-1">
+    <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
       {/* Animated Background */}
       <AnimatedWelcomeBackground />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="flex-1">
+        style={styles.keyboardAvoidingView}>
         <ScrollView
-          contentContainerClassName="flex-grow"
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
-          <View className="flex-1 px-6 py-8">
+          <View style={styles.content}>
             {/* Header */}
             <ThemedHeader
               title="Discover Roaster Me"
@@ -67,48 +124,24 @@ export default function FeatureTourScreen() {
             />
 
             {/* Features */}
-            <View className="flex-1 justify-center mb-8">
+            <View style={styles.featuresContainer}>
               {features.map((feature, index) => (
-                <ThemedView
-                  key={index}
-                  animated
-                  delay={index * 100}
-                  className="mb-6 p-6 rounded-xl border-2 border-white/30 bg-white/20 dark:bg-white/30 backdrop-blur-sm">
-                  <View className="flex-row items-start gap-4">
-                    <ThemedText className="text-4xl">{feature.icon}</ThemedText>
-                    <View className="flex-1">
-                      <ThemedText
-                        className="text-xl font-bold mb-2"
-                        lightColor="#FFFFFF"
-                        darkColor="#FFFFFF"
-                        style={{
-                          textShadowColor: 'rgba(0, 0, 0, 0.3)',
-                          textShadowOffset: {width: 1, height: 1},
-                          textShadowRadius: 2,
-                        }}>
-                        {feature.title}
-                      </ThemedText>
-                      <ThemedText
-                        className="text-base"
-                        lightColor="rgba(255, 255, 255, 0.9)"
-                        darkColor="rgba(255, 255, 255, 0.9)">
-                        {feature.description}
-                      </ThemedText>
-                    </View>
-                  </View>
-                </ThemedView>
+                <AnimatedFeatureCard key={index} feature={feature} index={index} />
               ))}
             </View>
 
             {/* Action Button */}
-            <View className="pb-4">
-              <ThemedButton
-                title="Start Using Roaster Me"
-                variant="primary"
-                fullWidth
+            <View style={styles.buttonContainer}>
+              <Button
+                mode="contained"
                 onPress={handleComplete}
-                isLoading={isLoading}
-              />
+                loading={isLoading}
+                disabled={isLoading}
+                style={styles.button}
+                contentStyle={styles.buttonContent}
+                labelStyle={styles.buttonLabel}>
+                Start Using Roaster Me
+              </Button>
             </View>
           </View>
         </ScrollView>
@@ -116,4 +149,79 @@ export default function FeatureTourScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 32,
+  },
+  featuresContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  featureCardContainer: {
+    marginBottom: 24,
+  },
+  featureCard: {
+    padding: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  featureContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  featureIcon: {
+    fontSize: 36,
+    marginRight: 16,
+  },
+  featureTextContainer: {
+    flex: 1,
+  },
+  featureTitle: {
+    marginBottom: 8,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: {width: 1, height: 1},
+    textShadowRadius: 2,
+  },
+  featureDescription: {
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  buttonContainer: {
+    paddingBottom: 16,
+  },
+  button: {
+    width: '100%',
+    borderRadius: 12,
+    minHeight: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  buttonContent: {
+    paddingVertical: 8,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: '#FFFFFF',
+  },
+});
 

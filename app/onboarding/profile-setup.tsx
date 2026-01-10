@@ -1,15 +1,14 @@
 import { AnimatedWelcomeBackground } from '@/components/AnimatedWelcomeBackground';
 import { ThemedHeader } from '@/components/ThemedHeader';
-import { ThemedText } from '@/components/ThemedText';
-import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { ThemedButton } from '@/components/ui/ThemedButton';
-import { ThemedInput } from '@/components/ui/ThemedInput';
 import { useAuthStore } from '@/stores/use-auth-store';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { Button, HelperText, Text, TextInput, useTheme } from 'react-native-paper';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ProfileSetupScreen() {
+  const theme = useTheme();
   const {profile, updateProfile} = useAuthStore();
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [isLoading, setIsLoading] = useState(false);
@@ -46,70 +45,160 @@ export default function ProfileSetupScreen() {
   };
 
   return (
-    <ScreenContainer edges={['top', 'bottom']} scrollable={false} contentClassName="px-6 py-8">
+    <SafeAreaView edges={['top', 'bottom']} style={styles.container}>
       {/* Animated Background */}
       <AnimatedWelcomeBackground />
 
-      {/* Header */}
-      <ThemedHeader
-        title="Let's set up your profile"
-        subtitle="Tell us your name so we can personalize your experience"
-        variant="overlay"
-      />
-
-      {/* Form */}
-      <View className="flex-1 justify-center">
-        <View className="mb-6">
-          <ThemedText
-            animated
-            delay={0}
-            className="mb-3 text-sm font-semibold tracking-wide uppercase"
-            lightColor="rgba(255, 255, 255, 0.9)"
-            darkColor="rgba(255, 255, 255, 0.9)"
-            style={{
-              textShadowColor: 'rgba(0, 0, 0, 0.3)',
-              textShadowOffset: {width: 1, height: 1},
-              textShadowRadius: 2,
-            }}>
-            Full Name
-          </ThemedText>
-          <ThemedInput
-            animated
-            delay={50}
-            placeholder="Enter your full name"
-            value={fullName}
-            onChangeText={(text) => {
-              setFullName(text);
-              if (error) setError('');
-            }}
-            error={error}
-            autoCapitalize="words"
-            autoComplete="name"
-            textContentType="name"
-            onSubmitEditing={handleNext}
-            returnKeyType="next"
-            autoFocus
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}>
+        <View style={styles.content}>
+          {/* Header */}
+          <ThemedHeader
+            title="Let's set up your profile"
+            subtitle="Tell us your name so we can personalize your experience"
+            variant="overlay"
           />
+
+          {/* Form */}
+          <View style={styles.formContainer}>
+            <View style={styles.inputContainer}>
+              <Text variant="labelLarge" style={styles.label}>
+                Full Name
+              </Text>
+              <TextInput
+                label="Enter your full name"
+                value={fullName}
+                onChangeText={(text) => {
+                  setFullName(text);
+                  if (error) setError('');
+                }}
+                mode="outlined"
+                autoCapitalize="words"
+                autoComplete="name"
+                textContentType="name"
+                onSubmitEditing={handleNext}
+                returnKeyType="next"
+                autoFocus
+                error={!!error}
+                placeholder="Enter your full name"
+                style={styles.textInput}
+                contentStyle={styles.textInputContent}
+                outlineStyle={styles.textInputOutline}
+                theme={{
+                  ...theme,
+                  colors: {
+                    ...theme.colors,
+                    primary: theme.colors.primary,
+                    error: theme.colors.error,
+                    onSurface: 'rgba(255, 255, 255, 0.9)',
+                    onSurfaceVariant: 'rgba(255, 255, 255, 0.7)',
+                    outline: 'rgba(255, 255, 255, 0.5)',
+                  },
+                }}
+              />
+              <HelperText type="error" visible={!!error} style={styles.helperText}>
+                {error}
+              </HelperText>
+            </View>
+
+            <Button
+              mode="contained"
+              onPress={handleNext}
+              loading={isLoading}
+              disabled={!fullName.trim() || isLoading}
+              style={styles.button}
+              contentStyle={styles.buttonContent}
+              labelStyle={styles.buttonLabel}>
+              Continue
+            </Button>
+
+            <Button
+              mode="outlined"
+              onPress={handleSkip}
+              disabled={isLoading}
+              style={[styles.button, styles.skipButton]}
+              contentStyle={styles.buttonContent}
+              labelStyle={styles.skipButtonLabel}>
+              Skip for now
+            </Button>
+          </View>
         </View>
-
-        <ThemedButton
-          title="Continue"
-          variant="primary"
-          fullWidth
-          onPress={handleNext}
-          isLoading={isLoading}
-          disabled={!fullName.trim() || isLoading}
-        />
-
-        <ThemedButton
-          title="Skip for now"
-          variant="outline"
-          fullWidth
-          onPress={handleSkip}
-          disabled={isLoading}
-          style={{marginTop: 12}}
-        />
-      </View>
-    </ScreenContainer>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 32,
+  },
+  formContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  inputContainer: {
+    marginBottom: 24,
+  },
+  label: {
+    marginBottom: 12,
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    color: 'rgba(255, 255, 255, 0.9)',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: {width: 1, height: 1},
+    textShadowRadius: 2,
+  },
+  textInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  textInputContent: {
+    backgroundColor: 'transparent',
+  },
+  textInputOutline: {
+    borderWidth: 2,
+  },
+  helperText: {
+    marginTop: 4,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  button: {
+    width: '100%',
+    borderRadius: 12,
+    minHeight: 60,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  buttonContent: {
+    paddingVertical: 8,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: '#FFFFFF',
+  },
+  skipButton: {
+    marginTop: 12,
+    backgroundColor: 'transparent',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  skipButtonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+    color: '#FFFFFF',
+  },
+});

@@ -1,8 +1,14 @@
 import { useEffect } from 'react';
 import { View, type ViewStyle } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
+import { Appbar, Text, useTheme } from 'react-native-paper';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
-import { ThemedText } from '@/components/ThemedText';
 import { easingCurves, staggerDelay, viewSpringConfig } from '@/utils/animations';
 import { type ReactNode } from 'react';
 
@@ -29,8 +35,8 @@ export type ThemedHeaderProps = {
  * @param subtitle - Optional subtitle/description text
  * @param variant - 'default' for regular screens, 'overlay' for screens with background images
  * @param className - Additional className for the container View
- * @param titleClassName - Additional className for the title ThemedText
- * @param subtitleClassName - Additional className for the subtitle ThemedText
+ * @param titleClassName - Additional className for the title Text
+ * @param subtitleClassName - Additional className for the subtitle Text
  * @param style - Additional style for the container View
  * @param left - Optional left component (e.g., back button, menu icon)
  * @param center - Optional center component (overrides title/subtitle if provided)
@@ -82,6 +88,7 @@ export function ThemedHeader({
   delay = 0,
   staggerChildren = true,
 }: ThemedHeaderProps) {
+  const theme = useTheme();
   const isOverlay = variant === 'overlay';
   const hasCustomLayout = left !== undefined || center !== undefined || right !== undefined;
 
@@ -92,16 +99,22 @@ export function ThemedHeader({
   const leftTranslateX = useSharedValue(animated && left ? -20 : 0);
   const rightOpacity = useSharedValue(animated && right ? 0 : 1);
   const rightTranslateX = useSharedValue(animated && right ? 20 : 0);
+  const titleOpacity = useSharedValue(animated ? 0 : 1);
+  const titleTranslateY = useSharedValue(animated ? 20 : 0);
+  const subtitleOpacity = useSharedValue(animated ? 0 : 1);
+  const subtitleTranslateY = useSharedValue(animated ? 20 : 0);
 
   // Container animation
   useEffect(() => {
     if (animated) {
-      containerOpacity.value = delay > 0
-        ? withDelay(delay, withTiming(1, { duration: 450, easing: easingCurves.easeOut }))
-        : withTiming(1, { duration: 450, easing: easingCurves.easeOut });
-      containerTranslateY.value = delay > 0
-        ? withDelay(delay, withSpring(0, viewSpringConfig))
-        : withSpring(0, viewSpringConfig);
+      containerOpacity.value =
+        delay > 0
+          ? withDelay(delay, withTiming(1, {duration: 450, easing: easingCurves.easeOut}))
+          : withTiming(1, {duration: 450, easing: easingCurves.easeOut});
+      containerTranslateY.value =
+        delay > 0
+          ? withDelay(delay, withSpring(0, viewSpringConfig))
+          : withSpring(0, viewSpringConfig);
     }
   }, [animated, delay, containerOpacity, containerTranslateY]);
 
@@ -109,12 +122,14 @@ export function ThemedHeader({
   useEffect(() => {
     if (animated && left) {
       const leftDelay = staggerChildren ? delay + staggerDelay(0, 50) : delay;
-      leftOpacity.value = leftDelay > 0
-        ? withDelay(leftDelay, withTiming(1, { duration: 450, easing: easingCurves.easeOut }))
-        : withTiming(1, { duration: 450, easing: easingCurves.easeOut });
-      leftTranslateX.value = leftDelay > 0
-        ? withDelay(leftDelay, withSpring(0, viewSpringConfig))
-        : withSpring(0, viewSpringConfig);
+      leftOpacity.value =
+        leftDelay > 0
+          ? withDelay(leftDelay, withTiming(1, {duration: 450, easing: easingCurves.easeOut}))
+          : withTiming(1, {duration: 450, easing: easingCurves.easeOut});
+      leftTranslateX.value =
+        leftDelay > 0
+          ? withDelay(leftDelay, withSpring(0, viewSpringConfig))
+          : withSpring(0, viewSpringConfig);
     }
   }, [animated, left, delay, staggerChildren, leftOpacity, leftTranslateX]);
 
@@ -122,28 +137,70 @@ export function ThemedHeader({
   useEffect(() => {
     if (animated && right) {
       const rightDelay = staggerChildren ? delay + staggerDelay(1, 50) : delay;
-      rightOpacity.value = rightDelay > 0
-        ? withDelay(rightDelay, withTiming(1, { duration: 450, easing: easingCurves.easeOut }))
-        : withTiming(1, { duration: 450, easing: easingCurves.easeOut });
-      rightTranslateX.value = rightDelay > 0
-        ? withDelay(rightDelay, withSpring(0, viewSpringConfig))
-        : withSpring(0, viewSpringConfig);
+      rightOpacity.value =
+        rightDelay > 0
+          ? withDelay(rightDelay, withTiming(1, {duration: 450, easing: easingCurves.easeOut}))
+          : withTiming(1, {duration: 450, easing: easingCurves.easeOut});
+      rightTranslateX.value =
+        rightDelay > 0
+          ? withDelay(rightDelay, withSpring(0, viewSpringConfig))
+          : withSpring(0, viewSpringConfig);
     }
   }, [animated, right, delay, staggerChildren, rightOpacity, rightTranslateX]);
 
+  // Title animation
+  useEffect(() => {
+    if (animated && title) {
+      const titleDelay = staggerChildren ? delay + staggerDelay(0, 80) : delay;
+      titleOpacity.value =
+        titleDelay > 0
+          ? withDelay(titleDelay, withTiming(1, {duration: 450, easing: easingCurves.easeOut}))
+          : withTiming(1, {duration: 450, easing: easingCurves.easeOut});
+      titleTranslateY.value =
+        titleDelay > 0
+          ? withDelay(titleDelay, withSpring(0, viewSpringConfig))
+          : withSpring(0, viewSpringConfig);
+    }
+  }, [animated, title, delay, staggerChildren, titleOpacity, titleTranslateY]);
+
+  // Subtitle animation
+  useEffect(() => {
+    if (animated && subtitle) {
+      const subtitleDelay = staggerChildren ? delay + staggerDelay(1, 80) : delay;
+      subtitleOpacity.value =
+        subtitleDelay > 0
+          ? withDelay(subtitleDelay, withTiming(1, {duration: 450, easing: easingCurves.easeOut}))
+          : withTiming(1, {duration: 450, easing: easingCurves.easeOut});
+      subtitleTranslateY.value =
+        subtitleDelay > 0
+          ? withDelay(subtitleDelay, withSpring(0, viewSpringConfig))
+          : withSpring(0, viewSpringConfig);
+    }
+  }, [animated, subtitle, delay, staggerChildren, subtitleOpacity, subtitleTranslateY]);
+
   const containerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: containerOpacity.value,
-    transform: [{ translateY: containerTranslateY.value }],
+    transform: [{translateY: containerTranslateY.value}],
   }));
 
   const leftAnimatedStyle = useAnimatedStyle(() => ({
     opacity: leftOpacity.value,
-    transform: [{ translateX: leftTranslateX.value }],
+    transform: [{translateX: leftTranslateX.value}],
   }));
 
   const rightAnimatedStyle = useAnimatedStyle(() => ({
     opacity: rightOpacity.value,
-    transform: [{ translateX: rightTranslateX.value }],
+    transform: [{translateX: rightTranslateX.value}],
+  }));
+
+  const titleAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: titleOpacity.value,
+    transform: [{translateY: titleTranslateY.value}],
+  }));
+
+  const subtitleAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: subtitleOpacity.value,
+    transform: [{translateY: subtitleTranslateY.value}],
   }));
 
   // Default container classes
@@ -170,67 +227,83 @@ export function ThemedHeader({
     textShadowRadius: 2,
   };
 
-  // Calculate title and subtitle delays for stagger effect
-  const titleDelay = staggerChildren ? delay + staggerDelay(0, 80) : delay;
-  const subtitleDelay = staggerChildren && subtitle ? delay + staggerDelay(1, 80) : delay;
-
   // Render default title/subtitle content
-  const renderDefaultContent = () => (
-    <>
-      {title && (
-        <ThemedText
-          type="title"
-          className={`${defaultTitleClasses} ${titleClassName}`}
-          lightColor={isOverlay ? '#FFFFFF' : undefined}
-          darkColor={isOverlay ? '#FFFFFF' : undefined}
-          style={isOverlay ? overlayTextShadow : undefined}
-          animated={animated}
-          delay={titleDelay}
-          animationType="combined">
-          {title}
-        </ThemedText>
-      )}
-      {subtitle && (
-        <ThemedText
-          className={`${defaultSubtitleClasses} ${subtitleClassName}`}
-          lightColor={isOverlay ? 'rgba(255, 255, 255, 0.9)' : undefined}
-          darkColor={isOverlay ? 'rgba(255, 255, 255, 0.9)' : undefined}
-          style={isOverlay ? overlaySubtitleShadow : undefined}
-          animated={animated}
-          delay={subtitleDelay}
-          animationType="combined">
-          {subtitle}
-        </ThemedText>
-      )}
-    </>
-  );
+  const renderDefaultContent = () => {
+    const titleColor = isOverlay ? '#FFFFFF' : theme.colors.onSurface;
+    const subtitleColor = isOverlay ? 'rgba(255, 255, 255, 0.9)' : theme.colors.onSurfaceVariant;
 
-  // If custom layout is provided, use flex row layout
+    return (
+      <>
+        {title && (
+          <Animated.View style={animated ? titleAnimatedStyle : undefined}>
+            <Text
+              variant="headlineLarge"
+              className={`${defaultTitleClasses} ${titleClassName}`}
+              style={[{color: titleColor}, isOverlay ? overlayTextShadow : undefined]}>
+              {title}
+            </Text>
+          </Animated.View>
+        )}
+        {subtitle && (
+          <Animated.View style={animated ? subtitleAnimatedStyle : undefined}>
+            <Text
+              variant="bodyLarge"
+              className={`${defaultSubtitleClasses} ${subtitleClassName}`}
+              style={[{color: subtitleColor}, isOverlay ? overlaySubtitleShadow : undefined]}>
+              {subtitle}
+            </Text>
+          </Animated.View>
+        )}
+      </>
+    );
+  };
+
+  // If custom layout is provided, use Appbar.Header
   if (hasCustomLayout) {
+    const appbarStyle: ViewStyle = {
+      backgroundColor: isOverlay ? 'transparent' : theme.colors.surface,
+      elevation: isOverlay ? 0 : undefined,
+    };
+
     return (
       <Animated.View
-        className={`${containerClasses} flex-row items-center`}
-        style={[animated ? containerAnimatedStyle : undefined, {overflow: 'visible'}, style]}>
-        {/* Left section */}
-        {left && (
-          <Animated.View className="flex-shrink-0" style={animated ? leftAnimatedStyle : undefined}>
-            {left}
-          </Animated.View>
-        )}
+        className={containerClasses}
+        style={[animated ? containerAnimatedStyle : undefined, style]}>
+        <Appbar.Header style={[appbarStyle, {paddingHorizontal: 0}]} elevated={!isOverlay}>
+          {/* Left section */}
+          {left && (
+            <Animated.View style={animated ? leftAnimatedStyle : undefined}>{left}</Animated.View>
+          )}
 
-        {/* Center section */}
-        <View className="flex-1 mx-3" style={{minWidth: 0}}>
-          {center !== undefined ? center : renderDefaultContent()}
-        </View>
+          {/* Center section */}
+          {center !== undefined ? (
+            <View className="flex-1 mx-3" style={{minWidth: 0}}>
+              {center}
+            </View>
+          ) : title ? (
+            <Appbar.Content
+              title={title}
+              subtitle={subtitle || undefined}
+              titleStyle={[
+                isOverlay ? {color: '#FFFFFF'} : {color: theme.colors.onSurface},
+                isOverlay ? overlayTextShadow : undefined,
+              ]}
+              subtitleStyle={[
+                isOverlay
+                  ? {color: 'rgba(255, 255, 255, 0.9)'}
+                  : {color: theme.colors.onSurfaceVariant},
+                isOverlay ? overlaySubtitleShadow : undefined,
+              ]}
+            />
+          ) : null}
 
-        {/* Right section */}
-        {right && (
-          <Animated.View
-            className="flex-shrink-0"
-            style={[animated ? rightAnimatedStyle : undefined, {zIndex: 10}]}>
-            {right}
-          </Animated.View>
-        )}
+          {/* Right section */}
+          {right && (
+            <Animated.View style={[animated ? rightAnimatedStyle : undefined, {zIndex: 10}]}>
+              {right}
+            </Animated.View>
+          )}
+        </Appbar.Header>
       </Animated.View>
     );
   }

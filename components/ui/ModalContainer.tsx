@@ -1,9 +1,13 @@
 import { type ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, TouchableOpacity, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { IconButton, Modal, Portal, Surface, Text, useTheme } from 'react-native-paper';
 
 export type ModalContainerProps = {
   visible: boolean;
@@ -18,7 +22,7 @@ export type ModalContainerProps = {
 
 /**
  * Reusable modal container with backdrop, rounded top corners, and close button
- * Consolidates modal patterns for better token efficiency
+ * Uses react-native-paper components for consistent theming
  */
 export function ModalContainer({
   visible,
@@ -30,49 +34,108 @@ export function ModalContainer({
   className = '',
   contentClassName = '',
 }: ModalContainerProps) {
-  const colorScheme = useColorScheme();
+  const theme = useTheme();
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1">
-        <View className="flex-1 bg-black/50 justify-end">
-          <ThemedView className={`rounded-t-3xl p-6 pb-8 ${contentClassName}`}>
-            {(title || subtitle || showCloseButton) && (
-              <View className="flex-row items-center justify-between mb-6">
-                <View className="flex-1">
-                  {title && (
-                    <ThemedText type="subtitle" className="text-xl font-semibold mb-1">
-                      {title}
-                    </ThemedText>
-                  )}
-                  {subtitle && (
-                    <ThemedText className="text-sm text-gray-500 dark:text-gray-400">
-                      {subtitle}
-                    </ThemedText>
-                  )}
-                </View>
-                {showCloseButton && (
-                  <TouchableOpacity onPress={onClose} className="p-2">
-                    <Ionicons
-                      name="close"
-                      size={28}
-                      color={colorScheme === 'dark' ? '#9BA1A6' : '#687076'}
-                    />
-                  </TouchableOpacity>
+    <Portal>
+      <Modal
+        visible={visible}
+        onDismiss={onClose}
+        contentContainerStyle={styles.modalContent}
+        dismissable={true}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+          keyboardVerticalOffset={Platform.OS === 'android' ? 0 : 0}
+          style={styles.keyboardView}>
+          <Pressable style={styles.backdrop} onPress={onClose}>
+            <Pressable onPress={(e) => e.stopPropagation()}>
+              <Surface
+                style={[
+                  styles.surface,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderTopLeftRadius: 24,
+                    borderTopRightRadius: 24,
+                  },
+                ]}
+                elevation={1}>
+                {(title || subtitle || showCloseButton) && (
+                  <View style={styles.header}>
+                    <View style={styles.headerContent}>
+                      {title && (
+                        <Text variant="titleLarge" style={styles.title}>
+                          {title}
+                        </Text>
+                      )}
+                      {subtitle && (
+                        <Text
+                          variant="bodyMedium"
+                          style={[styles.subtitle, {color: theme.colors.onSurfaceVariant}]}>
+                          {subtitle}
+                        </Text>
+                      )}
+                    </View>
+                    {showCloseButton && (
+                      <IconButton
+                        icon="close"
+                        size={24}
+                        iconColor={theme.colors.onSurfaceVariant}
+                        onPress={onClose}
+                      />
+                    )}
+                  </View>
                 )}
-              </View>
-            )}
-            {children}
-          </ThemedView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+                <ScrollView
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.scrollContent}>
+                  {children}
+                </ScrollView>
+              </Surface>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+    </Portal>
   );
 }
 
+const styles = StyleSheet.create({
+  modalContent: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  surface: {
+    padding: 24,
+    paddingBottom: 32,
+    maxHeight: '90%',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  headerContent: {
+    flex: 1,
+  },
+  title: {
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 14,
+  },
+  scrollContent: {
+    // flexGrow: 1,
+    height: '100%',
+    // minHeight: 300,
+  },
+});

@@ -10,7 +10,8 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.solaaslab.roasterme"
+      "bundleIdentifier": "com.solaaslab.roasterme",
+      "appleTeamId": "LN4N9P7PNR"
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +23,11 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.solaaslab.roasterme",
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
     },
     "web": {
       "output": "static",

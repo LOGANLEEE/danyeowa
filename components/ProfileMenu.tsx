@@ -42,7 +42,7 @@ export function ProfileMenu({visible, onClose}: ProfileMenuProps) {
           setIsSigningOut(true);
           try {
             await signOut();
-            router.replace('/auth/welcome');
+            router.replace('/auth/login');
           } catch (error) {
             console.error('[ProfileMenu] Sign out error:', error);
             Alert.alert('Error', 'Failed to sign out. Please try again.');

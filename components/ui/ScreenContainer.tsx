@@ -33,7 +33,7 @@ export type ScreenContainerProps = {
 export function ScreenContainer({
   children,
   edges = [],
-  keyboardBehavior = Platform.OS === 'ios' ? 'padding' : undefined,
+  keyboardBehavior = Platform.OS === 'ios' ? 'padding' : 'height',
   scrollViewProps,
   scrollViewRef,
   className = '',
@@ -44,6 +44,9 @@ export function ScreenContainer({
   scrollable = true,
   enableKeyboardAvoiding = true,
 }: ScreenContainerProps) {
+  // For Android, KeyboardAvoidingView with behavior="height" works best
+  // No keyboardVerticalOffset needed when using SafeAreaView as it handles insets automatically
+
   const content = scrollable ? (
     <ScrollView
       ref={scrollViewRef}
@@ -61,8 +64,10 @@ export function ScreenContainer({
     </View>
   );
 
-  const wrappedContent = enableKeyboardAvoiding ? (
-    <KeyboardAvoidingView behavior={keyboardBehavior} className="flex-1">
+  const wrappedContent = enableKeyboardAvoiding && keyboardBehavior ? (
+    <KeyboardAvoidingView
+      behavior={keyboardBehavior}
+      style={styles.keyboardAvoidingView}>
       {content}
     </KeyboardAvoidingView>
   ) : (
@@ -79,5 +84,8 @@ export function ScreenContainer({
 const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
 });
