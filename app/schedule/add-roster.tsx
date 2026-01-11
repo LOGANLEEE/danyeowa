@@ -25,6 +25,9 @@ import {
   useTheme,
 } from 'react-native-paper';
 
+import { ThemedLoader } from '@/components/ThemedLoader';
+import { useRostersStore } from '@/stores/use-rosters-store';
+
 const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48;
 const CARD_HEIGHT = 320;
@@ -54,7 +57,12 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [flightInput, setFlightInput] = useState('');
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<any>(null);
+
+  const {fetchRostersByDateRange, createMultipleRosters, updateMultipleRosters, rosters} =
+    useRostersStore();
 
   // Animation values for slot machine effect
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -64,6 +72,68 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
 
   // Calculate completed days
   const completedDays = flightDays.filter((day) => day.flightCode || day.skipped).length;
+
+  // Fetch existing rosters for the month on mount
+  useEffect(() => {
+    const loadExistingRosters = async () => {
+      setIsLoading(true);
+      try {
+        const startDate = month.startOf('month').toISODate();
+        const endDate = month.endOf('month').toISODate();
+
+        if (!startDate || !endDate) {
+          setIsLoading(false);
+          return;
+        }
+
+        const {error} = await fetchRostersByDateRange(startDate, endDate);
+
+        if (error) {
+          console.error('[AddRosterScreen] Error fetching rosters:', error);
+          // Continue with empty state if fetch fails
+        }
+
+        // Get the latest rosters from the store after fetch
+        const currentRosters = useRostersStore.getState().rosters;
+
+        // Map existing rosters to FlightDay format
+        const existingRostersMap = new Map<string, {flightCode: string; isReturn: boolean}>();
+        currentRosters.forEach((roster) => {
+          const dateKey = roster.flight_date;
+          if (!existingRostersMap.has(dateKey)) {
+            existingRostersMap.set(dateKey, {
+              flightCode: roster.flight_code,
+              isReturn: roster.flight_type === 'Return',
+            });
+          }
+        });
+
+        // Populate flightDays with existing data
+        setFlightDays((prev) =>
+          prev.map((day) => {
+            const dateKey = day.date.toISODate();
+            if (!dateKey) return day;
+
+            const existing = existingRostersMap.get(dateKey);
+            if (existing) {
+              return {
+                ...day,
+                flightCode: existing.flightCode,
+                isReturn: existing.isReturn,
+              };
+            }
+            return day;
+          }),
+        );
+      } catch (error) {
+        console.error('[AddRosterScreen] Exception loading rosters:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadExistingRosters();
+  }, [month, fetchRostersByDateRange]);
 
   // Reset input and trigger animation when index changes
   useEffect(() => {
@@ -104,13 +174,14 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
     return () => clearTimeout(timer);
   }, [currentIndex, flightDays]);
 
-  const handleNext = (update: Partial<FlightDay> = {}) => {
+  const handleNext = async (update: Partial<FlightDay> = {}) => {
     // Update current day
-    setFlightDays((prev) => {
-      const newDays = [...prev];
-      newDays[currentIndex] = {...newDays[currentIndex], ...update};
-      return newDays;
-    });
+    const updatedDays = [...flightDays];
+    updatedDays[currentIndex] = {...updatedDays[currentIndex], ...update};
+    setFlightDays(updatedDays);
+
+    // Save the current day's roster immediately
+    await saveSingleRoster(updatedDays[currentIndex]);
 
     // Trigger completion animation
     completionAnim.setValue(0);
@@ -155,6 +226,69 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
           ],
         );
       }, 500);
+    }
+  };
+
+  const saveSingleRoster = async (day: FlightDay) => {
+    const dateKey = day.date.toISODate();
+    if (!dateKey) {
+      return;
+    }
+
+    // For skipped days, we don't create a roster entry
+    if (day.skipped) {
+      return;
+    }
+
+    // Skip days without flight codes
+    if (!day.flightCode) {
+      return;
+    }
+
+    try {
+      // Get the latest rosters from the store
+      const currentRosters = useRostersStore.getState().rosters;
+
+      // Check if roster already exists for this date
+      const existingRoster = currentRosters.find((r) => r.flight_date === dateKey);
+
+      const flightType: 'Depart' | 'Return' = day.isReturn ? 'Return' : 'Depart';
+      const route = day.flightCode;
+      const destination = day.flightCode;
+
+      if (existingRoster) {
+        // Update existing roster
+        await updateMultipleRosters([
+          {
+            id: existingRoster.id,
+            flight_code: day.flightCode,
+            route,
+            destination,
+            flight_date: dateKey,
+            departure_time: '00:00:00',
+            arrival_time: '00:00:00',
+            flight_type: flightType,
+            status: 'Scheduled',
+          },
+        ]);
+      } else {
+        // Create new roster
+        await createMultipleRosters([
+          {
+            flight_code: day.flightCode,
+            route,
+            destination,
+            flight_date: dateKey,
+            departure_time: '00:00:00',
+            arrival_time: '00:00:00',
+            flight_type: flightType,
+            status: 'Scheduled',
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error('[AddRosterScreen] Error saving single roster:', error);
+      // Don't show alert for individual saves to avoid interrupting user flow
     }
   };
 
@@ -258,6 +392,11 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
       );
     });
   };
+
+  // Show loader while fetching initial data
+  if (isLoading) {
+    return <ThemedLoader fullScreen size="large" message="Loading rosters..." />;
+  }
 
   return (
     <KeyboardAvoidingView
@@ -381,6 +520,7 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
                 <Button
                   mode="outlined"
                   onPress={handleSkip}
+                  disabled={isSaving}
                   style={[styles.button, styles.skipButton]}
                   contentStyle={styles.buttonContent}
                   labelStyle={[styles.buttonLabel, {color: theme.colors.onSurfaceVariant}]}
@@ -391,7 +531,8 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
                 <Button
                   mode="contained"
                   onPress={handleSave}
-                  disabled={!flightInput.trim()}
+                  disabled={!flightInput.trim() || isSaving}
+                  loading={isSaving}
                   style={[styles.button, styles.saveButton]}
                   contentStyle={styles.buttonContent}
                   buttonColor={theme.colors.tertiary}
@@ -403,7 +544,8 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
                 <Button
                   mode="contained"
                   onPress={handleReturn}
-                  disabled={!flightInput.trim()}
+                  disabled={!flightInput.trim() || isSaving}
+                  loading={isSaving}
                   style={[styles.button, styles.returnButton]}
                   contentStyle={styles.buttonContent}
                   buttonColor={theme.colors.secondary}

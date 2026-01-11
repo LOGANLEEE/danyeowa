@@ -17,7 +17,15 @@ import { router } from 'expo-router';
 import { DateTime } from 'luxon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { Dialog, IconButton, PaperProvider, Portal, Surface, Text, useTheme } from 'react-native-paper';
+import {
+  Dialog,
+  IconButton,
+  PaperProvider,
+  Portal,
+  Surface,
+  Text,
+  useTheme,
+} from 'react-native-paper';
 
 // Helper function for month navigation
 const getFirstDayOfMonth = (dateTime: DateTime): DateTime => {
@@ -60,7 +68,8 @@ export default function ScheduleScreen() {
   // Fetch rosters on mount
   useEffect(() => {
     fetchRosters();
-  }, [fetchRosters]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load flight code prefix on mount
   useEffect(() => {
@@ -276,6 +285,14 @@ export default function ScheduleScreen() {
     setCurrentMonth(month);
   };
 
+  const handleAddMonthlyRoster = useCallback(() => {
+    // Only navigate if not in input mode and no departure date is set
+    router.push({
+      pathname: '/schedule/add-roster',
+      params: {targetMonth: currentMonth.toISO()},
+    });
+  }, [currentMonth]);
+
   return (
     <PaperProvider>
       <ScreenContainer
@@ -356,11 +373,14 @@ export default function ScheduleScreen() {
                     <Text
                       variant="bodySmall"
                       style={[styles.tipText, {color: theme.colors.onSurfaceVariant}]}>
-                      Tip: Enter just the number (e.g., "321") and it will become "{flightPrefix} 321"
+                      Tip: Enter just the number (e.g., "321") and it will become "{flightPrefix}{' '}
+                      321"
                     </Text>
                   )}
                   {saveError && (
-                    <Text variant="bodySmall" style={[styles.errorText, {color: theme.colors.error}]}>
+                    <Text
+                      variant="bodySmall"
+                      style={[styles.errorText, {color: theme.colors.error}]}>
                       {saveError}
                     </Text>
                   )}
@@ -373,7 +393,11 @@ export default function ScheduleScreen() {
                     style={[styles.toggleLabel, {color: theme.colors.onSurface}]}>
                     Flight Type
                   </Text>
-                  <FlightTypeToggle value={flightType} onChange={setFlightType} disabled={isSaving} />
+                  <FlightTypeToggle
+                    value={flightType}
+                    onChange={setFlightType}
+                    disabled={isSaving}
+                  />
                 </View>
               </Dialog.Content>
               <Dialog.Actions>
@@ -571,12 +595,7 @@ export default function ScheduleScreen() {
             accessibilityRole="button"
             accessibilityLabel="Add monthly roster"
             testID="add-monthly-button"
-            onPress={() =>
-              router.push({
-                pathname: '/schedule/add-roster',
-                params: {targetMonth: currentMonth.toISO()},
-              })
-            }
+            onPress={handleAddMonthlyRoster}
             style={[
               styles.addMonthlyButton,
               {
