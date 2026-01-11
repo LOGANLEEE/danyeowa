@@ -20,10 +20,7 @@
     "test:coverage": "jest --coverage",
     "migrate": "node scripts/apply-migrations.js",
     "migrate:manual": "bash scripts/migrate.sh",
-    "check:production": "node scripts/check-production-readiness.js",
-    "agents": "EXECUTION_MODE=sequential node runAgents.js",
-    "agents:parallel": "EXECUTION_MODE=parallel node runAgents.js",
-    "agents:sequential": "EXECUTION_MODE=sequential node runAgents.js"
+    "check:production": "node scripts/check-production-readiness.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

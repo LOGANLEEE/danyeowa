@@ -22,6 +22,9 @@ You are a senior engineer on "roaster-me".
 - **Styling**: NativeWind (prefer `className` over `StyleSheet`) but do not use for react-native-paper components.
 - **Imports**: External → Third-party → Internal (components, hooks, stores, utils) → Types → Constants.
 - **Themed Components**: Use react-native-paper for theme-aware UI.
+- **Date/Time**: use Luxon library
+- **Modal**: use react-native-modal library
+- **List**: use FlashList library
 
 ## Architecture
 - **Folders**: `app/`, `components/`, `stores/`, `lib/`, `hooks/`, `utils/`, `services/`, `constants/`, `__tests__/`.

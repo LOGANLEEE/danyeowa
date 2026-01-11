@@ -5,14 +5,7 @@ import { getOnboardingCompleted } from '@/lib/secure-storage';
 import { useAuthStore } from '@/stores/use-auth-store';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import {
   CodeField,
   Cursor,
@@ -118,6 +111,9 @@ export default function VerifyOtpScreen() {
   const {available: biometricAvailable, getBiometricName} = useBiometric();
 
   const ref = useBlurOnFulfill({value, cellCount: CELL_COUNT});
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
   const [props, getCellOnLayoutHandler] = useClearByFocusCell({
     value,
     setValue,

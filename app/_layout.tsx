@@ -44,6 +44,7 @@ function RootLayoutNav() {
           <Stack.Protected guard={isAuthenticated}>
             <Stack.Screen name="(tabs)" options={{headerShown: false}} />
             <Stack.Screen name="onboarding" options={{headerShown: false}} />
+            <Stack.Screen name="schedule" options={{headerShown: false}} />
           </Stack.Protected>
 
           {/* Protect auth routes - only accessible when not authenticated */}

@@ -3,7 +3,6 @@ import { CoffeeIcon } from '@/components/CoffeeIcon';
 import { ThemedLoader } from '@/components/ThemedLoader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { FlightTypeToggle } from '@/components/ui/FlightTypeToggle';
-import { ModalContainer } from '@/components/ui/ModalContainer';
 import { RosterCalendar } from '@/components/ui/RosterCalendar';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { SectionHeader } from '@/components/ui/SectionHeader';
@@ -14,48 +13,16 @@ import { getFlightCodePrefix } from '@/lib/secure-storage';
 import { useRostersStore } from '@/stores/use-rosters-store';
 import { Ionicons } from '@expo/vector-icons';
 import { fromDateId, toDateId } from '@marceloterreiro/flash-calendar';
-import { useRouter } from 'expo-router';
+import { router } from 'expo-router';
 import { DateTime } from 'luxon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
-import { PaperProvider, Surface, Text, useTheme } from 'react-native-paper';
+import { Dialog, IconButton, PaperProvider, Portal, Surface, Text, useTheme } from 'react-native-paper';
 
 // Helper function for month navigation
 const getFirstDayOfMonth = (dateTime: DateTime): DateTime => {
   return dateTime.startOf('month');
 };
-
-function AddMonthlyButton() {
-  const router = useRouter();
-  const theme = useTheme();
-
-  return (
-    <TouchableOpacity
-      accessible
-      accessibilityRole="button"
-      accessibilityLabel="Add monthly roster"
-      testID="add-monthly-button"
-      // onPress={() => router.push('/general/add-monthly')}
-      style={[
-        styles.addMonthlyButton,
-        {
-          backgroundColor: theme.dark ? '#A0002A20' : '#80002010',
-          borderColor: theme.dark ? '#A0002A40' : '#80002030',
-        },
-      ]}
-      activeOpacity={0.7}>
-      <Ionicons
-        name="add-circle-outline"
-        size={24}
-        color={theme.colors.primary}
-        testID="add-monthly-icon"
-        accessibilityElementsHidden={false}
-        accessibilityLabel="Add monthly roster"
-        importantForAccessibility="yes"
-      />
-    </TouchableOpacity>
-  );
-}
 
 export default function ScheduleScreen() {
   const theme = useTheme();
@@ -334,85 +301,105 @@ export default function ScheduleScreen() {
           </View>
 
           {/* Flight Code Input Modal */}
-          <ModalContainer
-            visible={isInputMode && departureDate !== null}
-            onClose={handleCloseModal}
-            title="Edit Flight"
-            subtitle={
-              departureDate
-                ? (() => {
-                    try {
-                      const dateObj = fromDateId(departureDate);
-                      return DateTime.fromJSDate(dateObj).toFormat('EEEE, MMMM d, yyyy');
-                    } catch {
-                      return DateTime.fromISO(departureDate).toFormat('EEEE, MMMM d, yyyy');
+          <Portal>
+            <Dialog
+              visible={isInputMode && departureDate !== null}
+              onDismiss={handleCloseModal}
+              style={styles.dialog}>
+              <Dialog.Title>
+                <View style={styles.dialogTitleContainer}>
+                  <View style={styles.dialogTitleContent}>
+                    <Text variant="titleLarge">Edit Flight</Text>
+                    {departureDate && (
+                      <Text
+                        variant="bodyMedium"
+                        style={[styles.dialogSubtitle, {color: theme.colors.onSurfaceVariant}]}>
+                        {(() => {
+                          try {
+                            const dateObj = fromDateId(departureDate);
+                            return DateTime.fromJSDate(dateObj).toFormat('EEEE, MMMM d, yyyy');
+                          } catch {
+                            return DateTime.fromISO(departureDate).toFormat('EEEE, MMMM d, yyyy');
+                          }
+                        })()}
+                      </Text>
+                    )}
+                  </View>
+                  <IconButton
+                    icon="close"
+                    size={24}
+                    iconColor={theme.colors.onSurfaceVariant}
+                    onPress={handleCloseModal}
+                  />
+                </View>
+              </Dialog.Title>
+              <Dialog.Content>
+                <View style={styles.inputContainer}>
+                  <ThemedInput
+                    label="Flight Code"
+                    placeholder={
+                      flightPrefix ? `e.g., ${flightPrefix} 321 or full code` : 'e.g., SQ 321'
                     }
-                  })()
-                : undefined
-            }>
-            <View style={styles.inputContainer}>
-              <ThemedInput
-                label="Flight Code"
-                placeholder={
-                  flightPrefix ? `e.g., ${flightPrefix} 321 or full code` : 'e.g., SQ 321'
-                }
-                value={flightCode}
-                onChangeText={(text) => {
-                  setFlightCode(text);
-                  if (saveError) setSaveError(null);
-                }}
-                error={saveError || undefined}
-                autoCapitalize="characters"
-                autoFocus
-                onSubmitEditing={handleFlightCodeSubmit}
-                returnKeyType="done"
-                editable={!isSaving}
-              />
-              {flightPrefix && !flightCode.includes(' ') && (
-                <Text
-                  variant="bodySmall"
-                  style={[styles.tipText, {color: theme.colors.onSurfaceVariant}]}>
-                  Tip: Enter just the number (e.g., "321") and it will become "{flightPrefix} 321"
-                </Text>
-              )}
-              {saveError && (
-                <Text variant="bodySmall" style={[styles.errorText, {color: theme.colors.error}]}>
-                  {saveError}
-                </Text>
-              )}
-            </View>
+                    value={flightCode}
+                    onChangeText={(text) => {
+                      setFlightCode(text);
+                      if (saveError) setSaveError(null);
+                    }}
+                    error={saveError || undefined}
+                    autoCapitalize="characters"
+                    autoFocus
+                    onSubmitEditing={handleFlightCodeSubmit}
+                    returnKeyType="done"
+                    editable={!isSaving}
+                  />
+                  {flightPrefix && !flightCode.includes(' ') && (
+                    <Text
+                      variant="bodySmall"
+                      style={[styles.tipText, {color: theme.colors.onSurfaceVariant}]}>
+                      Tip: Enter just the number (e.g., "321") and it will become "{flightPrefix} 321"
+                    </Text>
+                  )}
+                  {saveError && (
+                    <Text variant="bodySmall" style={[styles.errorText, {color: theme.colors.error}]}>
+                      {saveError}
+                    </Text>
+                  )}
+                </View>
 
-            {/* Flight Type Toggle */}
-            <View style={styles.toggleContainer}>
-              <Text
-                variant="labelLarge"
-                style={[styles.toggleLabel, {color: theme.colors.onSurface}]}>
-                Flight Type
-              </Text>
-              <FlightTypeToggle value={flightType} onChange={setFlightType} disabled={isSaving} />
-            </View>
-
-            <View style={styles.buttonRow}>
-              <View style={styles.buttonWrapper}>
-                <ThemedButton
-                  title="Cancel"
-                  onPress={handleCloseModal}
-                  variant="secondary"
-                  fullWidth
-                  disabled={isSaving}
-                />
-              </View>
-              <View style={styles.buttonWrapper}>
-                <ThemedButton
-                  title={isSaving ? 'Saving...' : 'Save'}
-                  onPress={handleFlightCodeSubmit}
-                  disabled={!flightCode.trim() || isSaving}
-                  isLoading={isSaving}
-                  fullWidth
-                />
-              </View>
-            </View>
-          </ModalContainer>
+                {/* Flight Type Toggle */}
+                <View style={styles.toggleContainer}>
+                  <Text
+                    variant="labelLarge"
+                    style={[styles.toggleLabel, {color: theme.colors.onSurface}]}>
+                    Flight Type
+                  </Text>
+                  <FlightTypeToggle value={flightType} onChange={setFlightType} disabled={isSaving} />
+                </View>
+              </Dialog.Content>
+              <Dialog.Actions>
+                <View style={styles.buttonRow}>
+                  <View style={styles.buttonWrapper}>
+                    <ThemedButton
+                      title="Cancel"
+                      onPress={handleCloseModal}
+                      variant="secondary"
+                      fullWidth
+                      disabled={isSaving}
+                    />
+                  </View>
+                  <View style={styles.buttonWrapper}>
+                    <ThemedButton
+                      title={isSaving ? 'Saving...' : 'Save'}
+                      onPress={handleFlightCodeSubmit}
+                      disabled={!flightCode.trim() || isSaving}
+                      isLoading={isSaving}
+                      fullWidth
+                    />
+                  </View>
+                </View>
+              </Dialog.Actions>
+            </Dialog>
+          </Portal>
 
           {/* Selected Date Rosters - Show when not in input mode */}
           {selectedDate && !isInputMode && (
@@ -579,6 +566,35 @@ export default function ScheduleScreen() {
               <ThemedLoader size="small" message="Loading your roster..." />
             </Surface>
           )}
+          <TouchableOpacity
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Add monthly roster"
+            testID="add-monthly-button"
+            onPress={() =>
+              router.push({
+                pathname: '/schedule/add-roster',
+                params: {targetMonth: currentMonth.toISO()},
+              })
+            }
+            style={[
+              styles.addMonthlyButton,
+              {
+                backgroundColor: theme.dark ? '#A0002A20' : '#80002010',
+                borderColor: theme.dark ? '#A0002A40' : '#80002030',
+              },
+            ]}
+            activeOpacity={0.7}>
+            <Ionicons
+              name="add-circle-outline"
+              size={24}
+              color={theme.colors.primary}
+              testID="add-monthly-icon"
+              accessibilityElementsHidden={false}
+              accessibilityLabel="Add monthly roster"
+              importantForAccessibility="yes"
+            />
+          </TouchableOpacity>
         </View>
       </ScreenContainer>
     </PaperProvider>
@@ -600,6 +616,21 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 999,
     borderWidth: 1,
+  },
+  dialog: {
+    borderRadius: 24,
+  },
+  dialogTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dialogTitleContent: {
+    flex: 1,
+  },
+  dialogSubtitle: {
+    marginTop: 4,
+    fontSize: 14,
   },
   inputContainer: {
     marginBottom: 24,
