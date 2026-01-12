@@ -311,7 +311,6 @@ export default function ScheduleScreen() {
               onDayPress={handleDayPress}
               activeDateRanges={calendarActiveDateRanges}
               dateHasFlights={dateHasFlights}
-              rosters={rosters}
               currentMonth={currentMonth}
               onMonthChange={handleMonthChange}
             />

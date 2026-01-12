@@ -1,3 +1,5 @@
+import { AnimatedWelcomeBackground } from '@/components/AnimatedWelcomeBackground';
+import { useRostersStore } from '@/stores/use-rosters-store';
 import { FlashList } from '@shopify/flash-list';
 import { router, useLocalSearchParams } from 'expo-router';
 import { DateTime } from 'luxon';
@@ -20,15 +22,13 @@ import {
   Dialog,
   IconButton,
   Portal,
+  Snackbar,
   Text,
   TextInput,
   useTheme,
 } from 'react-native-paper';
 
-import { ThemedLoader } from '@/components/ThemedLoader';
-import { useRostersStore } from '@/stores/use-rosters-store';
-
-const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
+const {width: SCREEN_WIDTH} = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 48;
 const CARD_HEIGHT = 320;
 
@@ -48,6 +48,9 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
   const year = month.year;
   const monthNumber = month.month;
 
+  // Store hooks
+  const {rosters, createRoster, updateRoster, isLoading, error, setError} = useRostersStore();
+
   const daysInMonth = month.daysInMonth || 31;
   const initialDays: FlightDay[] = Array.from({length: daysInMonth}, (_, i) => ({
     date: DateTime.fromObject({year, month: monthNumber, day: i + 1}),
@@ -57,83 +60,56 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [flightInput, setFlightInput] = useState('');
   const [showDatePickerModal, setShowDatePickerModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [savingDayIndex, setSavingDayIndex] = useState<number | null>(null);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
   const inputRef = useRef<any>(null);
 
-  const {fetchRostersByDateRange, createMultipleRosters, updateMultipleRosters, rosters} =
-    useRostersStore();
-
-  // Animation values for slot machine effect
+  // Animation values for card stack effect
   const slideAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const rotationAnim = useRef(new Animated.Value(0)).current;
   const completionAnim = useRef(new Animated.Value(0)).current;
 
   // Calculate completed days
   const completedDays = flightDays.filter((day) => day.flightCode || day.skipped).length;
 
-  // Fetch existing rosters for the month on mount
+  // Load and sync existing rosters for the month on mount
   useEffect(() => {
-    const loadExistingRosters = async () => {
-      setIsLoading(true);
-      try {
-        const startDate = month.startOf('month').toISODate();
-        const endDate = month.endOf('month').toISODate();
+    const loadAndSyncRosters = async () => {
+      const startDate = month.startOf('month').toISODate();
+      const endDate = month.endOf('month').toISODate();
 
-        if (!startDate || !endDate) {
-          setIsLoading(false);
-          return;
-        }
+      if (!startDate || !endDate) return;
 
-        const {error} = await fetchRostersByDateRange(startDate, endDate);
+      await useRostersStore.getState().fetchRostersByDateRange(startDate, endDate);
 
-        if (error) {
-          console.error('[AddRosterScreen] Error fetching rosters:', error);
-          // Continue with empty state if fetch fails
-        }
+      // Sync loaded rosters with flightDays (only for days without flight codes)
+      const currentRosters = useRostersStore.getState().rosters;
+      if (currentRosters.length > 0) {
+        setFlightDays((prevDays) => {
+          return prevDays.map((day) => {
+            // Skip if day already has a flight code (preserve user input)
+            if (day.flightCode) return day;
 
-        // Get the latest rosters from the store after fetch
-        const currentRosters = useRostersStore.getState().rosters;
+            const dateStr = day.date.toISODate();
+            if (!dateStr) return day;
 
-        // Map existing rosters to FlightDay format
-        const existingRostersMap = new Map<string, {flightCode: string; isReturn: boolean}>();
-        currentRosters.forEach((roster) => {
-          const dateKey = roster.flight_date;
-          if (!existingRostersMap.has(dateKey)) {
-            existingRostersMap.set(dateKey, {
-              flightCode: roster.flight_code,
-              isReturn: roster.flight_type === 'Return',
-            });
-          }
+            const existingRoster = currentRosters.find((r) => r.flight_date === dateStr);
+            if (!existingRoster) return day;
+
+            return {
+              ...day,
+              flightCode: existingRoster.flight_code,
+              isReturn: existingRoster.flight_type === 'Return',
+            };
+          });
         });
-
-        // Populate flightDays with existing data
-        setFlightDays((prev) =>
-          prev.map((day) => {
-            const dateKey = day.date.toISODate();
-            if (!dateKey) return day;
-
-            const existing = existingRostersMap.get(dateKey);
-            if (existing) {
-              return {
-                ...day,
-                flightCode: existing.flightCode,
-                isReturn: existing.isReturn,
-              };
-            }
-            return day;
-          }),
-        );
-      } catch (error) {
-        console.error('[AddRosterScreen] Exception loading rosters:', error);
-      } finally {
-        setIsLoading(false);
       }
     };
 
-    loadExistingRosters();
-  }, [month, fetchRostersByDateRange]);
+    loadAndSyncRosters();
+  }, [targetMonth]);
 
   // Reset input and trigger animation when index changes
   useEffect(() => {
@@ -142,26 +118,33 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
 
     // Reset animations
     slideAnim.setValue(0);
-    scaleAnim.setValue(0.8);
+    scaleAnim.setValue(0.85);
     fadeAnim.setValue(0);
+    rotationAnim.setValue(0);
 
-    // Animate card entrance (slot machine effect)
+    // Animate card entrance (card stack effect)
     Animated.parallel([
       Animated.spring(slideAnim, {
         toValue: 1,
-        tension: 50,
-        friction: 7,
+        tension: 60,
+        friction: 8,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
-        tension: 50,
-        friction: 7,
+        tension: 60,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.spring(rotationAnim, {
+        toValue: 1,
+        tension: 60,
+        friction: 8,
         useNativeDriver: true,
       }),
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 300,
+        duration: 350,
         useNativeDriver: true,
       }),
     ]).start();
@@ -172,16 +155,96 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [currentIndex, flightDays]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex]);
+
+  // Transform FlightDay to RosterInput format
+  const createRosterInput = (
+    day: FlightDay,
+    flightCode: string,
+  ): {
+    flight_code: string;
+    route: string;
+    destination: string;
+    flight_date: string;
+    departure_time: string;
+    arrival_time: string;
+    flight_type: 'Depart' | 'Return';
+  } => {
+    const flightDate = day.date.toISODate();
+    if (!flightDate) {
+      throw new Error('Invalid date');
+    }
+
+    return {
+      flight_code: flightCode,
+      route: flightCode, // Use flight code as route for now
+      destination: '', // Empty for now, can be filled later
+      flight_date: flightDate,
+      departure_time: '00:00', // Default, can be filled later
+      arrival_time: '00:00', // Default, can be filled later
+      flight_type: day.isReturn ? 'Return' : 'Depart',
+    };
+  };
+
+  // Find existing roster for a specific date
+  const findExistingRoster = (date: DateTime): string | null => {
+    const dateStr = date.toISODate();
+    if (!dateStr) return null;
+
+    const existing = rosters.find((r) => r.flight_date === dateStr);
+    return existing?.id || null;
+  };
 
   const handleNext = async (update: Partial<FlightDay> = {}) => {
-    // Update current day
+    const dayIndex = currentIndex;
+    const day = flightDays[dayIndex];
+    const updatedDay = {...day, ...update};
+
+    // Update local state first
     const updatedDays = [...flightDays];
-    updatedDays[currentIndex] = {...updatedDays[currentIndex], ...update};
+    updatedDays[dayIndex] = updatedDay;
     setFlightDays(updatedDays);
 
-    // Save the current day's roster immediately
-    await saveSingleRoster(updatedDays[currentIndex]);
+    let saveSuccess = true;
+
+    // Save to store only if flight code is provided (not for skipped days)
+    if (updatedDay.flightCode && !updatedDay.skipped) {
+      setSavingDayIndex(dayIndex);
+      try {
+        const rosterInput = createRosterInput(updatedDay, updatedDay.flightCode);
+        const existingRosterId = findExistingRoster(updatedDay.date);
+
+        if (existingRosterId) {
+          // Update existing roster
+          const {error: updateError} = await updateRoster(existingRosterId, rosterInput);
+          if (updateError) {
+            console.error('[AddRosterScreen] Error updating roster:', updateError);
+            setSnackbarVisible(true);
+            saveSuccess = false;
+          }
+        } else {
+          // Create new roster
+          const {error: createError} = await createRoster(rosterInput);
+          if (createError) {
+            console.error('[AddRosterScreen] Error creating roster:', createError);
+            setSnackbarVisible(true);
+            saveSuccess = false;
+          }
+        }
+      } catch (error) {
+        console.error('[AddRosterScreen] Exception saving roster:', error);
+        setSnackbarVisible(true);
+        saveSuccess = false;
+      } finally {
+        setSavingDayIndex(null);
+      }
+    }
+
+    // Only proceed if save was successful (or skipped day)
+    if (!saveSuccess) {
+      return;
+    }
 
     // Trigger completion animation
     completionAnim.setValue(0);
@@ -198,97 +261,31 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
       }),
     ]).start();
 
-    Keyboard.dismiss();
+    // Keyboard.dismiss();
     setFlightInput('');
 
-    // Move to next day or show completion alert
+    // Move to next day or finish if last day
     if (currentIndex < flightDays.length - 1) {
       setTimeout(() => {
         setCurrentIndex(currentIndex + 1);
       }, 300);
     } else {
-      // Last day completed
+      // Last day completed - show alert and navigate back
       setTimeout(() => {
         Alert.alert(
-          'Monthly Roster Completed! 🎉',
-          `You've completed all ${daysInMonth} days for ${month.toLocaleString({
-            month: 'long',
-            year: 'numeric',
-          })}.`,
+          'Roster Complete',
+          'All rosters have been saved successfully!',
           [
             {
               text: 'OK',
               onPress: () => {
-                // Go back to schedule screen after roster completion
-                router.replace('/(tabs)/calendar');
+                router.back();
               },
             },
           ],
+          {cancelable: false},
         );
       }, 500);
-    }
-  };
-
-  const saveSingleRoster = async (day: FlightDay) => {
-    const dateKey = day.date.toISODate();
-    if (!dateKey) {
-      return;
-    }
-
-    // For skipped days, we don't create a roster entry
-    if (day.skipped) {
-      return;
-    }
-
-    // Skip days without flight codes
-    if (!day.flightCode) {
-      return;
-    }
-
-    try {
-      // Get the latest rosters from the store
-      const currentRosters = useRostersStore.getState().rosters;
-
-      // Check if roster already exists for this date
-      const existingRoster = currentRosters.find((r) => r.flight_date === dateKey);
-
-      const flightType: 'Depart' | 'Return' = day.isReturn ? 'Return' : 'Depart';
-      const route = day.flightCode;
-      const destination = day.flightCode;
-
-      if (existingRoster) {
-        // Update existing roster
-        await updateMultipleRosters([
-          {
-            id: existingRoster.id,
-            flight_code: day.flightCode,
-            route,
-            destination,
-            flight_date: dateKey,
-            departure_time: '00:00:00',
-            arrival_time: '00:00:00',
-            flight_type: flightType,
-            status: 'Scheduled',
-          },
-        ]);
-      } else {
-        // Create new roster
-        await createMultipleRosters([
-          {
-            flight_code: day.flightCode,
-            route,
-            destination,
-            flight_date: dateKey,
-            departure_time: '00:00:00',
-            arrival_time: '00:00:00',
-            flight_type: flightType,
-            status: 'Scheduled',
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error('[AddRosterScreen] Error saving single roster:', error);
-      // Don't show alert for individual saves to avoid interrupting user flow
     }
   };
 
@@ -329,15 +326,25 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
     weekday: 'long',
   });
 
-  // Animation interpolations for slot machine effect
+  // Animation interpolations for card stack effect
+  const translateX = slideAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [SCREEN_WIDTH, 0],
+  });
+
   const translateY = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [100, 0],
+    outputRange: [20, 0],
   });
 
   const cardScale = scaleAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0.85, 1],
+  });
+
+  const cardRotation = rotationAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['15deg', '0deg'],
   });
 
   const cardOpacity = fadeAnim.interpolate({
@@ -393,16 +400,12 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
     });
   };
 
-  // Show loader while fetching initial data
-  if (isLoading) {
-    return <ThemedLoader fullScreen size="large" message="Loading rosters..." />;
-  }
-
   return (
     <KeyboardAvoidingView
       style={[styles.container, {backgroundColor: theme.colors.background}]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+      <AnimatedWelcomeBackground />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -466,7 +469,12 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
           <Animated.View
             style={[
               {
-                transform: [{translateY}, {scale: Animated.multiply(cardScale, completionScale)}],
+                transform: [
+                  {translateX},
+                  {translateY},
+                  {rotate: cardRotation},
+                  {scale: Animated.multiply(cardScale, completionScale)},
+                ],
                 opacity: cardOpacity,
               },
             ]}>
@@ -520,7 +528,6 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
                 <Button
                   mode="outlined"
                   onPress={handleSkip}
-                  disabled={isSaving}
                   style={[styles.button, styles.skipButton]}
                   contentStyle={styles.buttonContent}
                   labelStyle={[styles.buttonLabel, {color: theme.colors.onSurfaceVariant}]}
@@ -531,8 +538,8 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
                 <Button
                   mode="contained"
                   onPress={handleSave}
-                  disabled={!flightInput.trim() || isSaving}
-                  loading={isSaving}
+                  disabled={!flightInput.trim() || isLoading || savingDayIndex === currentIndex}
+                  loading={isLoading && savingDayIndex === currentIndex}
                   style={[styles.button, styles.saveButton]}
                   contentStyle={styles.buttonContent}
                   buttonColor={theme.colors.tertiary}
@@ -544,8 +551,8 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
                 <Button
                   mode="contained"
                   onPress={handleReturn}
-                  disabled={!flightInput.trim() || isSaving}
-                  loading={isSaving}
+                  disabled={!flightInput.trim() || isLoading || savingDayIndex === currentIndex}
+                  loading={isLoading && savingDayIndex === currentIndex}
                   style={[styles.button, styles.returnButton]}
                   contentStyle={styles.buttonContent}
                   buttonColor={theme.colors.secondary}
@@ -647,6 +654,24 @@ const AddRosterScreen: React.FC<AddRosterScreenProps> = () => {
             </Dialog.Content>
           </Dialog>
         </Portal>
+
+        {/* Error Snackbar */}
+        <Snackbar
+          visible={snackbarVisible}
+          onDismiss={() => {
+            setSnackbarVisible(false);
+            setError(null);
+          }}
+          duration={3000}
+          action={{
+            label: 'Dismiss',
+            onPress: () => {
+              setSnackbarVisible(false);
+              setError(null);
+            },
+          }}>
+          {error || 'Failed to save roster. Please try again.'}
+        </Snackbar>
       </ScrollView>
     </KeyboardAvoidingView>
   );

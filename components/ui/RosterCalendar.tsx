@@ -1,11 +1,12 @@
-import { ThemedView } from '@/components/ThemedView';
 import { CalendarWrapper } from '@/components/ui/CalendarWrapper';
 import { MonthNavigation } from '@/components/ui/MonthNavigation';
-import { Roster } from '@/lib/supabase/types';
-import { getCountryFlag } from '@/utils/country-flags';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { fromDateId, toDateId, type CalendarActiveDateRange } from '@marceloterreiro/flash-calendar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { DateTime } from 'luxon';
 import { useCallback, useMemo, useState } from 'react';
+import { StyleSheet, ViewStyle } from 'react-native';
+import { Surface } from 'react-native-paper';
 
 type RosterCalendarProps = {
   /**
@@ -28,10 +29,6 @@ type RosterCalendarProps = {
    */
   dateHasFlights?: Set<string>;
   /**
-   * Rosters data to extract country flags from destinations
-   */
-  rosters?: Roster[];
-  /**
    * Initial month to display (defaults to current month)
    */
   initialMonth?: DateTime;
@@ -49,9 +46,9 @@ type RosterCalendarProps = {
    */
   showWrapper?: boolean;
   /**
-   * Custom className for the wrapper
+   * Custom style for the wrapper
    */
-  wrapperClassName?: string;
+  wrapperStyle?: ViewStyle;
 };
 
 /**
@@ -88,13 +85,15 @@ export function RosterCalendar({
   onDayPress,
   activeDateRanges,
   dateHasFlights,
-  rosters,
   initialMonth,
   currentMonth: controlledCurrentMonth,
   onMonthChange,
   showWrapper = true,
-  wrapperClassName,
+  wrapperStyle,
 }: RosterCalendarProps) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+
   const [internalCurrentMonth, setInternalCurrentMonth] = useState<DateTime>(
     () => initialMonth || DateTime.now().startOf('month'),
   );
@@ -121,23 +120,6 @@ export function RosterCalendar({
     });
     return isoSet;
   }, [dateHasFlights]);
-
-  // Map dates to country flags
-  const dateToFlags = useMemo(() => {
-    if (!rosters?.length) return new Map<string, string[]>();
-
-    const flagsMap = new Map<string, string[]>();
-    rosters.forEach((roster) => {
-      if (!roster.flight_date) return;
-      const flag = getCountryFlag(roster.destination);
-      const displayFlag = flag === '✈️' ? '🏁' : flag;
-      const existing = flagsMap.get(roster.flight_date) || [];
-      if (!existing.includes(displayFlag)) {
-        flagsMap.set(roster.flight_date, [...existing, displayFlag]);
-      }
-    });
-    return flagsMap;
-  }, [rosters]);
 
   // Normalize activeDateRanges to dateId format
   const normalizedActiveDateRanges = useMemo(
@@ -186,22 +168,40 @@ export function RosterCalendar({
         activeDateRanges={normalizedActiveDateRanges}
         onDayPress={onDayPress}
         dateHasFlights={dateHasFlightsISO}
-        dateToFlags={dateToFlags}
       />
     </>
   );
 
   if (!showWrapper) return calendarContent;
 
+  // Border color based on theme
+  const borderColor = isDark ? 'rgba(160, 0, 42, 0.4)' : 'rgba(128, 0, 32, 0.3)';
+
   return (
-    <ThemedView
-      animated
-      delay={0}
-      className={
-        wrapperClassName ||
-        'rounded-3xl p-6 border-2 border-[#800020]/30 dark:border-[#A0002A]/40 bg-gradient-to-br from-[#800020]/10 to-[#A0002A]/5 dark:from-[#A0002A]/20 dark:to-[#800020]/10 shadow-lg'
-      }>
-      {calendarContent}
-    </ThemedView>
+    <Surface style={[styles.wrapper, { borderColor }, wrapperStyle]} elevation={4}>
+      <LinearGradient
+        colors={
+          isDark
+            ? (['rgba(160, 0, 42, 0.2)', 'rgba(128, 0, 32, 0.1)'] as const)
+            : (['rgba(128, 0, 32, 0.1)', 'rgba(160, 0, 42, 0.05)'] as const)
+        }
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.gradient}>
+        {calendarContent}
+      </LinearGradient>
+    </Surface>
   );
 }
+
+const styles = StyleSheet.create({
+  wrapper: {
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 2,
+    overflow: 'hidden',
+  },
+  gradient: {
+    flex: 1,
+  },
+});

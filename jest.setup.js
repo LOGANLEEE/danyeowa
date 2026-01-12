@@ -49,9 +49,7 @@ process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ
 // Mock window.dispatchEvent for React Native test environment
 if (typeof window !== 'undefined' && !window.dispatchEvent) {
   window.dispatchEvent = jest.fn();
-}
-
-// Suppress console errors in tests (but allow console.error to be spied on)
+}// Suppress console errors in tests (but allow console.error to be spied on)
 const originalError = console.error;
 console.error = (...args: any[]) => {
   // Only suppress known test environment errors

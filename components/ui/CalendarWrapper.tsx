@@ -1,4 +1,3 @@
-import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -18,7 +17,6 @@ type CalendarWrapperProps = {
   activeDateRanges: CalendarActiveDateRange[];
   onDayPress: (dateId: string) => void;
   dateHasFlights?: Set<string>;
-  dateToFlags?: Map<string, string[]>;
 };
 
 export function CalendarWrapper({
@@ -27,7 +25,6 @@ export function CalendarWrapper({
   activeDateRanges,
   onDayPress,
   dateHasFlights,
-  dateToFlags,
 }: CalendarWrapperProps) {
   const colorScheme = useColorScheme();
   const themeColors = Colors[colorScheme ?? 'light'];
@@ -164,45 +161,6 @@ export function CalendarWrapper({
     ];
   }, [activeDateRanges, currentMonth, selectedDate]);
 
-  // Generate all days in the current month for flag overlay
-  const monthDays = useMemo(() => {
-    if (!dateToFlags || dateToFlags.size === 0) return [];
-
-    const days: Array<{
-      dateId: string;
-      isoDate: string;
-      flags: string[];
-      row: number;
-      col: number;
-    }> = [];
-    const startOfMonth = currentMonth.startOf('month');
-    const endOfMonth = currentMonth.endOf('month');
-    const firstDayOfMonth = startOfMonth;
-    const firstWeekday = firstDayOfMonth.weekday; // 1 = Monday, 7 = Sunday
-
-    let currentDate = startOfMonth;
-    while (currentDate <= endOfMonth) {
-      const isoDate = currentDate.toISODate();
-      if (isoDate) {
-        const dateId = toDateId(currentDate.toJSDate());
-        if (dateId) {
-          const flags = dateToFlags.get(isoDate) || [];
-          if (flags.length > 0) {
-            const dayOfMonth = currentDate.day;
-            const weekday = currentDate.weekday;
-            const daysFromStart = dayOfMonth - 1;
-            const row = Math.floor((daysFromStart + firstWeekday - 1) / 7);
-            const col = (weekday - 1) % 7;
-            days.push({dateId, isoDate, flags, row, col});
-          }
-        }
-      }
-      currentDate = currentDate.plus({days: 1});
-    }
-
-    return days;
-  }, [currentMonth, dateToFlags]);
-
   return (
     <View style={styles.calendarContainer}>
       <Calendar
@@ -215,37 +173,6 @@ export function CalendarWrapper({
         calendarRowHorizontalSpacing={12}
         theme={calendarTheme}
       />
-      {/* Flag overlay - positioned absolutely underneath days */}
-      {monthDays.length > 0 && (
-        <View style={styles.flagOverlay} pointerEvents="none">
-          {monthDays.map(({dateId, flags, row, col}) => {
-            // Calculate position: each day is approximately 14.28% width (100% / 7)
-            // With 12px spacing, we need to account for spacing
-            // Position flags at the bottom of each day cell
-            const dayWidthPercent = 100 / 7;
-            const left = `${col * dayWidthPercent + dayWidthPercent / 2}%`;
-            const top = `${row * 62 + 38}px`; // 50px day height + 12px spacing, position at ~38px from top of cell
-
-            return (
-              <View
-                key={dateId}
-                style={[
-                  styles.flagContainer,
-                  {
-                    left: parseFloat(left),
-                    top: parseFloat(top),
-                    transform: [{translateX: -7}], // Center the flag (approximate half width)
-                  },
-                ]}>
-                <ThemedText style={styles.flagText}>
-                  {flags.slice(0, 2).join(' ')}
-                  {flags.length > 2 ? ' +' : ''}
-                </ThemedText>
-              </View>
-            );
-          })}
-        </View>
-      )}
     </View>
   );
 }
@@ -253,23 +180,5 @@ export function CalendarWrapper({
 const styles = StyleSheet.create({
   calendarContainer: {
     position: 'relative',
-  },
-  flagOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  flagContainer: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 20,
-  },
-  flagText: {
-    fontSize: 10,
-    lineHeight: 12,
-    textAlign: 'center',
   },
 });
