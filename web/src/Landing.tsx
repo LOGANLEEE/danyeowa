@@ -30,7 +30,9 @@ export default function Landing({ onSignIn }: Props) {
           </p>
         </div>
 
-        <p className="num text-sm text-ink-muted">dep 10:45 → arr 06:20+1</p>
+        <p className="num text-sm text-ink-muted">
+          dep 10:45 → arr 06:20<sup>+1</sup>
+        </p>
       </div>
 
       <ul className="flex w-full flex-col gap-3 text-left text-sm">

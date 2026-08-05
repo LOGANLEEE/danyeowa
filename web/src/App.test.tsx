@@ -34,7 +34,8 @@ describe("App", () => {
   it("shows title, API status, and the landing page (not the login form) when signed out", async () => {
     stubSignedOutFetch();
     render(<App />);
-    expect(screen.getByRole("heading", { name: /roaster/i })).toBeInTheDocument();
+    // Exactly one h1 on the page — the Landing hero — no duplicate with the header chrome.
+    expect(screen.getAllByRole("heading", { name: /roaster/i, level: 1 })).toHaveLength(1);
     expect(await screen.findByText(/api: online/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign in with email/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();

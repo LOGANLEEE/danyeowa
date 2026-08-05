@@ -44,12 +44,22 @@ export default function App() {
     setMe(null);
   }
 
+  // The Landing view renders its own hero h1 ("roaster·me") as the page heading.
+  // Suppress the header's h1 there so the page has exactly one h1 (a11y: no duplicate headings).
+  const isLanding = me === null && signedOutView === "landing";
+
   return (
     <div className="flex min-h-screen flex-col bg-ground text-ink">
       <header className="flex items-center justify-between border-b border-edge px-4 py-3">
-        <h1 className="text-xl font-semibold text-ink-bright">
-          roaster<span className="text-amber">·me</span>
-        </h1>
+        {isLanding ? (
+          <span className="text-xl font-semibold text-ink-bright" aria-hidden="true">
+            roaster<span className="text-amber">·me</span>
+          </span>
+        ) : (
+          <h1 className="text-xl font-semibold text-ink-bright">
+            roaster<span className="text-amber">·me</span>
+          </h1>
+        )}
         {me !== "loading" && me !== null && (
           <div className="flex items-center gap-3 text-sm">
             <span className="text-ink-muted">{me.email}</span>
