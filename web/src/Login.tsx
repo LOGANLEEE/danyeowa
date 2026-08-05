@@ -12,26 +12,34 @@ export default function Login({ onSignedIn }: Props) {
   async function handleSendCode(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const { error: sendError } = await authClient.emailOtp.sendVerificationOtp({
-      email,
-      type: "sign-in",
-    });
-    if (sendError) {
-      setError(sendError.message ?? "Failed to send code");
-      return;
+    try {
+      const { error: sendError } = await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: "sign-in",
+      });
+      if (sendError) {
+        setError(sendError.message ?? "Failed to send code");
+        return;
+      }
+      setCodeSent(true);
+    } catch {
+      setError("Couldn't send the code — check your connection");
     }
-    setCodeSent(true);
   }
 
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const { error: signInError } = await authClient.signIn.emailOtp({ email, otp: code });
-    if (signInError) {
-      setError(signInError.message ?? "Failed to sign in");
-      return;
+    try {
+      const { error: signInError } = await authClient.signIn.emailOtp({ email, otp: code });
+      if (signInError) {
+        setError(signInError.message ?? "Failed to sign in");
+        return;
+      }
+      onSignedIn();
+    } catch {
+      setError("Sign-in failed — try again");
     }
-    onSignedIn();
   }
 
   if (!codeSent) {

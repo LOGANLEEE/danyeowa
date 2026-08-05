@@ -49,4 +49,42 @@ describe("Login", () => {
     });
     expect(onSignedIn).toHaveBeenCalled();
   });
+
+  it("shows a fallback error when sendVerificationOtp throws", async () => {
+    const user = userEvent.setup();
+    vi.mocked(authClient.emailOtp.sendVerificationOtp).mockRejectedValue(new Error("network down"));
+    const onSignedIn = vi.fn();
+
+    render(<Login onSignedIn={onSignedIn} />);
+
+    await user.type(screen.getByLabelText(/email/i), "roast@example.com");
+    await user.click(screen.getByRole("button", { name: /send code/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /couldn't send the code — check your connection/i
+    );
+    expect(onSignedIn).not.toHaveBeenCalled();
+  });
+
+  it("shows a fallback error when signIn.emailOtp throws", async () => {
+    const user = userEvent.setup();
+    vi.mocked(authClient.emailOtp.sendVerificationOtp).mockResolvedValue({
+      data: {},
+      error: null,
+    } as never);
+    vi.mocked(authClient.signIn.emailOtp).mockRejectedValue(new Error("network down"));
+    const onSignedIn = vi.fn();
+
+    render(<Login onSignedIn={onSignedIn} />);
+
+    await user.type(screen.getByLabelText(/email/i), "roast@example.com");
+    await user.click(screen.getByRole("button", { name: /send code/i }));
+
+    const codeInput = await screen.findByLabelText(/code/i);
+    await user.type(codeInput, "123456");
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/sign-in failed — try again/i);
+    expect(onSignedIn).not.toHaveBeenCalled();
+  });
 });
