@@ -16,13 +16,32 @@ describe("app schema", () => {
     }
   });
 
+  it("generates a UUID-shaped id when none is provided", async () => {
+    const db = drizzle(env.DB, { schema });
+    const userId = crypto.randomUUID();
+    await env.DB.prepare(
+      "INSERT INTO user (id, name, email, email_verified) VALUES (?, 'Test', ?, 0)"
+    )
+      .bind(userId, `${userId}@example.com`)
+      .run();
+
+    const [inserted] = await db
+      .insert(schema.trips)
+      .values({ userId, label: "No explicit id" })
+      .returning();
+
+    expect(inserted?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
+  });
+
   it("cascades delete from trips to flights", async () => {
     const db = drizzle(env.DB, { schema });
     const userId = crypto.randomUUID();
     await env.DB.prepare(
-      "INSERT INTO user (id, name, email, email_verified) VALUES (?, 'Test', 'test@example.com', 0)"
+      "INSERT INTO user (id, name, email, email_verified) VALUES (?, 'Test', ?, 0)"
     )
-      .bind(userId)
+      .bind(userId, `${userId}@example.com`)
       .run();
 
     const tripId = crypto.randomUUID();

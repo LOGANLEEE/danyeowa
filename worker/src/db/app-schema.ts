@@ -3,7 +3,9 @@ import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { user } from "./auth-schema";
 
 export const trips = sqliteTable("trips", {
-  id: text("id").primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
@@ -14,7 +16,9 @@ export const trips = sqliteTable("trips", {
 });
 
 export const flights = sqliteTable("flights", {
-  id: text("id").primaryKey(),
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   tripId: text("trip_id")
     .notNull()
     .references(() => trips.id, { onDelete: "cascade" }),

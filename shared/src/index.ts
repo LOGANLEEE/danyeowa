@@ -3,10 +3,7 @@ import { z } from "zod";
 export type HealthResponse = { ok: boolean; d1: boolean };
 export type Me = { id: string; email: string; name: string | null };
 
-const iataSchema = z
-  .string()
-  .length(3)
-  .regex(/^[A-Z]{3}$/i);
+const iataSchema = z.string().regex(/^[A-Z]{3}$/i);
 
 export const LegInputSchema = z.object({
   flightNo: z.string().regex(/^[A-Z]{2}\d{1,4}$/i),
