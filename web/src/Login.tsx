@@ -44,8 +44,13 @@ export default function Login({ onSignedIn }: Props) {
 
   if (!codeSent) {
     return (
-      <form onSubmit={handleSendCode} className="flex flex-col gap-2">
-        <label htmlFor="login-email">Email</label>
+      <form
+        onSubmit={handleSendCode}
+        className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
+      >
+        <label htmlFor="login-email" className="text-sm text-ink-muted">
+          Email
+        </label>
         <input
           id="login-email"
           type="email"
@@ -53,16 +58,31 @@ export default function Login({ onSignedIn }: Props) {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
         />
-        <button type="submit">Send code</button>
-        {error && <p role="alert">{error}</p>}
+        <button
+          type="submit"
+          className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110"
+        >
+          Send code
+        </button>
+        {error && (
+          <p role="alert" className="text-sm text-ink-muted">
+            {error}
+          </p>
+        )}
       </form>
     );
   }
 
   return (
-    <form onSubmit={handleSignIn} className="flex flex-col gap-2">
-      <label htmlFor="login-code">Code</label>
+    <form
+      onSubmit={handleSignIn}
+      className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
+    >
+      <label htmlFor="login-code" className="text-sm text-ink-muted">
+        Code
+      </label>
       <input
         id="login-code"
         type="text"
@@ -72,9 +92,19 @@ export default function Login({ onSignedIn }: Props) {
         required
         value={code}
         onChange={(e) => setCode(e.target.value)}
+        className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
       />
-      <button type="submit">Sign in</button>
-      {error && <p role="alert">{error}</p>}
+      <button
+        type="submit"
+        className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110"
+      >
+        Sign in
+      </button>
+      {error && (
+        <p role="alert" className="text-sm text-ink-muted">
+          {error}
+        </p>
+      )}
     </form>
   );
 }
