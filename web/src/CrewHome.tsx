@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { dayOffset, formatLocal, layoverHours, relativeUntil } from "@roaster/shared";
+import { dayOffset, formatLocal, layoverHours, relativeUntil, tripProgress } from "@roaster/shared";
 import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 
@@ -25,6 +25,19 @@ export default function CrewHome({ onAddTrip, now }: Props) {
     .sort((a, b) => Date.parse(a.reportUtc) - Date.parse(b.reportUtc));
   const upcoming = allFlights.filter((f) => Date.parse(f.reportUtc) >= nowMs);
   const nextDuty = upcoming[0] ?? null;
+
+  // Active pairing: a trip whose first departure has passed and last arrival hasn't (spans `now`).
+  // Home base tz = origin tz of the trip's first leg.
+  const activePairing = trips
+    .map((trip) => {
+      const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
+      const first = legs[0];
+      const last = legs[legs.length - 1];
+      if (!first || !last) return null;
+      const progress = tripProgress(first.depUtc, last.arrUtc, first.depTz, nowMs);
+      return progress ? { trip, legs, first, last, progress } : null;
+    })
+    .find((entry) => entry !== null);
 
   if (!nextDuty) {
     return (
@@ -79,6 +92,49 @@ export default function CrewHome({ onAddTrip, now }: Props) {
           {arrOffset > 0 && <sup>+{arrOffset}</sup>}
         </p>
       </div>
+
+      {/* Active pairing card: shown when a trip spans `now` (first dep passed, last arr not yet). */}
+      {activePairing && (
+        <div
+          data-testid="pairing-progress-card"
+          className="flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4"
+        >
+          <div className="flex items-baseline justify-between">
+            <p className="text-sm text-ink-bright">Trip · {activePairing.progress.totalDays} days</p>
+            <p className="num text-sm text-ink-muted">
+              day {activePairing.progress.currentDay} of {activePairing.progress.totalDays}
+            </p>
+          </div>
+
+          <p className="num text-sm text-ink-muted">
+            {activePairing.legs.map((leg, index) => {
+              const prevLeg = activePairing.legs[index - 1];
+              const layover = prevLeg ? layoverHours(prevLeg.arrUtc, leg.depUtc) : null;
+              return (
+                <span key={leg.id}>
+                  {layover !== null && ` ····· ${layover.toFixed(0)}h ····· `}
+                  {leg.origin} → {leg.dest}
+                </span>
+              );
+            })}
+          </p>
+
+          <div className="flex gap-1">
+            {Array.from({ length: activePairing.progress.totalDays }, (_, i) => i + 1).map((day) => (
+              <div
+                key={day}
+                className={`h-1.5 flex-1 rounded-full ${
+                  day < activePairing.progress.currentDay
+                    ? "bg-amber"
+                    : day === activePairing.progress.currentDay
+                      ? "bg-amber-num"
+                      : "bg-edge"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* No rest/legal strip yet — needs duty aggregation across trips; deferred to Plan 4+. */}
 

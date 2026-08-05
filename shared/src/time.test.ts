@@ -5,6 +5,7 @@ import {
   layoverHours,
   relativeUntil,
   reportDefault,
+  tripProgress,
   wallToUtc,
 } from "./time";
 
@@ -177,6 +178,65 @@ describe("dayOffset", () => {
     expect(
       dayOffset("2026-02-28T19:00:00Z", "2026-03-01T01:00:00Z", "Asia/Dubai", "Asia/Dubai"),
     ).toBe(1);
+  });
+});
+
+describe("tripProgress", () => {
+  // 3-day DXB->AKL->DXB trip, home base Asia/Dubai:
+  // first dep 2026-08-10 02:15 Dubai local (2026-08-09T22:15:00Z)
+  // last arr  2026-08-12 18:00 Dubai local (2026-08-12T14:00:00Z)
+  // Local days spanned: Aug 10, Aug 11, Aug 12 -> totalDays = 3.
+  const firstDepUtc = "2026-08-09T22:15:00Z";
+  const lastArrUtc = "2026-08-12T14:00:00Z";
+
+  it("returns null when now is before the first departure (fully future trip)", () => {
+    const now = Date.parse("2026-08-09T20:00:00Z");
+    expect(tripProgress(firstDepUtc, lastArrUtc, "Asia/Dubai", now)).toBeNull();
+  });
+
+  it("returns null when now is at/after the last arrival (fully past trip)", () => {
+    const now = Date.parse("2026-08-12T14:00:00Z");
+    expect(tripProgress(firstDepUtc, lastArrUtc, "Asia/Dubai", now)).toBeNull();
+  });
+
+  it("reports day 1 of N right after departure", () => {
+    // 2026-08-09T23:00Z = Dubai local Aug 10 03:00 = trip's first local day
+    const now = Date.parse("2026-08-09T23:00:00Z");
+    expect(tripProgress(firstDepUtc, lastArrUtc, "Asia/Dubai", now)).toEqual({
+      currentDay: 1,
+      totalDays: 3,
+    });
+  });
+
+  it("reports the middle day of a multi-day trip", () => {
+    // 2026-08-11T10:00Z = Dubai local Aug 11 14:00 = trip's 2nd local day
+    const now = Date.parse("2026-08-11T10:00:00Z");
+    expect(tripProgress(firstDepUtc, lastArrUtc, "Asia/Dubai", now)).toEqual({
+      currentDay: 2,
+      totalDays: 3,
+    });
+  });
+
+  it("reports the final day just before the last arrival", () => {
+    const now = Date.parse("2026-08-12T13:00:00Z");
+    expect(tripProgress(firstDepUtc, lastArrUtc, "Asia/Dubai", now)).toEqual({
+      currentDay: 3,
+      totalDays: 3,
+    });
+  });
+
+  it("returns null for a single-leg same-day trip once it has landed", () => {
+    const now = Date.parse("2026-08-10T14:00:00Z");
+    expect(
+      tripProgress("2026-08-10T02:15:00Z", "2026-08-10T13:35:00Z", "Asia/Dubai", now),
+    ).toBeNull();
+  });
+
+  it("reports day 1 of 1 mid-flight on a single-leg same-local-day trip", () => {
+    const now = Date.parse("2026-08-10T06:00:00Z");
+    expect(
+      tripProgress("2026-08-10T02:15:00Z", "2026-08-10T13:35:00Z", "Asia/Dubai", now),
+    ).toEqual({ currentDay: 1, totalDays: 1 });
   });
 });
 

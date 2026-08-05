@@ -66,7 +66,8 @@ function localDateKey(utcIso: string, tz: string): string {
   return fmt.format(new Date(utcIso));
 }
 
-function localDayEpoch(utcIso: string, tz: string): number {
+/** Local calendar day for `utcIso` in `tz`, as an epoch-ms midnight-UTC marker (day-granularity only, not a real instant). */
+export function localDayEpoch(utcIso: string, tz: string): number {
   const [year, month, day] = localDateKey(utcIso, tz).split("-").map(Number) as [
     number,
     number,
@@ -100,6 +101,44 @@ function offsetMinutesAt(utcMs: number, tz: string): number {
   const hours = Number(match[1]);
   const minutes = Number(match[2] ?? 0);
   return hours < 0 ? hours * 60 - minutes : hours * 60 + minutes;
+}
+
+export type TripProgress = {
+  /** 1-indexed current day of the trip, clamped to [1, totalDays]. */
+  currentDay: number;
+  /** Total trip length in local calendar days (home-base tz), first dep day through last arr day, inclusive. */
+  totalDays: number;
+};
+
+/**
+ * Determines whether a trip is currently in progress (first departure has passed, last
+ * arrival has not) and, if so, which calendar day of the trip `now` falls on.
+ *
+ * Day counting uses the HOME BASE tz (the origin tz of the first leg — the crew's home
+ * airport for this trip) for calendar-day boundaries, per the mockup's "day X of N".
+ *
+ * Returns `null` when the trip has not yet started or has already ended (fully future or
+ * fully past relative to `nowMs`).
+ */
+export function tripProgress(
+  firstDepUtc: string,
+  lastArrUtc: string,
+  homeBaseTz: string,
+  nowMs: number,
+): TripProgress | null {
+  const firstDepMs = Date.parse(firstDepUtc);
+  const lastArrMs = Date.parse(lastArrUtc);
+  if (nowMs < firstDepMs || nowMs >= lastArrMs) return null;
+
+  const firstDay = localDayEpoch(firstDepUtc, homeBaseTz);
+  const lastDay = localDayEpoch(lastArrUtc, homeBaseTz);
+  const nowDay = localDayEpoch(new Date(nowMs).toISOString(), homeBaseTz);
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const totalDays = Math.round((lastDay - firstDay) / DAY_MS) + 1;
+  const currentDay = Math.min(totalDays, Math.max(1, Math.round((nowDay - firstDay) / DAY_MS) + 1));
+
+  return { currentDay, totalDays };
 }
 
 /**
