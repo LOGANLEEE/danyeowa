@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import CrewHome from "./CrewHome";
 import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
@@ -97,10 +97,14 @@ const inProgressTrip: TripWithFlights = {
 };
 
 describe("CrewHome", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it("renders the report time prominently and a relative countdown for the next duty", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
 
-    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} now={now} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
 
     // REPORT box: prominent amber .num element showing the local report time at origin (DXB, Asia/Dubai, UTC+4).
     const reportTime = await screen.findByText("04:45");
@@ -114,7 +118,7 @@ describe("CrewHome", () => {
   it("renders one row per upcoming duty", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
 
-    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} now={now} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
 
     const rows = await screen.findAllByTestId("upcoming-row");
     expect(rows).toHaveLength(2);
@@ -126,7 +130,7 @@ describe("CrewHome", () => {
     vi.mocked(getTrips).mockResolvedValue([]);
     const onAddTrip = vi.fn();
 
-    render(<CrewHome onAddTrip={onAddTrip} onOpenTrip={vi.fn()} now={now} />);
+    render(<CrewHome onAddTrip={onAddTrip} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
 
     expect(await screen.findByText(/no trips yet/i)).toBeInTheDocument();
     const button = screen.getByRole("button", { name: /add your first/i });
@@ -139,7 +143,7 @@ describe("CrewHome", () => {
     // local days spanned by the trip (first dep local day Aug 10, last arr local day Aug 12).
     const midTripNow = new Date("2026-08-11T10:00:00.000Z");
 
-    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} now={midTripNow} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={midTripNow} />);
 
     const card = await screen.findByTestId("pairing-progress-card");
     expect(card).toHaveTextContent(/trip.*3 days/i);
@@ -152,7 +156,7 @@ describe("CrewHome", () => {
   it("does not show the pairing progress card for a fully future trip", async () => {
     vi.mocked(getTrips).mockResolvedValue([inProgressTrip]);
     // now is well before the trip's first departure.
-    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} now={now} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
 
     expect(screen.queryByTestId("pairing-progress-card")).not.toBeInTheDocument();
   });
@@ -162,7 +166,7 @@ describe("CrewHome", () => {
     const onOpenTrip = vi.fn();
     const user = userEvent.setup();
 
-    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={onOpenTrip} now={now} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={onOpenTrip} onPickDay={vi.fn()} now={now} />);
 
     const [firstRow] = await screen.findAllByTestId("upcoming-row");
     await user.click(firstRow!);
@@ -175,10 +179,73 @@ describe("CrewHome", () => {
     const onOpenTrip = vi.fn();
     const user = userEvent.setup();
 
-    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={onOpenTrip} now={now} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={onOpenTrip} onPickDay={vi.fn()} now={now} />);
 
     await user.click(await screen.findByTestId("next-duty-card"));
 
     expect(onOpenTrip).toHaveBeenCalledWith(aklTrip);
+  });
+
+  it("defaults to the list view, showing upcoming rows and no calendar grid", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
+
+    await screen.findAllByTestId("upcoming-row");
+    expect(screen.queryByTestId("calendar-next")).not.toBeInTheDocument();
+  });
+
+  it("switches to the calendar view when the Calendar segment is clicked, replacing the upcoming list", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
+    await screen.findAllByTestId("upcoming-row");
+
+    await user.click(screen.getByRole("button", { name: /^calendar$/i }));
+
+    expect(screen.getByTestId("calendar-next")).toBeInTheDocument();
+    expect(screen.queryByTestId("upcoming-row")).not.toBeInTheDocument();
+    // Next-duty card stays visible regardless of view.
+    expect(screen.getByTestId("next-duty-card")).toBeInTheDocument();
+  });
+
+  it("persists the chosen view to localStorage and restores it on remount", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    const { unmount } = render(
+      <CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />,
+    );
+    await screen.findAllByTestId("upcoming-row");
+    await user.click(screen.getByRole("button", { name: /^calendar$/i }));
+    expect(localStorage.getItem("roster-view")).toBe("calendar");
+    unmount();
+
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
+    expect(await screen.findByTestId("calendar-next")).toBeInTheDocument();
+  });
+
+  it("defaults to list view when localStorage has no saved preference", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
+
+    await screen.findAllByTestId("upcoming-row");
+  });
+
+  it("calls onPickDay when a calendar day without a trip is tapped", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const onPickDay = vi.fn();
+    const user = userEvent.setup();
+
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={onPickDay} now={now} />);
+    await screen.findAllByTestId("upcoming-row");
+    await user.click(screen.getByRole("button", { name: /^calendar$/i }));
+
+    // now = 2026-08-10; pick a later day in the same month with no trip coverage.
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+
+    expect(onPickDay).toHaveBeenCalledWith("2026-08-20");
   });
 });

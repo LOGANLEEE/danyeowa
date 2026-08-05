@@ -125,4 +125,18 @@ describe("TripForm", () => {
     const deps = screen.getAllByLabelText(/departure/i);
     expect((deps[1] as HTMLInputElement).value.startsWith("2026-08-10")).toBe(true);
   });
+
+  it("prefills the first leg's departure date (not time) from initialDate", () => {
+    render(<TripForm onSubmitted={vi.fn()} initialDate="2026-08-20" />);
+
+    const depInput = screen.getByLabelText(/departure/i) as HTMLInputElement;
+    expect(depInput.value).toBe("2026-08-20T00:00");
+  });
+
+  it("does not prefill departure when initialDate is absent", () => {
+    render(<TripForm onSubmitted={vi.fn()} />);
+
+    const depInput = screen.getByLabelText(/departure/i) as HTMLInputElement;
+    expect(depInput.value).toBe("");
+  });
 });

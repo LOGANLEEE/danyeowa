@@ -166,3 +166,98 @@ export function wallToUtc(wallIso: string, tz: string): string {
   const chosenOffset = Math.max(offsetBefore, offsetAfter);
   return new Date(naiveMs - chosenOffset * 60_000).toISOString();
 }
+
+export type MonthGridCell = {
+  /** ISO calendar date, e.g. "2026-08-01". Timezone-agnostic (calendar date, not an instant). */
+  iso: string;
+  /** Day-of-month number for this cell's own month (1-31), even when `inMonth` is false. */
+  day: number;
+  /** Whether this cell's date falls within the requested `month`. */
+  inMonth: boolean;
+};
+
+function isoDate(year: number, monthIndex0: number, day: number): string {
+  const d = new Date(Date.UTC(year, monthIndex0, day));
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+/**
+ * Builds a Monday-start, 6-week month grid for `month` (1-12) of `year`. Purely calendar-date
+ * arithmetic (no instants), so it does not depend on `tz`; the parameter is accepted for call-site
+ * symmetry with other calendar helpers.
+ */
+export function monthGrid(year: number, month: number, _tz: string): MonthGridCell[][] {
+  const monthIndex0 = month - 1;
+  const firstOfMonth = new Date(Date.UTC(year, monthIndex0, 1));
+  // JS getUTCDay(): 0=Sun..6=Sat. Convert to Mon-start offset (0=Mon..6=Sun).
+  const firstWeekday = (firstOfMonth.getUTCDay() + 6) % 7;
+  const gridStart = new Date(Date.UTC(year, monthIndex0, 1 - firstWeekday));
+
+  const weeks: MonthGridCell[][] = [];
+  for (let week = 0; week < 6; week++) {
+    const days: MonthGridCell[] = [];
+    for (let day = 0; day < 7; day++) {
+      const cellDate = new Date(gridStart.getTime() + (week * 7 + day) * 24 * 60 * 60 * 1000);
+      days.push({
+        iso: isoDate(cellDate.getUTCFullYear(), cellDate.getUTCMonth(), cellDate.getUTCDate()),
+        day: cellDate.getUTCDate(),
+        inMonth: cellDate.getUTCMonth() === monthIndex0 && cellDate.getUTCFullYear() === year,
+      });
+    }
+    weeks.push(days);
+  }
+  return weeks;
+}
+
+export type TripSpan = {
+  firstDepUtc: string;
+  lastArrUtc: string;
+};
+
+/**
+ * Maps each local calendar date (in `homeTz`) covered by any trip's span (first departure to
+ * last arrival) within the given `year`/`month` to "away" (fully covered day) or "partial"
+ * (the trip's first or last local day, when part of the day is spent outside the trip).
+ * A single-day trip's only day is "away".
+ */
+export function tripDaysInMonth(
+  trips: TripSpan[],
+  year: number,
+  month: number,
+  homeTz: string,
+): Map<string, "away" | "partial"> {
+  const result = new Map<string, "away" | "partial">();
+  const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
+
+  for (const trip of trips) {
+    const firstDayKey = localDateKeyFromEpoch(localDayEpoch(trip.firstDepUtc, homeTz));
+    const lastDayKey = localDateKeyFromEpoch(localDayEpoch(trip.lastArrUtc, homeTz));
+
+    let cursor = localDayEpoch(trip.firstDepUtc, homeTz);
+    const end = localDayEpoch(trip.lastArrUtc, homeTz);
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    while (cursor <= end) {
+      const key = localDateKeyFromEpoch(cursor);
+      if (key.startsWith(monthPrefix)) {
+        const status = key === firstDayKey || key === lastDayKey ? "partial" : "away";
+        // A same-day trip (first === last) should read as "away", not "partial".
+        result.set(key, firstDayKey === lastDayKey ? "away" : status);
+      }
+      cursor += DAY_MS;
+    }
+  }
+
+  return result;
+}
+
+function localDateKeyFromEpoch(dayEpochMs: number): string {
+  const d = new Date(dayEpochMs);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}

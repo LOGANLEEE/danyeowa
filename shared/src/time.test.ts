@@ -3,11 +3,14 @@ import {
   dayOffset,
   formatLocal,
   layoverHours,
+  monthGrid,
   relativeUntil,
   reportDefault,
+  tripDaysInMonth,
   tripProgress,
   wallToUtc,
 } from "./time";
+import type { TripSpan } from "./time";
 
 describe("formatLocal", () => {
   it("formats time-only (default) in the given IANA tz", () => {
@@ -265,5 +268,127 @@ describe("wallToUtc", () => {
   it("round-trips with formatLocal for an unambiguous stable-offset tz", () => {
     const utc = wallToUtc("2026-08-10T09:00:00", "America/Sao_Paulo");
     expect(formatLocal(utc, "America/Sao_Paulo")).toBe("09:00");
+  });
+});
+
+describe("monthGrid", () => {
+  it("returns 6 weeks of 7 days each", () => {
+    const grid = monthGrid(2026, 8, "Asia/Dubai");
+    expect(grid).toHaveLength(6);
+    for (const week of grid) {
+      expect(week).toHaveLength(7);
+    }
+  });
+
+  it("starts weeks on Monday: Aug 2026 1st is a Saturday, so the first week has 5 lead-in days", () => {
+    // 2026-08-01 is a Saturday -> Mon-start week is [Jul 27 .. Aug 2]
+    const grid = monthGrid(2026, 8, "Asia/Dubai");
+    const firstWeek = grid[0]!;
+    expect(firstWeek.map((c) => c.iso)).toEqual([
+      "2026-07-27",
+      "2026-07-28",
+      "2026-07-29",
+      "2026-07-30",
+      "2026-07-31",
+      "2026-08-01",
+      "2026-08-02",
+    ]);
+    expect(firstWeek.map((c) => c.inMonth)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+    ]);
+    expect(firstWeek.map((c) => c.day)).toEqual([27, 28, 29, 30, 31, 1, 2]);
+  });
+
+  it("marks trailing out-of-month days in the final week", () => {
+    // Aug 2026 has 31 days, last day (Aug 31) is a Monday -> final week spans into September.
+    const grid = monthGrid(2026, 8, "Asia/Dubai");
+    const lastWeek = grid[grid.length - 1]!;
+    expect(lastWeek[0]).toEqual({ iso: "2026-08-31", day: 31, inMonth: true });
+    expect(lastWeek[1]).toEqual({ iso: "2026-09-01", day: 1, inMonth: false });
+  });
+
+  it("handles February in a non-leap year (2026, 28 days)", () => {
+    // 2026-02-01 is a Sunday -> Mon-start first week leads in with Jan 26-31.
+    const grid = monthGrid(2026, 2, "Asia/Dubai");
+    const flat = grid.flat();
+    const inMonthDays = flat.filter((c) => c.inMonth);
+    expect(inMonthDays).toHaveLength(28);
+    expect(inMonthDays[0]!.iso).toBe("2026-02-01");
+    expect(inMonthDays[inMonthDays.length - 1]!.iso).toBe("2026-02-28");
+  });
+
+  it("handles a month where the 1st falls on Monday (no lead-in days)", () => {
+    // 2026-06-01 is a Monday.
+    const grid = monthGrid(2026, 6, "Asia/Dubai");
+    const firstWeek = grid[0]!;
+    expect(firstWeek[0]).toEqual({ iso: "2026-06-01", day: 1, inMonth: true });
+  });
+
+  it("produces ISO date strings independent of the tz's UTC offset direction", () => {
+    // Same calendar month grid regardless of tz sign - grid is calendar-date arithmetic only.
+    const dubai = monthGrid(2026, 8, "Asia/Dubai");
+    const saoPaulo = monthGrid(2026, 8, "America/Sao_Paulo");
+    expect(dubai).toEqual(saoPaulo);
+  });
+});
+
+describe("tripDaysInMonth", () => {
+  it("marks a single same-local-day trip as 'away' for its one day", () => {
+    const trips: TripSpan[] = [
+      { firstDepUtc: "2026-08-10T05:00:00Z", lastArrUtc: "2026-08-10T10:00:00Z" },
+    ];
+    const map = tripDaysInMonth(trips, 2026, 8, "Asia/Dubai");
+    expect(map.get("2026-08-10")).toBe("away");
+    expect(map.size).toBe(1);
+  });
+
+  it("marks the first and last local day of a multi-day trip as 'partial' and the days between as 'away'", () => {
+    // Home tz Asia/Dubai. First dep 2026-08-10 02:15 local (2026-08-09T22:15Z).
+    // Last arr 2026-08-12 18:00 local (2026-08-12T14:00Z). Local days: Aug 10 (partial,
+    // departs mid-day), Aug 11 (away, full day), Aug 12 (partial, arrives mid-day).
+    const trips: TripSpan[] = [
+      { firstDepUtc: "2026-08-09T22:15:00Z", lastArrUtc: "2026-08-12T14:00:00Z" },
+    ];
+    const map = tripDaysInMonth(trips, 2026, 8, "Asia/Dubai");
+    expect(map.get("2026-08-10")).toBe("partial");
+    expect(map.get("2026-08-11")).toBe("away");
+    expect(map.get("2026-08-12")).toBe("partial");
+    expect(map.size).toBe(3);
+  });
+
+  it("only includes days that fall within the requested month/year", () => {
+    // Trip spans Jul 31 -> Aug 2 in Asia/Dubai local; querying August should only include Aug 1-2.
+    const trips: TripSpan[] = [
+      { firstDepUtc: "2026-07-31T18:00:00Z", lastArrUtc: "2026-08-02T10:00:00Z" }, // Jul 31 22:00, Aug 2 14:00 Dubai local
+    ];
+    const map = tripDaysInMonth(trips, 2026, 8, "Asia/Dubai");
+    expect(map.has("2026-07-31")).toBe(false);
+    expect(map.get("2026-08-01")).toBe("away");
+    expect(map.get("2026-08-02")).toBe("partial");
+  });
+
+  it("merges multiple trips into one map, keyed by ISO date", () => {
+    const trips: TripSpan[] = [
+      { firstDepUtc: "2026-08-05T05:00:00Z", lastArrUtc: "2026-08-05T10:00:00Z" },
+      { firstDepUtc: "2026-08-20T05:00:00Z", lastArrUtc: "2026-08-20T10:00:00Z" },
+    ];
+    const map = tripDaysInMonth(trips, 2026, 8, "Asia/Dubai");
+    expect(map.get("2026-08-05")).toBe("away");
+    expect(map.get("2026-08-20")).toBe("away");
+    expect(map.size).toBe(2);
+  });
+
+  it("returns an empty map when no trips fall in the given month", () => {
+    const trips: TripSpan[] = [
+      { firstDepUtc: "2026-07-05T05:00:00Z", lastArrUtc: "2026-07-05T10:00:00Z" },
+    ];
+    const map = tripDaysInMonth(trips, 2026, 8, "Asia/Dubai");
+    expect(map.size).toBe(0);
   });
 });

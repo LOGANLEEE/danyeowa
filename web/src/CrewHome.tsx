@@ -2,14 +2,33 @@ import { useEffect, useState } from "react";
 import { dayOffset, formatLocal, layoverHours, relativeUntil, tripProgress } from "@roaster/shared";
 import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
+import TripsCalendar from "./TripsCalendar";
 
-type Props = { onAddTrip: () => void; onOpenTrip: (trip: TripWithFlights) => void; now: Date };
+type Props = {
+  onAddTrip: () => void;
+  onOpenTrip: (trip: TripWithFlights) => void;
+  onPickDay: (isoDate: string) => void;
+  now: Date;
+};
 
 const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
+const VIEW_STORAGE_KEY = "roster-view";
 
-export default function CrewHome({ onAddTrip, onOpenTrip, now }: Props) {
+type RosterView = "list" | "calendar";
+
+function loadStoredView(): RosterView {
+  return localStorage.getItem(VIEW_STORAGE_KEY) === "calendar" ? "calendar" : "list";
+}
+
+export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
+  const [view, setView] = useState<RosterView>(loadStoredView);
   const nowMs = now.getTime();
+
+  function selectView(next: RosterView) {
+    setView(next);
+    localStorage.setItem(VIEW_STORAGE_KEY, next);
+  }
 
   useEffect(() => {
     getTrips().then(setTrips);
@@ -66,6 +85,28 @@ export default function CrewHome({ onAddTrip, onOpenTrip, now }: Props) {
         <span className="text-ink-muted">
           Off duty — next report <span className="num">{relativeUntil(nextDuty.reportUtc, nowMs)}</span>
         </span>
+      </div>
+
+      {/* View toggle: segmented control, List | Calendar. */}
+      <div className="flex gap-1 text-sm">
+        <button
+          type="button"
+          onClick={() => selectView("list")}
+          className={`rounded px-2 py-1 transition-colors duration-[120ms] ${
+            view === "list" ? "hairline text-ink-bright" : "text-ink-muted"
+          }`}
+        >
+          List
+        </button>
+        <button
+          type="button"
+          onClick={() => selectView("calendar")}
+          className={`rounded px-2 py-1 transition-colors duration-[120ms] ${
+            view === "calendar" ? "hairline text-ink-bright" : "text-ink-muted"
+          }`}
+        >
+          Calendar
+        </button>
       </div>
 
       {/* Next duty card */}
@@ -147,34 +188,46 @@ export default function CrewHome({ onAddTrip, onOpenTrip, now }: Props) {
 
       {/* No rest/legal strip yet — needs duty aggregation across trips; deferred to Plan 4+. */}
 
-      {/* Rolling upcoming list: one line per duty (R1). */}
-      <div className="stagger-3 flex flex-col gap-1">
-        {upcoming.map((flight, index) => {
-          const prev = upcoming[index - 1];
-          const layover = prev ? layoverHours(prev.arrUtc, flight.depUtc) : null;
-          return (
-            <button
-              key={flight.id}
-              type="button"
-              data-testid="upcoming-row"
-              onClick={() => {
-                const trip = tripByFlightId.get(flight.id);
-                if (trip) onOpenTrip(trip);
-              }}
-              className="flex items-center justify-between border-b border-edge py-2 text-left text-sm transition-colors duration-[120ms] last:border-b-0 hover:bg-raised"
-            >
-              <span className="text-ink">
-                {flight.origin} → {flight.dest}{" "}
-                <span className="text-ink-muted">{flight.flightNo}</span>
-              </span>
-              <span className="num text-ink-muted">
-                {formatLocal(flight.reportUtc, flight.depTz, { withDate: true })}
-                {layover !== null && ` · layover ${layover.toFixed(1)}h`}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {view === "list" ? (
+        /* Rolling upcoming list: one line per duty (R1). */
+        <div className="stagger-3 flex flex-col gap-1">
+          {upcoming.map((flight, index) => {
+            const prev = upcoming[index - 1];
+            const layover = prev ? layoverHours(prev.arrUtc, flight.depUtc) : null;
+            return (
+              <button
+                key={flight.id}
+                type="button"
+                data-testid="upcoming-row"
+                onClick={() => {
+                  const trip = tripByFlightId.get(flight.id);
+                  if (trip) onOpenTrip(trip);
+                }}
+                className="flex items-center justify-between border-b border-edge py-2 text-left text-sm transition-colors duration-[120ms] last:border-b-0 hover:bg-raised"
+              >
+                <span className="text-ink">
+                  {flight.origin} → {flight.dest}{" "}
+                  <span className="text-ink-muted">{flight.flightNo}</span>
+                </span>
+                <span className="num text-ink-muted">
+                  {formatLocal(flight.reportUtc, flight.depTz, { withDate: true })}
+                  {layover !== null && ` · layover ${layover.toFixed(1)}h`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="stagger-3">
+          <TripsCalendar
+            now={now}
+            trips={trips}
+            homeTz={nextDuty.depTz}
+            onPickDay={onPickDay}
+            onOpenTrip={onOpenTrip}
+          />
+        </div>
+      )}
 
       <button
         type="button"

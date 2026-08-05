@@ -15,6 +15,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null | "loading">("loading");
   const [signedOutView, setSignedOutView] = useState<SignedOutView>("landing");
   const [showTripForm, setShowTripForm] = useState(false);
+  const [tripFormInitialDate, setTripFormInitialDate] = useState<string | undefined>(undefined);
   const [selectedTrip, setSelectedTrip] = useState<TripWithFlights | null>(null);
   const [tripsVersion, setTripsVersion] = useState(0);
   const [now, setNow] = useState(() => new Date());
@@ -86,8 +87,10 @@ export default function App() {
           )
         ) : showTripForm ? (
           <TripForm
+            initialDate={tripFormInitialDate}
             onSubmitted={() => {
               setShowTripForm(false);
+              setTripFormInitialDate(undefined);
               setTripsVersion((v) => v + 1);
             }}
           />
@@ -105,6 +108,10 @@ export default function App() {
             key={tripsVersion}
             onAddTrip={() => setShowTripForm(true)}
             onOpenTrip={setSelectedTrip}
+            onPickDay={(isoDate) => {
+              setTripFormInitialDate(isoDate);
+              setShowTripForm(true);
+            }}
             now={now}
           />
         )}

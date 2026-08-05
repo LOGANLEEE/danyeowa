@@ -3,7 +3,7 @@ import type { Airport, LegInput } from "@roaster/shared";
 import { TripInputSchema, reportDefault, wallToUtc } from "@roaster/shared";
 import { createTrip, getAirport } from "./api";
 
-type Props = { onSubmitted: () => void };
+type Props = { onSubmitted: () => void; initialDate?: string };
 
 type LegDraft = {
   flightNo: string;
@@ -40,8 +40,10 @@ function utcToDatetimeLocal(utcIso: string, tz: string): string {
   return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
 
-export default function TripForm({ onSubmitted }: Props) {
-  const [legs, setLegs] = useState<LegDraft[]>([emptyLeg()]);
+export default function TripForm({ onSubmitted, initialDate }: Props) {
+  const [legs, setLegs] = useState<LegDraft[]>([
+    initialDate ? { ...emptyLeg(), dep: `${initialDate}T00:00` } : emptyLeg(),
+  ]);
   const [airports, setAirports] = useState<Map<string, Airport | null>>(new Map());
   const [unknown, setUnknown] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
