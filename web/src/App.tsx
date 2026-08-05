@@ -2,10 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { HealthResponse, Me } from "@roaster/shared";
 import { authClient } from "./auth-client";
 import Login from "./Login";
+import TripForm from "./TripForm";
 
 export default function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
+  const [showTripForm, setShowTripForm] = useState(false);
 
   useEffect(() => {
     fetch("/api/health")
@@ -55,7 +57,17 @@ export default function App() {
           <p className="text-ink-muted">loading…</p>
         ) : me === null ? (
           <Login onSignedIn={loadMe} />
-        ) : null}
+        ) : showTripForm ? (
+          <TripForm onSubmitted={() => setShowTripForm(false)} />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowTripForm(true)}
+            className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110"
+          >
+            Add trip
+          </button>
+        )}
       </main>
 
       <footer className="px-4 py-2 text-right text-xs text-ink-muted">

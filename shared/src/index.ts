@@ -60,3 +60,12 @@ export const FlightSchema = z.object({
 });
 
 export type Flight = z.infer<typeof FlightSchema>;
+
+export const AirportSchema = z.object({
+  iata: iataSchema,
+  city: z.string(),
+  name: z.string(),
+  tz: z.string(),
+});
+
+export type Airport = z.infer<typeof AirportSchema>;
