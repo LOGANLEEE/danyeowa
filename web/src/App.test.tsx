@@ -29,7 +29,7 @@ describe("App", () => {
       })
     );
     render(<App />);
-    expect(screen.getByRole("heading", { name: /roaster me/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /roaster/i })).toBeInTheDocument();
     expect(await screen.findByText(/api: online/i)).toBeInTheDocument();
     expect(await screen.findByLabelText(/email/i)).toBeInTheDocument();
   });

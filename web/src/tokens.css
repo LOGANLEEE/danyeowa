@@ -1,0 +1,19 @@
+@theme {
+  --color-ground: #121418;
+  --color-surface: #191d24;
+  --color-raised: #1a2027;
+  --color-edge: #2b3442;
+  --color-ink: #dfe4ec;
+  --color-ink-bright: #f2f5fa;
+  --color-ink-muted: #8b93a3;
+  --color-amber: #e2a63d;
+  --color-amber-num: #ffd57e;
+  --color-ok: #8fd3b6;
+  --color-away: #9db8e8;
+  --color-violation: #e0655f;
+}
+
+.num {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
