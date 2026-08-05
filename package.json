@@ -1,0 +1,16 @@
+{
+  "name": "roaster-me",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "pnpm --filter @roaster/web build && wrangler dev",
+    "build": "pnpm --filter @roaster/web build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "deploy": "pnpm --filter @roaster/web build && wrangler deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "wrangler": "^4.0.0"
+  }
+}
