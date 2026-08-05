@@ -7,6 +7,23 @@ dist/
 .DS_Store
 coverage/
 .superpowers/
+test-results/
+playwright-report/
+/blob-report/
+/playwright/.cache/
+.playwright-mcp/
+
+# local-state backups (wrangler D1 session tokens, dist snapshots) — never commit
+.wrangler.bak*/
+*.bak/
+
+# root screenshots dropped by manual/e2e visual checks
+/baseline-landing-390.png
+/e2e-crew-home.png
+/landing-desktop.png
+/v2-crewhome-390.png
+/v2-landing-390.png
+/v2-landing-390b.png
 
 # venv/build artifacts pending manual removal (sandbox rm -rf blocked) — see task-1-report.md
 /.expo/

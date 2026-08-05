@@ -3,11 +3,11 @@ import { dayOffset, formatLocal, layoverHours, relativeUntil, tripProgress } fro
 import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 
-type Props = { onAddTrip: () => void; now: Date };
+type Props = { onAddTrip: () => void; onOpenTrip: (trip: TripWithFlights) => void; now: Date };
 
 const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
 
-export default function CrewHome({ onAddTrip, now }: Props) {
+export default function CrewHome({ onAddTrip, onOpenTrip, now }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
   const nowMs = now.getTime();
 
@@ -25,6 +25,7 @@ export default function CrewHome({ onAddTrip, now }: Props) {
     .sort((a, b) => Date.parse(a.reportUtc) - Date.parse(b.reportUtc));
   const upcoming = allFlights.filter((f) => Date.parse(f.reportUtc) >= nowMs);
   const nextDuty = upcoming[0] ?? null;
+  const tripByFlightId = new Map(trips.flatMap((trip) => trip.flights.map((f) => [f.id, trip])));
 
   // Active pairing: a trip whose first departure has passed and last arrival hasn't (spans `now`).
   // Home base tz = origin tz of the trip's first leg.
@@ -41,12 +42,12 @@ export default function CrewHome({ onAddTrip, now }: Props) {
 
   if (!nextDuty) {
     return (
-      <div className="flex flex-col items-center gap-4 text-center">
+      <div className="entrance flex flex-col items-center gap-4 text-center">
         <p className="text-ink-muted">No trips yet — add your first</p>
         <button
           type="button"
           onClick={onAddTrip}
-          className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110"
+          className="rounded bg-amber px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
         >
           Add your first trip
         </button>
@@ -58,17 +59,25 @@ export default function CrewHome({ onAddTrip, now }: Props) {
   const arrOffset = dayOffset(nextDuty.depUtc, nextDuty.arrUtc, nextDuty.depTz, nextDuty.arrTz);
 
   return (
-    <div className="flex w-full max-w-xl flex-col gap-4">
+    <div className="entrance flex w-full max-w-xl flex-col gap-4">
       {/* Status band */}
       <div className="flex items-center gap-2 text-sm">
         <span className="h-2 w-2 rounded-full bg-ok" aria-hidden="true" />
         <span className="text-ink-muted">
-          Off duty — next report {relativeUntil(nextDuty.reportUtc, nowMs)}
+          Off duty — next report <span className="num">{relativeUntil(nextDuty.reportUtc, nowMs)}</span>
         </span>
       </div>
 
       {/* Next duty card */}
-      <div className="flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4">
+      <button
+        type="button"
+        data-testid="next-duty-card"
+        onClick={() => {
+          const trip = tripByFlightId.get(nextDuty.id);
+          if (trip) onOpenTrip(trip);
+        }}
+        className="stagger-1 flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
+      >
         <div>
           <p className="text-lg font-semibold text-ink-bright">
             {nextDuty.origin} → {nextDuty.dest}
@@ -91,13 +100,13 @@ export default function CrewHome({ onAddTrip, now }: Props) {
           {formatLocal(nextDuty.arrUtc, nextDuty.arrTz)}
           {arrOffset > 0 && <sup>+{arrOffset}</sup>}
         </p>
-      </div>
+      </button>
 
       {/* Active pairing card: shown when a trip spans `now` (first dep passed, last arr not yet). */}
       {activePairing && (
         <div
           data-testid="pairing-progress-card"
-          className="flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4"
+          className="stagger-2 flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4"
         >
           <div className="flex items-baseline justify-between">
             <p className="text-sm text-ink-bright">Trip · {activePairing.progress.totalDays} days</p>
@@ -139,15 +148,20 @@ export default function CrewHome({ onAddTrip, now }: Props) {
       {/* No rest/legal strip yet — needs duty aggregation across trips; deferred to Plan 4+. */}
 
       {/* Rolling upcoming list: one line per duty (R1). */}
-      <div className="flex flex-col gap-1">
+      <div className="stagger-3 flex flex-col gap-1">
         {upcoming.map((flight, index) => {
           const prev = upcoming[index - 1];
           const layover = prev ? layoverHours(prev.arrUtc, flight.depUtc) : null;
           return (
-            <div
+            <button
               key={flight.id}
+              type="button"
               data-testid="upcoming-row"
-              className="flex items-center justify-between border-b border-edge py-2 text-sm last:border-b-0"
+              onClick={() => {
+                const trip = tripByFlightId.get(flight.id);
+                if (trip) onOpenTrip(trip);
+              }}
+              className="flex items-center justify-between border-b border-edge py-2 text-left text-sm transition-colors duration-[120ms] last:border-b-0 hover:bg-raised"
             >
               <span className="text-ink">
                 {flight.origin} → {flight.dest}{" "}
@@ -157,7 +171,7 @@ export default function CrewHome({ onAddTrip, now }: Props) {
                 {formatLocal(flight.reportUtc, flight.depTz, { withDate: true })}
                 {layover !== null && ` · layover ${layover.toFixed(1)}h`}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -165,7 +179,7 @@ export default function CrewHome({ onAddTrip, now }: Props) {
       <button
         type="button"
         onClick={onAddTrip}
-        className="self-start rounded border border-edge px-3 py-2 text-ink hover:border-ink-muted"
+        className="self-start rounded border border-amber px-3 py-2 text-amber transition-colors duration-[120ms] hover:bg-amber/10 active:scale-[0.98]"
       >
         Add trip
       </button>

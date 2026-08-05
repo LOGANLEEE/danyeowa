@@ -145,7 +145,7 @@ export default function TripForm({ onSubmitted }: Props) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex w-full max-w-xl flex-col gap-4 rounded-lg border border-edge bg-surface p-6"
+      className="entrance flex w-full max-w-xl flex-col gap-4 rounded-lg border border-edge bg-surface p-6"
     >
       {legs.map((leg, index) => {
         const originInfo = airportLabel(leg.origin);
@@ -159,7 +159,7 @@ export default function TripForm({ onSubmitted }: Props) {
               id={`flight-no-${index}`}
               value={leg.flightNo}
               onChange={(e) => updateLeg(index, { flightNo: e.target.value.toUpperCase() })}
-              className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
+              className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
             />
 
             <label htmlFor={`origin-${index}`} className="text-sm text-ink-muted">
@@ -170,7 +170,7 @@ export default function TripForm({ onSubmitted }: Props) {
               value={leg.origin}
               onChange={(e) => updateLeg(index, { origin: e.target.value.toUpperCase() })}
               onBlur={(e) => lookupAirport(e.target.value)}
-              className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
+              className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
             />
             {originInfo && <p className="text-sm text-ink-muted">{originInfo}</p>}
 
@@ -182,7 +182,7 @@ export default function TripForm({ onSubmitted }: Props) {
               value={leg.dest}
               onChange={(e) => updateLeg(index, { dest: e.target.value.toUpperCase() })}
               onBlur={(e) => lookupAirport(e.target.value)}
-              className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
+              className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
             />
             {destInfo && <p className="text-sm text-ink-muted">{destInfo}</p>}
 
@@ -194,7 +194,7 @@ export default function TripForm({ onSubmitted }: Props) {
               type="datetime-local"
               value={leg.dep}
               onChange={(e) => updateLeg(index, { dep: e.target.value })}
-              className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
+              className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
             />
 
             <label htmlFor={`arr-${index}`} className="text-sm text-ink-muted">
@@ -205,7 +205,7 @@ export default function TripForm({ onSubmitted }: Props) {
               type="datetime-local"
               value={leg.arr}
               onChange={(e) => updateLeg(index, { arr: e.target.value })}
-              className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
+              className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
             />
 
             <label htmlFor={`report-${index}`} className="text-sm text-amber">
@@ -216,7 +216,7 @@ export default function TripForm({ onSubmitted }: Props) {
               type="datetime-local"
               value={leg.report}
               onChange={(e) => updateLeg(index, { report: e.target.value, reportTouched: true })}
-              className="num rounded border border-edge bg-raised px-3 py-2 text-amber-num outline-none focus:border-amber"
+              className="num rounded border border-edge bg-raised px-3 py-2 text-amber-num outline-none transition-colors duration-[120ms] focus:border-amber"
             />
           </fieldset>
         );
@@ -225,7 +225,7 @@ export default function TripForm({ onSubmitted }: Props) {
       <button
         type="button"
         onClick={addLeg}
-        className="rounded border border-edge px-3 py-2 text-ink hover:border-ink-muted"
+        className="rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
       >
         Add leg
       </button>
@@ -233,7 +233,7 @@ export default function TripForm({ onSubmitted }: Props) {
       <button
         type="submit"
         disabled={submitting}
-        className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110 disabled:opacity-50"
+        className="rounded bg-amber px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
       >
         Add trip
       </button>

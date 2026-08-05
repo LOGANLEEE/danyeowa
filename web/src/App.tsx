@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HealthResponse, Me } from "@roaster/shared";
+import type { TripWithFlights } from "./api";
 import { authClient } from "./auth-client";
 import CrewHome from "./CrewHome";
 import Landing from "./Landing";
 import Login from "./Login";
+import TripDetail from "./TripDetail";
 import TripForm from "./TripForm";
 
 type SignedOutView = "landing" | "login";
@@ -13,6 +15,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null | "loading">("loading");
   const [signedOutView, setSignedOutView] = useState<SignedOutView>("landing");
   const [showTripForm, setShowTripForm] = useState(false);
+  const [selectedTrip, setSelectedTrip] = useState<TripWithFlights | null>(null);
   const [tripsVersion, setTripsVersion] = useState(0);
   const [now, setNow] = useState(() => new Date());
 
@@ -42,37 +45,35 @@ export default function App() {
   async function handleSignOut() {
     await authClient.signOut();
     setMe(null);
+    setSignedOutView("landing");
   }
 
-  // The Landing view renders its own hero h1 ("roaster·me") as the page heading.
-  // Suppress the header's h1 there so the page has exactly one h1 (a11y: no duplicate headings).
+  // The Landing view renders its own hero h1 ("roaster·me") as the page heading, and has
+  // no sign-out control to show — skip rendering the header band entirely there so it
+  // doesn't leave an empty, bordered strip above the hero (a11y bonus: no duplicate h1s).
   const isLanding = me === null && signedOutView === "landing";
 
   return (
     <div className="flex min-h-screen flex-col bg-ground text-ink">
-      <header className="flex items-center justify-between border-b border-edge px-4 py-3">
-        {isLanding ? (
-          <span className="text-xl font-semibold text-ink-bright" aria-hidden="true">
-            roaster<span className="text-amber">·me</span>
-          </span>
-        ) : (
+      {!isLanding && (
+        <header className="flex items-center justify-between border-b border-edge px-4 py-3">
           <h1 className="text-xl font-semibold text-ink-bright">
             roaster<span className="text-amber">·me</span>
           </h1>
-        )}
-        {me !== "loading" && me !== null && (
-          <div className="flex items-center gap-3 text-sm">
-            <span className="text-ink-muted">{me.email}</span>
-            <button
-              type="button"
-              onClick={handleSignOut}
-              className="rounded border border-edge px-2 py-1 text-ink hover:border-ink-muted"
-            >
-              Sign out
-            </button>
-          </div>
-        )}
-      </header>
+          {me !== "loading" && me !== null && (
+            <div className="flex items-center gap-3 text-sm">
+              <span className="text-ink-muted">{me.email}</span>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="rounded border border-edge px-2 py-1 text-ink hover:border-ink-muted"
+              >
+                Sign out
+              </button>
+            </div>
+          )}
+        </header>
+      )}
 
       <main className="flex flex-1 flex-col items-center px-4 py-6">
         {me === "loading" ? (
@@ -90,8 +91,22 @@ export default function App() {
               setTripsVersion((v) => v + 1);
             }}
           />
+        ) : selectedTrip ? (
+          <TripDetail
+            trip={selectedTrip}
+            onBack={() => setSelectedTrip(null)}
+            onDone={() => {
+              setSelectedTrip(null);
+              setTripsVersion((v) => v + 1);
+            }}
+          />
         ) : (
-          <CrewHome key={tripsVersion} onAddTrip={() => setShowTripForm(true)} now={now} />
+          <CrewHome
+            key={tripsVersion}
+            onAddTrip={() => setShowTripForm(true)}
+            onOpenTrip={setSelectedTrip}
+            now={now}
+          />
         )}
       </main>
 

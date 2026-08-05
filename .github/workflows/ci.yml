@@ -17,6 +17,37 @@ jobs:
       - run: pnpm --filter @roaster/web build
       - run: pnpm test
 
+  e2e:
+    runs-on: ubuntu-latest
+    # Non-blocking while the suite proves itself in CI (real wrangler dev + local D1
+    # + browser). Flip continue-on-error off, and add e2e to `deploy`'s `needs`, once
+    # it's been stable for a while.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: npx playwright install --with-deps chromium
+      - name: Write .dev.vars for wrangler dev
+        # wrangler dev reads local secrets/vars from .dev.vars (not process env) — see
+        # .dev.vars.example for what each of these does.
+        run: |
+          cat > .dev.vars <<'EOF'
+          BETTER_AUTH_SECRET=ci-test-secret-not-for-production-0000000
+          DEV_OTP_FALLBACK=true
+          BETTER_AUTH_URL=http://localhost:8787
+          E2E_TEST_MODE=true
+          EOF
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   deploy:
     needs: check
     if: github.ref == 'refs/heads/main'
