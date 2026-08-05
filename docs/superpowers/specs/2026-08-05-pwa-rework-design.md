@@ -46,7 +46,9 @@ users               id, email, name, home_base (default DXB), created_at
 (better-auth)       session, account, verification tables — generated
 trips               id, user_id, label, created_at              -- pairing/trip grouping
 flights             id, trip_id, user_id, flight_no, origin, dest,
-                    dep_utc, arr_utc, dep_tz, arr_tz, source(manual|autofill), notes
+                    dep_utc, arr_utc, dep_tz, arr_tz, report_utc, source(manual|autofill), notes
+                    -- report_utc: crew sign-on time; auto-filled dep_utc − 90min, editable.
+                    -- Primary number on crew screens (legally load-bearing; UX research 2026-08-05)
 connections         id, owner_id, viewer_id, status(pending|accepted)
 share_invites       id, owner_id, token, expires_at             -- family joins via link
 push_subscriptions  id, user_id, endpoint, p256dh, auth
@@ -74,7 +76,7 @@ airports            iata, city, name, tz
 
 **Authorization rule (single spot):** every roster read checks `flights.user_id = me OR accepted connection(owner = flights.user_id, viewer = me)`. Implemented once as Hono middleware/helper; all endpoints use it. This replaces Supabase RLS.
 
-No public no-login share link in v1 (roster = crew location data). Expiring read-only link possible later.
+**Family access (revised 2026-08-05 after UX research):** primary path is a revocable tokenized read-only link — zero setup, no login, no app (research: account walls are the #1 family-side complaint in existing crew apps). Optional upgrade: family member creates an account from the link view to get push notifications; that converts the link session into a `connections` row. Crew sees all active links + connected accounts and can revoke each independently. Tokens are 128-bit, unlisted, and revocation is immediate.
 
 ## 4. API surface
 
