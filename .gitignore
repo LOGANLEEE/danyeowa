@@ -7,6 +7,10 @@ dist/
 .DS_Store
 coverage/
 .superpowers/
+test-results/
+playwright-report/
+/blob-report/
+/playwright/.cache/
 
 # venv/build artifacts pending manual removal (sandbox rm -rf blocked) — see task-1-report.md
 /.expo/

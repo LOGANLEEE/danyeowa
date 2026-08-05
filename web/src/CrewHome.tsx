@@ -179,7 +179,7 @@ export default function CrewHome({ onAddTrip, onOpenTrip, now }: Props) {
       <button
         type="button"
         onClick={onAddTrip}
-        className="self-start rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+        className="self-start rounded border border-amber px-3 py-2 text-amber transition-colors duration-[120ms] hover:bg-amber/10 active:scale-[0.98]"
       >
         Add trip
       </button>
