@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HealthResponse, Me } from "@roaster/shared";
+import type { TripWithFlights } from "./api";
 import { authClient } from "./auth-client";
 import CrewHome from "./CrewHome";
 import Landing from "./Landing";
 import Login from "./Login";
+import TripDetail from "./TripDetail";
 import TripForm from "./TripForm";
 
 type SignedOutView = "landing" | "login";
@@ -13,6 +15,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null | "loading">("loading");
   const [signedOutView, setSignedOutView] = useState<SignedOutView>("landing");
   const [showTripForm, setShowTripForm] = useState(false);
+  const [selectedTrip, setSelectedTrip] = useState<TripWithFlights | null>(null);
   const [tripsVersion, setTripsVersion] = useState(0);
   const [now, setNow] = useState(() => new Date());
 
@@ -90,8 +93,22 @@ export default function App() {
               setTripsVersion((v) => v + 1);
             }}
           />
+        ) : selectedTrip ? (
+          <TripDetail
+            trip={selectedTrip}
+            onBack={() => setSelectedTrip(null)}
+            onDone={() => {
+              setSelectedTrip(null);
+              setTripsVersion((v) => v + 1);
+            }}
+          />
         ) : (
-          <CrewHome key={tripsVersion} onAddTrip={() => setShowTripForm(true)} now={now} />
+          <CrewHome
+            key={tripsVersion}
+            onAddTrip={() => setShowTripForm(true)}
+            onOpenTrip={setSelectedTrip}
+            now={now}
+          />
         )}
       </main>
 

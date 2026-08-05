@@ -3,11 +3,11 @@ import { dayOffset, formatLocal, layoverHours, relativeUntil, tripProgress } fro
 import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 
-type Props = { onAddTrip: () => void; now: Date };
+type Props = { onAddTrip: () => void; onOpenTrip: (trip: TripWithFlights) => void; now: Date };
 
 const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
 
-export default function CrewHome({ onAddTrip, now }: Props) {
+export default function CrewHome({ onAddTrip, onOpenTrip, now }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
   const nowMs = now.getTime();
 
@@ -25,6 +25,7 @@ export default function CrewHome({ onAddTrip, now }: Props) {
     .sort((a, b) => Date.parse(a.reportUtc) - Date.parse(b.reportUtc));
   const upcoming = allFlights.filter((f) => Date.parse(f.reportUtc) >= nowMs);
   const nextDuty = upcoming[0] ?? null;
+  const tripByFlightId = new Map(trips.flatMap((trip) => trip.flights.map((f) => [f.id, trip])));
 
   // Active pairing: a trip whose first departure has passed and last arrival hasn't (spans `now`).
   // Home base tz = origin tz of the trip's first leg.
@@ -68,7 +69,15 @@ export default function CrewHome({ onAddTrip, now }: Props) {
       </div>
 
       {/* Next duty card */}
-      <div className="flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4">
+      <button
+        type="button"
+        data-testid="next-duty-card"
+        onClick={() => {
+          const trip = tripByFlightId.get(nextDuty.id);
+          if (trip) onOpenTrip(trip);
+        }}
+        className="flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4 text-left hover:bg-raised"
+      >
         <div>
           <p className="text-lg font-semibold text-ink-bright">
             {nextDuty.origin} → {nextDuty.dest}
@@ -91,7 +100,7 @@ export default function CrewHome({ onAddTrip, now }: Props) {
           {formatLocal(nextDuty.arrUtc, nextDuty.arrTz)}
           {arrOffset > 0 && <sup>+{arrOffset}</sup>}
         </p>
-      </div>
+      </button>
 
       {/* Active pairing card: shown when a trip spans `now` (first dep passed, last arr not yet). */}
       {activePairing && (
@@ -144,10 +153,15 @@ export default function CrewHome({ onAddTrip, now }: Props) {
           const prev = upcoming[index - 1];
           const layover = prev ? layoverHours(prev.arrUtc, flight.depUtc) : null;
           return (
-            <div
+            <button
               key={flight.id}
+              type="button"
               data-testid="upcoming-row"
-              className="flex items-center justify-between border-b border-edge py-2 text-sm last:border-b-0"
+              onClick={() => {
+                const trip = tripByFlightId.get(flight.id);
+                if (trip) onOpenTrip(trip);
+              }}
+              className="flex items-center justify-between border-b border-edge py-2 text-left text-sm last:border-b-0 hover:bg-raised"
             >
               <span className="text-ink">
                 {flight.origin} → {flight.dest}{" "}
@@ -157,7 +171,7 @@ export default function CrewHome({ onAddTrip, now }: Props) {
                 {formatLocal(flight.reportUtc, flight.depTz, { withDate: true })}
                 {layover !== null && ` · layover ${layover.toFixed(1)}h`}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>

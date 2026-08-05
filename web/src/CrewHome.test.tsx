@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import CrewHome from "./CrewHome";
 import { getTrips } from "./api";
@@ -99,7 +100,7 @@ describe("CrewHome", () => {
   it("renders the report time prominently and a relative countdown for the next duty", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
 
-    render(<CrewHome onAddTrip={vi.fn()} now={now} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} now={now} />);
 
     // REPORT box: prominent amber .num element showing the local report time at origin (DXB, Asia/Dubai, UTC+4).
     const reportTime = await screen.findByText("04:45");
@@ -113,7 +114,7 @@ describe("CrewHome", () => {
   it("renders one row per upcoming duty", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
 
-    render(<CrewHome onAddTrip={vi.fn()} now={now} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} now={now} />);
 
     const rows = await screen.findAllByTestId("upcoming-row");
     expect(rows).toHaveLength(2);
@@ -125,7 +126,7 @@ describe("CrewHome", () => {
     vi.mocked(getTrips).mockResolvedValue([]);
     const onAddTrip = vi.fn();
 
-    render(<CrewHome onAddTrip={onAddTrip} now={now} />);
+    render(<CrewHome onAddTrip={onAddTrip} onOpenTrip={vi.fn()} now={now} />);
 
     expect(await screen.findByText(/no trips yet/i)).toBeInTheDocument();
     const button = screen.getByRole("button", { name: /add your first/i });
@@ -138,7 +139,7 @@ describe("CrewHome", () => {
     // local days spanned by the trip (first dep local day Aug 10, last arr local day Aug 12).
     const midTripNow = new Date("2026-08-11T10:00:00.000Z");
 
-    render(<CrewHome onAddTrip={vi.fn()} now={midTripNow} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} now={midTripNow} />);
 
     const card = await screen.findByTestId("pairing-progress-card");
     expect(card).toHaveTextContent(/trip.*3 days/i);
@@ -151,8 +152,33 @@ describe("CrewHome", () => {
   it("does not show the pairing progress card for a fully future trip", async () => {
     vi.mocked(getTrips).mockResolvedValue([inProgressTrip]);
     // now is well before the trip's first departure.
-    render(<CrewHome onAddTrip={vi.fn()} now={now} />);
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} now={now} />);
 
     expect(screen.queryByTestId("pairing-progress-card")).not.toBeInTheDocument();
+  });
+
+  it("clicking an upcoming row calls onOpenTrip with that flight's trip", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const onOpenTrip = vi.fn();
+    const user = userEvent.setup();
+
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={onOpenTrip} now={now} />);
+
+    const [firstRow] = await screen.findAllByTestId("upcoming-row");
+    await user.click(firstRow!);
+
+    expect(onOpenTrip).toHaveBeenCalledWith(aklTrip);
+  });
+
+  it("clicking the next-duty card calls onOpenTrip with that flight's trip", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const onOpenTrip = vi.fn();
+    const user = userEvent.setup();
+
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={onOpenTrip} now={now} />);
+
+    await user.click(await screen.findByTestId("next-duty-card"));
+
+    expect(onOpenTrip).toHaveBeenCalledWith(aklTrip);
   });
 });
