@@ -152,6 +152,32 @@ describe("dayOffset", () => {
       ),
     ).toBe(0);
   });
+
+  it("returns 0 for a same-month regression case (no over-correction)", () => {
+    // Dep Dubai 09:00 local Aug 5, arr Dubai 14:00 local Aug 5 - same local day
+    expect(
+      dayOffset("2026-08-05T05:00:00Z", "2026-08-05T10:00:00Z", "Asia/Dubai", "Asia/Dubai"),
+    ).toBe(0);
+  });
+
+  it("returns +1 across a month boundary (Jan 31 -> Feb 1)", () => {
+    // Dep Dubai 23:00 local Jan 31 (19:00Z), arr Dubai 01:00 local Feb 1 (2026-02-01T01:00:00Z Dubai local... )
+    expect(
+      dayOffset("2026-01-31T19:00:00Z", "2026-02-01T01:00:00Z", "Asia/Dubai", "Asia/Dubai"),
+    ).toBe(1);
+  });
+
+  it("returns +1 across a year boundary (Dec 31 -> Jan 1)", () => {
+    expect(
+      dayOffset("2026-12-31T19:00:00Z", "2027-01-01T01:00:00Z", "Asia/Dubai", "Asia/Dubai"),
+    ).toBe(1);
+  });
+
+  it("returns +1 across a Feb 28 -> Mar 1 boundary in a non-leap year (2026)", () => {
+    expect(
+      dayOffset("2026-02-28T19:00:00Z", "2026-03-01T01:00:00Z", "Asia/Dubai", "Asia/Dubai"),
+    ).toBe(1);
+  });
 });
 
 describe("wallToUtc", () => {

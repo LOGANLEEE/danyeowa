@@ -66,18 +66,24 @@ function localDateKey(utcIso: string, tz: string): string {
   return fmt.format(new Date(utcIso));
 }
 
+function localDayEpoch(utcIso: string, tz: string): number {
+  const [year, month, day] = localDateKey(utcIso, tz).split("-").map(Number) as [
+    number,
+    number,
+    number,
+  ];
+  // Date.UTC's month param is 0-indexed; localDateKey's month (from en-CA) is 1-indexed.
+  return Date.UTC(year, month - 1, day);
+}
+
 export function dayOffset(
   depUtcIso: string,
   arrUtcIso: string,
   depTz: string,
   arrTz: string,
 ): number {
-  const depDay = Date.UTC(
-    ...(localDateKey(depUtcIso, depTz).split("-").map(Number) as [number, number, number]),
-  );
-  const arrDay = Date.UTC(
-    ...(localDateKey(arrUtcIso, arrTz).split("-").map(Number) as [number, number, number]),
-  );
+  const depDay = localDayEpoch(depUtcIso, depTz);
+  const arrDay = localDayEpoch(arrUtcIso, arrTz);
   return Math.round((arrDay - depDay) / (24 * 60 * 60 * 1000));
 }
 
