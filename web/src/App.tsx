@@ -2,12 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import type { HealthResponse, Me } from "@roaster/shared";
 import { authClient } from "./auth-client";
 import CrewHome from "./CrewHome";
+import Landing from "./Landing";
 import Login from "./Login";
 import TripForm from "./TripForm";
+
+type SignedOutView = "landing" | "login";
 
 export default function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
+  const [signedOutView, setSignedOutView] = useState<SignedOutView>("landing");
   const [showTripForm, setShowTripForm] = useState(false);
   const [tripsVersion, setTripsVersion] = useState(0);
   const [now, setNow] = useState(() => new Date());
@@ -40,12 +44,22 @@ export default function App() {
     setMe(null);
   }
 
+  // The Landing view renders its own hero h1 ("roaster·me") as the page heading.
+  // Suppress the header's h1 there so the page has exactly one h1 (a11y: no duplicate headings).
+  const isLanding = me === null && signedOutView === "landing";
+
   return (
     <div className="flex min-h-screen flex-col bg-ground text-ink">
       <header className="flex items-center justify-between border-b border-edge px-4 py-3">
-        <h1 className="text-xl font-semibold text-ink-bright">
-          roaster<span className="text-amber">·me</span>
-        </h1>
+        {isLanding ? (
+          <span className="text-xl font-semibold text-ink-bright" aria-hidden="true">
+            roaster<span className="text-amber">·me</span>
+          </span>
+        ) : (
+          <h1 className="text-xl font-semibold text-ink-bright">
+            roaster<span className="text-amber">·me</span>
+          </h1>
+        )}
         {me !== "loading" && me !== null && (
           <div className="flex items-center gap-3 text-sm">
             <span className="text-ink-muted">{me.email}</span>
@@ -64,7 +78,11 @@ export default function App() {
         {me === "loading" ? (
           <p className="text-ink-muted">loading…</p>
         ) : me === null ? (
-          <Login onSignedIn={loadMe} />
+          signedOutView === "landing" ? (
+            <Landing onSignIn={() => setSignedOutView("login")} />
+          ) : (
+            <Login onSignedIn={loadMe} onBack={() => setSignedOutView("landing")} />
+          )
         ) : showTripForm ? (
           <TripForm
             onSubmitted={() => {

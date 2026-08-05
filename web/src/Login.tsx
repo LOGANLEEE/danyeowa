@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { authClient } from "./auth-client";
 
-type Props = { onSignedIn: () => void };
+type Props = { onSignedIn: () => void; onBack?: () => void };
 
-export default function Login({ onSignedIn }: Props) {
+export default function Login({ onSignedIn, onBack }: Props) {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
@@ -48,6 +48,15 @@ export default function Login({ onSignedIn }: Props) {
         onSubmit={handleSendCode}
         className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
       >
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="self-start text-sm text-ink-muted hover:text-ink"
+          >
+            ← back
+          </button>
+        )}
         <label htmlFor="login-email" className="text-sm text-ink-muted">
           Email
         </label>
@@ -80,6 +89,15 @@ export default function Login({ onSignedIn }: Props) {
       onSubmit={handleSignIn}
       className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
     >
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="self-start text-sm text-ink-muted hover:text-ink"
+        >
+          ← back
+        </button>
+      )}
       <label htmlFor="login-code" className="text-sm text-ink-muted">
         Code
       </label>
