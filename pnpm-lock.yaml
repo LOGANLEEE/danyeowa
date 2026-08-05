@@ -15,7 +15,11 @@ importers:
         specifier: ^4.0.0
         version: 4.118.0(@cloudflare/workers-types@5.20260804.1)
 
-  shared: {}
+  shared:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   web:
     dependencies:
