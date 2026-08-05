@@ -56,7 +56,8 @@ export function layoverHours(arrUtcIso: string, nextDepUtcIso: string): number {
   return (Date.parse(nextDepUtcIso) - Date.parse(arrUtcIso)) / (60 * 60 * 1000);
 }
 
-function localDateKey(utcIso: string, tz: string): string {
+/** Local calendar date for `utcIso` in `tz`, as an ISO date string ("YYYY-MM-DD"). */
+export function localDateKey(utcIso: string, tz: string): string {
   const fmt = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
     year: "numeric",

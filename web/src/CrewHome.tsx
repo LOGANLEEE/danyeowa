@@ -17,7 +17,12 @@ const VIEW_STORAGE_KEY = "roster-view";
 type RosterView = "list" | "calendar";
 
 function loadStoredView(): RosterView {
-  return localStorage.getItem(VIEW_STORAGE_KEY) === "calendar" ? "calendar" : "list";
+  try {
+    return localStorage.getItem(VIEW_STORAGE_KEY) === "calendar" ? "calendar" : "list";
+  } catch {
+    // Storage access can throw (e.g. private-mode WebKit) - fall back to the default view.
+    return "list";
+  }
 }
 
 export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Props) {
@@ -27,7 +32,12 @@ export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Prop
 
   function selectView(next: RosterView) {
     setView(next);
-    localStorage.setItem(VIEW_STORAGE_KEY, next);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // Storage access can throw (e.g. private-mode WebKit) - the view still switches for
+      // this session, it just won't persist across reloads.
+    }
   }
 
   useEffect(() => {

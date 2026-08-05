@@ -149,4 +149,40 @@ describe("TripsCalendar", () => {
     const today = screen.getByTestId("calendar-day-2026-08-10");
     expect(today.className).toContain("border-amber");
   });
+
+  it("puts today's ring on the home-base LOCAL date, not the UTC date, when tz is ahead of UTC", () => {
+    // 2026-08-10T21:00:00Z in Pacific/Auckland (+12 NZ winter) is local Aug 11 09:00 -
+    // the today ring must land on Aug 11, not the UTC calendar date Aug 10.
+    const nowAheadOfUtc = new Date("2026-08-10T21:00:00.000Z");
+    render(
+      <TripsCalendar
+        now={nowAheadOfUtc}
+        trips={[]}
+        homeTz="Pacific/Auckland"
+        onPickDay={vi.fn()}
+        onOpenTrip={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("calendar-day-2026-08-11").className).toContain("border-amber");
+    expect(screen.getByTestId("calendar-day-2026-08-10").className).not.toContain("border-amber");
+  });
+
+  it("puts today's ring on the home-base LOCAL date, not the UTC date, when tz is behind UTC", () => {
+    // 2026-08-10T02:00:00Z in America/Sao_Paulo (-3) is local Aug 9 23:00 - the today ring
+    // must land on Aug 9, not the UTC calendar date Aug 10.
+    const nowBehindUtc = new Date("2026-08-10T02:00:00.000Z");
+    render(
+      <TripsCalendar
+        now={nowBehindUtc}
+        trips={[]}
+        homeTz="America/Sao_Paulo"
+        onPickDay={vi.fn()}
+        onOpenTrip={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("calendar-day-2026-08-09").className).toContain("border-amber");
+    expect(screen.getByTestId("calendar-day-2026-08-10").className).not.toContain("border-amber");
+  });
 });

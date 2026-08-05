@@ -3,6 +3,7 @@ import {
   dayOffset,
   formatLocal,
   layoverHours,
+  localDateKey,
   monthGrid,
   relativeUntil,
   reportDefault,
@@ -390,5 +391,21 @@ describe("tripDaysInMonth", () => {
     ];
     const map = tripDaysInMonth(trips, 2026, 8, "Asia/Dubai");
     expect(map.size).toBe(0);
+  });
+});
+
+describe("localDateKey", () => {
+  it("returns the local calendar date one day ahead of UTC when tz is far ahead (Pacific/Auckland)", () => {
+    // 2026-08-10T21:00:00Z + 12h (NZ winter) = Aug 11 09:00 local.
+    expect(localDateKey("2026-08-10T21:00:00Z", "Pacific/Auckland")).toBe("2026-08-11");
+  });
+
+  it("returns the local calendar date one day behind UTC when tz is behind (America/Sao_Paulo)", () => {
+    // 2026-08-10T02:00:00Z - 3h = Aug 9 23:00 local.
+    expect(localDateKey("2026-08-10T02:00:00Z", "America/Sao_Paulo")).toBe("2026-08-09");
+  });
+
+  it("matches the UTC calendar date when tz offset keeps the same local day", () => {
+    expect(localDateKey("2026-08-10T12:00:00Z", "Asia/Dubai")).toBe("2026-08-10");
   });
 });

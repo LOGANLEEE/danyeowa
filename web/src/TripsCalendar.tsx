@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { monthGrid, tripDaysInMonth } from "@roaster/shared";
+import { localDateKey, monthGrid, tripDaysInMonth } from "@roaster/shared";
 import type { TripWithFlights } from "./api";
 
 type Props = {
@@ -26,18 +26,13 @@ const MONTH_LABELS = [
   "December",
 ];
 
-function todayIso(now: Date): string {
-  const y = now.getUTCFullYear();
-  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(now.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 export default function TripsCalendar({ now, trips, homeTz, onPickDay, onOpenTrip }: Props) {
-  const [viewYear, setViewYear] = useState(now.getUTCFullYear());
-  const [viewMonth, setViewMonth] = useState(now.getUTCMonth() + 1); // 1-12
-
-  const today = todayIso(now);
+  // "Today" and the initial view month must use the home-base LOCAL date, not the UTC date -
+  // they can differ by a day near midnight in tzs far from UTC (see localDateKey).
+  const today = localDateKey(now.toISOString(), homeTz);
+  const [todayYear, todayMonthStr] = today.split("-");
+  const [viewYear, setViewYear] = useState(Number(todayYear));
+  const [viewMonth, setViewMonth] = useState(Number(todayMonthStr)); // 1-12
   const grid = monthGrid(viewYear, viewMonth, homeTz);
 
   const tripSpans = trips

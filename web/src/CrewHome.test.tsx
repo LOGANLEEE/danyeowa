@@ -248,4 +248,34 @@ describe("CrewHome", () => {
 
     expect(onPickDay).toHaveBeenCalledWith("2026-08-20");
   });
+
+  it("degrades to the default list view when localStorage.getItem throws (e.g. private-mode WebKit)", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const getItemSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("private mode: storage disabled");
+    });
+
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
+
+    await screen.findAllByTestId("upcoming-row");
+    expect(screen.queryByTestId("calendar-next")).not.toBeInTheDocument();
+
+    getItemSpy.mockRestore();
+  });
+
+  it("does not crash when localStorage.setItem throws while switching views", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("private mode: storage disabled");
+    });
+
+    render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
+    await screen.findAllByTestId("upcoming-row");
+
+    await user.click(screen.getByRole("button", { name: /^calendar$/i }));
+    expect(screen.getByTestId("calendar-next")).toBeInTheDocument();
+
+    setItemSpy.mockRestore();
+  });
 });
