@@ -16,6 +16,7 @@
     "@better-auth/cli": "^1.4.21",
     "@cloudflare/vitest-pool-workers": "^0.20.2",
     "@cloudflare/workers-types": "^5.20260804.1",
+    "better-sqlite3": "^12.11.1",
     "drizzle-kit": "^0.31.10",
     "vitest": "^4.1.0"
   }
