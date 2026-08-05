@@ -14,8 +14,14 @@
     {
       "binding": "DB",
       "database_name": "roaster-me-db",
-      "database_id": "86f1d8cf-1aec-42ef-82a7-62da5db9d4d9"
+      "database_id": "86f1d8cf-1aec-42ef-82a7-62da5db9d4d9",
+      "migrations_dir": "drizzle"
     }
   ],
+  "vars": {
+    // remove when RESEND_API_KEY is set
+    "DEV_OTP_FALLBACK": "true",
+    "BETTER_AUTH_URL": "https://roaster-me.logan-lee.workers.dev"
+  },
   "observability": { "enabled": true }
 }
