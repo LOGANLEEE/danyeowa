@@ -4,6 +4,7 @@ import type { HealthResponse } from "@roaster/shared";
 export type Env = {
   DB: D1Database;
   ASSETS: Fetcher;
+  RESEND_API_KEY?: string;
 };
 
 const app = new Hono<{ Bindings: Env }>();
