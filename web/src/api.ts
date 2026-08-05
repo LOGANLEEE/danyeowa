@@ -48,5 +48,5 @@ export async function patchFlight(id: string, patch: LegPatch): Promise<Flight> 
 
 export async function deleteTrip(id: string): Promise<void> {
   const res = await fetch(`/api/trips/${id}`, { method: "DELETE" });
-  if (!res.ok && res.status !== 204) throw new Error("Failed to delete trip");
+  if (!res.ok) throw new Error("Failed to delete trip");
 }
