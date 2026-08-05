@@ -1,0 +1,221 @@
+import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/d1";
+import { Hono } from "hono";
+import { LegPatchSchema, TripInputSchema, reportDefault } from "@roaster/shared";
+import * as schema from "./db/schema";
+import type { Env } from "./index";
+
+type Variables = {
+  user: { id: string; email: string; name: string | null } | null;
+};
+
+export const tripsRouter = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+function db(env: Env) {
+  return drizzle(env.DB, { schema });
+}
+
+type OwnableTable = typeof schema.trips | typeof schema.flights;
+
+/**
+ * Fetches a row by id, scoped to the owning user, returning null both when the row
+ * doesn't exist and when it exists but belongs to someone else — callers must respond
+ * 404 in both cases so ownership never leaks via a 403/404 status difference.
+ */
+async function requireOwn<T extends OwnableTable>(
+  database: ReturnType<typeof db>,
+  table: T,
+  id: string,
+  userId: string,
+): Promise<T["$inferSelect"] | null> {
+  const rows = await database
+    .select()
+    .from(table)
+    .where(and(eq(table.id, id), eq(table.userId, userId)))
+    .limit(1);
+  return (rows[0] as T["$inferSelect"] | undefined) ?? null;
+}
+
+tripsRouter.get("/trips", async (c) => {
+  const user = c.var.user;
+  if (!user) return c.json({ error: "unauthenticated" }, 401);
+
+  const database = db(c.env);
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+
+  const trips = await database
+    .select()
+    .from(schema.trips)
+    .where(eq(schema.trips.userId, user.id));
+
+  const tripIds = trips.map((t) => t.id);
+  const flightConditions = [
+    tripIds.length > 0 ? inArray(schema.flights.tripId, tripIds) : eq(schema.flights.tripId, ""),
+  ];
+  if (from) flightConditions.push(gte(schema.flights.depUtc, from));
+  if (to) flightConditions.push(lte(schema.flights.depUtc, to));
+
+  const flights =
+    tripIds.length > 0
+      ? await database
+          .select()
+          .from(schema.flights)
+          .where(and(...flightConditions))
+          .orderBy(asc(schema.flights.legSeq))
+      : [];
+
+  const flightsByTrip = new Map<string, (typeof flights)[number][]>();
+  for (const flight of flights) {
+    const list = flightsByTrip.get(flight.tripId) ?? [];
+    list.push(flight);
+    flightsByTrip.set(flight.tripId, list);
+  }
+
+  // Only trips that still have a matching flight (post from/to filter) are returned,
+  // ordered by their earliest flight's dep_utc ascending.
+  const tripsWithFlights = trips
+    .map((trip) => ({ ...trip, flights: flightsByTrip.get(trip.id) ?? [] }))
+    .filter((trip) => trip.flights.length > 0 || (!from && !to));
+
+  tripsWithFlights.sort((a, b) => {
+    const aDep = a.flights[0]?.depUtc ?? "";
+    const bDep = b.flights[0]?.depUtc ?? "";
+    return aDep.localeCompare(bDep);
+  });
+
+  return c.json({ trips: tripsWithFlights });
+});
+
+tripsRouter.post("/trips", async (c) => {
+  const user = c.var.user;
+  if (!user) return c.json({ error: "unauthenticated" }, 401);
+
+  const parsed = TripInputSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
+  const input = parsed.data;
+
+  const database = db(c.env);
+
+  // Resolve dep/arr tz for every leg from the airports table by IATA up front, so a
+  // single unknown airport 400s before any writes happen.
+  const iatas = [...new Set(input.legs.flatMap((leg) => [leg.origin, leg.dest]))].map((code) =>
+    code.toUpperCase(),
+  );
+  const airportRows = await database
+    .select()
+    .from(schema.airports)
+    .where(inArray(schema.airports.iata, iatas));
+  const airportByIata = new Map(airportRows.map((a) => [a.iata, a]));
+
+  for (const leg of input.legs) {
+    for (const code of [leg.origin.toUpperCase(), leg.dest.toUpperCase()]) {
+      if (!airportByIata.has(code)) {
+        return c.json({ error: `unknown airport: ${code}` }, 400);
+      }
+    }
+  }
+
+  const tripId = crypto.randomUUID();
+  const tripRow = { id: tripId, userId: user.id, label: input.label ?? null };
+
+  const flightRows = input.legs.map((leg, index) => {
+    const origin = leg.origin.toUpperCase();
+    const dest = leg.dest.toUpperCase();
+    return {
+      id: crypto.randomUUID(),
+      tripId,
+      userId: user.id,
+      flightNo: leg.flightNo.toUpperCase(),
+      origin,
+      dest,
+      depUtc: leg.depUtc,
+      arrUtc: leg.arrUtc,
+      // report_utc defaults to dep_utc - 90min (reportDefault) when the client
+      // doesn't explicitly supply one; always editable afterwards via PATCH.
+      reportUtc: leg.reportUtc ?? reportDefault(leg.depUtc),
+      depTz: airportByIata.get(origin)!.tz,
+      arrTz: airportByIata.get(dest)!.tz,
+      legSeq: index,
+    };
+  });
+
+  // D1 has no cross-statement transactions; batch() applies all statements
+  // atomically so a trip can never be left stranded without its flights.
+  const tripInsert = database.insert(schema.trips).values(tripRow);
+  const flightInserts = flightRows.map((row) => database.insert(schema.flights).values(row));
+  await database.batch([tripInsert, ...flightInserts]);
+
+  return c.json({ ...tripRow, createdAt: Date.now(), flights: flightRows }, 201);
+});
+
+tripsRouter.delete("/trips/:id", async (c) => {
+  const user = c.var.user;
+  if (!user) return c.json({ error: "unauthenticated" }, 401);
+
+  const database = db(c.env);
+  const trip = await requireOwn(database, schema.trips, c.req.param("id"), user.id);
+  if (!trip) return c.json({ error: "not found" }, 404);
+
+  // flights cascade-delete via the FK's onDelete: "cascade".
+  await database.delete(schema.trips).where(eq(schema.trips.id, c.req.param("id")));
+
+  return c.body(null, 204);
+});
+
+tripsRouter.patch("/flights/:id", async (c) => {
+  const user = c.var.user;
+  if (!user) return c.json({ error: "unauthenticated" }, 401);
+
+  const database = db(c.env);
+  const flightId = c.req.param("id");
+  const existing = await requireOwn(database, schema.flights, flightId, user.id);
+  if (!existing) return c.json({ error: "not found" }, 404);
+
+  const parsed = LegPatchSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
+  const patch = parsed.data;
+
+  const update: Partial<typeof schema.flights.$inferInsert> = {};
+  if (patch.flightNo !== undefined) update.flightNo = patch.flightNo.toUpperCase();
+  if (patch.origin !== undefined) update.origin = patch.origin.toUpperCase();
+  if (patch.dest !== undefined) update.dest = patch.dest.toUpperCase();
+  if (patch.arrUtc !== undefined) update.arrUtc = patch.arrUtc;
+  if (patch.depTz !== undefined) update.depTz = patch.depTz;
+  if (patch.arrTz !== undefined) update.arrTz = patch.arrTz;
+
+  if (patch.depUtc !== undefined) {
+    update.depUtc = patch.depUtc;
+    // Product behavior: changing dep_utc without explicitly patching report_utc
+    // recomputes report_utc from the new departure via reportDefault() (dep - 90min),
+    // so the report time stays consistent with the new schedule unless the caller
+    // deliberately overrides it in the same request.
+    update.reportUtc = patch.reportUtc ?? reportDefault(patch.depUtc);
+  } else if (patch.reportUtc !== undefined) {
+    update.reportUtc = patch.reportUtc;
+  }
+
+  if (Object.keys(update).length === 0) {
+    return c.json(existing, 200);
+  }
+
+  const [updated] = await database
+    .update(schema.flights)
+    .set(update)
+    .where(eq(schema.flights.id, flightId))
+    .returning();
+
+  return c.json(updated, 200);
+});
+
+tripsRouter.get("/airports/:iata", async (c) => {
+  const database = db(c.env);
+  const iata = c.req.param("iata").toUpperCase();
+  const row = await database
+    .select()
+    .from(schema.airports)
+    .where(eq(schema.airports.iata, iata))
+    .limit(1);
+  if (!row[0]) return c.json({ error: "not found" }, 404);
+  return c.json(row[0], 200);
+});

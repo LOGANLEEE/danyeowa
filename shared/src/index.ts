@@ -13,12 +13,18 @@ export const LegInputSchema = z.object({
   dest: iataSchema,
   depUtc: z.string().datetime(),
   arrUtc: z.string().datetime(),
-  reportUtc: z.string().datetime(),
-  depTz: z.string(),
-  arrTz: z.string(),
+  // reportUtc backfilled server-side via reportDefault() when absent.
+  reportUtc: z.string().datetime().optional(),
+  // depTz/arrTz resolved server-side from the airports table by IATA; not client-supplied.
+  depTz: z.string().optional(),
+  arrTz: z.string().optional(),
 });
 
 export type LegInput = z.infer<typeof LegInputSchema>;
+
+export const LegPatchSchema = LegInputSchema.partial();
+
+export type LegPatch = z.infer<typeof LegPatchSchema>;
 
 export const TripInputSchema = z.object({
   label: z.string().optional(),

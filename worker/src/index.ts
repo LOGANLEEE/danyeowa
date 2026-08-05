@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { HealthResponse, Me } from "@roaster/shared";
 import { createAuth } from "./auth";
+import { tripsRouter } from "./trips";
 
 export type Env = {
   DB: D1Database;
@@ -44,5 +45,7 @@ app.get("/api/me", (c) => {
   const body: Me = { id: user.id, email: user.email, name: user.name ?? null };
   return c.json(body);
 });
+
+app.route("/api", tripsRouter);
 
 export default app;
