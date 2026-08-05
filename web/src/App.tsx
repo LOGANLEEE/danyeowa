@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HealthResponse, Me } from "@roaster/shared";
 import { authClient } from "./auth-client";
+import CrewHome from "./CrewHome";
 import Login from "./Login";
 import TripForm from "./TripForm";
 
@@ -8,6 +9,13 @@ export default function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
   const [showTripForm, setShowTripForm] = useState(false);
+  const [tripsVersion, setTripsVersion] = useState(0);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     fetch("/api/health")
@@ -52,21 +60,20 @@ export default function App() {
         )}
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center gap-4 px-4">
+      <main className="flex flex-1 flex-col items-center px-4 py-6">
         {me === "loading" ? (
           <p className="text-ink-muted">loading…</p>
         ) : me === null ? (
           <Login onSignedIn={loadMe} />
         ) : showTripForm ? (
-          <TripForm onSubmitted={() => setShowTripForm(false)} />
+          <TripForm
+            onSubmitted={() => {
+              setShowTripForm(false);
+              setTripsVersion((v) => v + 1);
+            }}
+          />
         ) : (
-          <button
-            type="button"
-            onClick={() => setShowTripForm(true)}
-            className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110"
-          >
-            Add trip
-          </button>
+          <CrewHome key={tripsVersion} onAddTrip={() => setShowTripForm(true)} now={now} />
         )}
       </main>
 

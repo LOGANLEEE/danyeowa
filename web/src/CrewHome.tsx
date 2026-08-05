@@ -1,0 +1,118 @@
+import { useEffect, useState } from "react";
+import { dayOffset, formatLocal, layoverHours, relativeUntil } from "@roaster/shared";
+import { getTrips } from "./api";
+import type { TripWithFlights } from "./api";
+
+type Props = { onAddTrip: () => void; now: Date };
+
+const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
+
+export default function CrewHome({ onAddTrip, now }: Props) {
+  const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
+  const nowMs = now.getTime();
+
+  useEffect(() => {
+    getTrips().then(setTrips);
+  }, []);
+
+  if (trips === null) {
+    return <p className="text-ink-muted">loading…</p>;
+  }
+
+  // Flatten to a single flights list ordered by report time; upcoming = report time in the future.
+  const allFlights = trips
+    .flatMap((trip) => trip.flights)
+    .sort((a, b) => Date.parse(a.reportUtc) - Date.parse(b.reportUtc));
+  const upcoming = allFlights.filter((f) => Date.parse(f.reportUtc) >= nowMs);
+  const nextDuty = upcoming[0] ?? null;
+
+  if (!nextDuty) {
+    return (
+      <div className="flex flex-col items-center gap-4 text-center">
+        <p className="text-ink-muted">No trips yet — add your first</p>
+        <button
+          type="button"
+          onClick={onAddTrip}
+          className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110"
+        >
+          Add your first trip
+        </button>
+      </div>
+    );
+  }
+
+  const leaveHomeUtc = new Date(Date.parse(nextDuty.reportUtc) - LEAVE_HOME_LEAD_MS).toISOString();
+  const arrOffset = dayOffset(nextDuty.depUtc, nextDuty.arrUtc, nextDuty.depTz, nextDuty.arrTz);
+
+  return (
+    <div className="flex w-full max-w-xl flex-col gap-4">
+      {/* Status band */}
+      <div className="flex items-center gap-2 text-sm">
+        <span className="h-2 w-2 rounded-full bg-ok" aria-hidden="true" />
+        <span className="text-ink-muted">
+          Off duty — next report {relativeUntil(nextDuty.reportUtc, nowMs)}
+        </span>
+      </div>
+
+      {/* Next duty card */}
+      <div className="flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4">
+        <div>
+          <p className="text-lg font-semibold text-ink-bright">
+            {nextDuty.origin} → {nextDuty.dest}
+          </p>
+          <p className="text-sm text-ink-muted">{nextDuty.flightNo}</p>
+        </div>
+
+        <div className="rounded border border-edge bg-raised p-3">
+          <p className="text-xs uppercase text-ink-muted">Report</p>
+          <p className="num text-3xl font-semibold text-amber-num">
+            {formatLocal(nextDuty.reportUtc, nextDuty.depTz)}
+          </p>
+          <p className="text-sm text-ink-muted">
+            leave home by <span className="num">{formatLocal(leaveHomeUtc, nextDuty.depTz)}</span>
+          </p>
+        </div>
+
+        <p className="num text-sm text-ink-muted">
+          dep {formatLocal(nextDuty.depUtc, nextDuty.depTz)} → arr{" "}
+          {formatLocal(nextDuty.arrUtc, nextDuty.arrTz)}
+          {arrOffset > 0 && <sup>+{arrOffset}</sup>}
+        </p>
+      </div>
+
+      {/* No rest/legal strip yet — needs duty aggregation across trips; deferred to Plan 4+. */}
+
+      {/* Rolling upcoming list: one line per duty (R1). */}
+      <div className="flex flex-col gap-1">
+        {upcoming.map((flight, index) => {
+          const prev = upcoming[index - 1];
+          const layover = prev ? layoverHours(prev.arrUtc, flight.depUtc) : null;
+          return (
+            <div
+              key={flight.id}
+              data-testid="upcoming-row"
+              className="flex items-center justify-between border-b border-edge py-2 text-sm last:border-b-0"
+            >
+              <span className="text-ink">
+                {flight.origin} → {flight.dest}{" "}
+                <span className="text-ink-muted">{flight.flightNo}</span>
+              </span>
+              <span className="num text-ink-muted">
+                {formatLocal(flight.reportUtc, flight.depTz, { withDate: true })}
+                {layover !== null && ` · layover ${layover.toFixed(1)}h`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={onAddTrip}
+        className="self-start rounded border border-edge px-3 py-2 text-ink hover:border-ink-muted"
+      >
+        Add trip
+      </button>
+    </div>
+  );
+}
