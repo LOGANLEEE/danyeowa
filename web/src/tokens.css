@@ -16,4 +16,78 @@
 .num {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-variant-numeric: tabular-nums;
+  min-width: 1ch;
+}
+
+/* Motion tokens */
+:root {
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --duration-enter: 240ms;
+  --duration-micro: 120ms;
+  --stagger-step: 60ms;
+}
+
+/* Background depth: fixed, subtle radial glow on the ground only (not on cards). */
+body {
+  background-color: var(--color-ground);
+  background-image:
+    radial-gradient(ellipse 120% 60% at 50% 0%, rgba(226, 166, 61, 0.04) 0%, rgba(226, 166, 61, 0.028) 15%, rgba(226, 166, 61, 0.016) 25%, rgba(226, 166, 61, 0.008) 32%, rgba(226, 166, 61, 0.003) 38%, rgba(226, 166, 61, 0) 40%),
+    radial-gradient(ellipse 90% 70% at 100% 100%, rgba(157, 184, 232, 0.02) 0%, rgba(157, 184, 232, 0.012) 20%, rgba(157, 184, 232, 0.006) 32%, rgba(157, 184, 232, 0.002) 45%, rgba(157, 184, 232, 0) 60%);
+  background-attachment: fixed;
+}
+
+/* Hairline: 1px ~10%-white border for raised surfaces (second, cheap depth cue). */
+.hairline {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Entrance: base = opacity-only (reduced-motion-safe default). */
+.entrance {
+  opacity: 0;
+  animation: fade-in var(--duration-enter) var(--ease-standard) forwards;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Enhance with transform-based rise only when motion is not reduced. */
+@media (prefers-reduced-motion: no-preference) {
+  .entrance {
+    animation-name: fade-rise;
+  }
+
+  .stagger-1 {
+    animation-delay: var(--stagger-step);
+  }
+  .stagger-2 {
+    animation-delay: calc(var(--stagger-step) * 2);
+  }
+  .stagger-3 {
+    animation-delay: calc(var(--stagger-step) * 3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger-1,
+  .stagger-2,
+  .stagger-3 {
+    animation-delay: 0ms;
+  }
 }

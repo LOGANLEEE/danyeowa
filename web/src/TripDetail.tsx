@@ -99,11 +99,11 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
   }
 
   return (
-    <div className="flex w-full max-w-xl flex-col gap-4">
+    <div className="entrance flex w-full max-w-xl flex-col gap-4">
       <button
         type="button"
         onClick={onBack}
-        className="self-start rounded border border-edge px-3 py-2 text-ink hover:border-ink-muted"
+        className="self-start rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
       >
         Back
       </button>
@@ -122,7 +122,7 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
                     type="button"
                     data-testid="edit-leg"
                     onClick={() => startEdit(flight)}
-                    className="rounded border border-edge px-2 py-1 text-sm text-ink hover:border-ink-muted"
+                    className="rounded border border-edge px-2 py-1 text-sm text-ink transition-colors duration-[120ms] hover:border-ink-muted"
                   >
                     Edit
                   </button>
@@ -139,7 +139,7 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
                     type="datetime-local"
                     value={edits.dep}
                     onChange={(e) => setEdits({ ...edits, dep: e.target.value })}
-                    className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
+                    className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
                   />
 
                   <label htmlFor={`arr-${flight.id}`} className="text-sm text-ink-muted">
@@ -150,7 +150,7 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
                     type="datetime-local"
                     value={edits.arr}
                     onChange={(e) => setEdits({ ...edits, arr: e.target.value })}
-                    className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
+                    className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
                   />
 
                   <label htmlFor={`report-${flight.id}`} className="text-sm text-amber">
@@ -161,7 +161,7 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
                     type="datetime-local"
                     value={edits.report}
                     onChange={(e) => setEdits({ ...edits, report: e.target.value })}
-                    className="num rounded border border-edge bg-raised px-3 py-2 text-amber-num outline-none focus:border-amber"
+                    className="num rounded border border-edge bg-raised px-3 py-2 text-amber-num outline-none transition-colors duration-[120ms] focus:border-amber"
                   />
 
                   <div className="flex gap-2">
@@ -170,14 +170,14 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
                       data-testid="save-leg"
                       disabled={saving}
                       onClick={() => saveEdit(flight)}
-                      className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110 disabled:opacity-50"
+                      className="rounded bg-amber px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
                     >
                       Save
                     </button>
                     <button
                       type="button"
                       onClick={cancelEdit}
-                      className="rounded border border-edge px-3 py-2 text-ink hover:border-ink-muted"
+                      className="rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
                     >
                       Cancel
                     </button>
@@ -213,14 +213,14 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
               data-testid="confirm-delete"
               disabled={deleting}
               onClick={confirmDelete}
-              className="rounded bg-raised px-3 py-2 font-medium text-ink-bright border border-edge hover:border-ink-muted disabled:opacity-50"
+              className="rounded bg-raised px-3 py-2 font-medium text-ink-bright border border-edge transition-colors duration-[120ms] hover:border-ink-muted disabled:opacity-50"
             >
               Delete
             </button>
             <button
               type="button"
               onClick={() => setConfirmingDelete(false)}
-              className="rounded border border-edge px-3 py-2 text-ink hover:border-ink-muted"
+              className="rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
             >
               Cancel
             </button>
@@ -231,7 +231,7 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
           type="button"
           data-testid="delete-trip"
           onClick={() => setConfirmingDelete(true)}
-          className="self-start rounded border border-edge px-3 py-2 text-ink hover:border-ink-muted"
+          className="self-start rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
         >
           Delete trip
         </button>

@@ -54,11 +54,7 @@ export default function App() {
   return (
     <div className="flex min-h-screen flex-col bg-ground text-ink">
       <header className="flex items-center justify-between border-b border-edge px-4 py-3">
-        {isLanding ? (
-          <span className="text-xl font-semibold text-ink-bright" aria-hidden="true">
-            roaster<span className="text-amber">·me</span>
-          </span>
-        ) : (
+        {!isLanding && (
           <h1 className="text-xl font-semibold text-ink-bright">
             roaster<span className="text-amber">·me</span>
           </h1>

@@ -46,13 +46,13 @@ export default function Login({ onSignedIn, onBack }: Props) {
     return (
       <form
         onSubmit={handleSendCode}
-        className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
+        className="entrance flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
       >
         {onBack && (
           <button
             type="button"
             onClick={onBack}
-            className="self-start text-sm text-ink-muted hover:text-ink"
+            className="self-start text-sm text-ink-muted transition-colors duration-[120ms] hover:text-ink"
           >
             ← back
           </button>
@@ -67,11 +67,11 @@ export default function Login({ onSignedIn, onBack }: Props) {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
+          className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
         />
         <button
           type="submit"
-          className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110"
+          className="rounded bg-amber px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
         >
           Send code
         </button>
@@ -87,13 +87,13 @@ export default function Login({ onSignedIn, onBack }: Props) {
   return (
     <form
       onSubmit={handleSignIn}
-      className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
+      className="entrance flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
     >
       {onBack && (
         <button
           type="button"
           onClick={onBack}
-          className="self-start text-sm text-ink-muted hover:text-ink"
+          className="self-start text-sm text-ink-muted transition-colors duration-[120ms] hover:text-ink"
         >
           ← back
         </button>
@@ -110,11 +110,11 @@ export default function Login({ onSignedIn, onBack }: Props) {
         required
         value={code}
         onChange={(e) => setCode(e.target.value)}
-        className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none focus:border-amber"
+        className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
       />
       <button
         type="submit"
-        className="rounded bg-amber px-3 py-2 font-medium text-ground hover:brightness-110"
+        className="rounded bg-amber px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
       >
         Sign in
       </button>
