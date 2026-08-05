@@ -14,10 +14,7 @@ describe("email OTP send", () => {
     expect(otp).toMatch(/^\d{6}$/);
   });
 
-  // Task 3 mounts createAuth(env) on the Hono app's /api/auth/* route.
-  // Until then, SELF-fetch hits no handler and 404s — this is the red state
-  // Task 3 turns green by wiring the middleware + route from the research doc.
-  it.fails("sends a dev OTP via the SELF-mounted /api/auth route (Task 3)", async () => {
+  it("sends a dev OTP via the SELF-mounted /api/auth route (Task 3)", async () => {
     const res = await SELF.fetch("https://example.com/api/auth/email-otp/send-verification-otp", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
