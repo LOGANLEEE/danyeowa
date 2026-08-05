@@ -9,15 +9,15 @@ coverage/
 .superpowers/
 
 # venv/build artifacts pending manual removal (sandbox rm -rf blocked) — see task-1-report.md
-.expo/
-.yarn/
-android/
-ios/
+/.expo/
+/.yarn/
+/android/
+/ios/
 expo-env.d.ts
 EK_flightMapping.json
-lib/
+/lib/
 pyvenv.cfg
-include/
-bin/
-path/
-python/
+/include/
+/bin/
+/path/
+/python/
