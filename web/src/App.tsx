@@ -2,12 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import type { HealthResponse, Me } from "@roaster/shared";
 import { authClient } from "./auth-client";
 import CrewHome from "./CrewHome";
+import Landing from "./Landing";
 import Login from "./Login";
 import TripForm from "./TripForm";
+
+type SignedOutView = "landing" | "login";
 
 export default function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
+  const [signedOutView, setSignedOutView] = useState<SignedOutView>("landing");
   const [showTripForm, setShowTripForm] = useState(false);
   const [tripsVersion, setTripsVersion] = useState(0);
   const [now, setNow] = useState(() => new Date());
@@ -64,7 +68,11 @@ export default function App() {
         {me === "loading" ? (
           <p className="text-ink-muted">loading…</p>
         ) : me === null ? (
-          <Login onSignedIn={loadMe} />
+          signedOutView === "landing" ? (
+            <Landing onSignIn={() => setSignedOutView("login")} />
+          ) : (
+            <Login onSignedIn={loadMe} onBack={() => setSignedOutView("landing")} />
+          )
         ) : showTripForm ? (
           <TripForm
             onSubmitted={() => {

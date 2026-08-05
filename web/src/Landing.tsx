@@ -1,0 +1,71 @@
+type Props = { onSignIn: () => void };
+
+export default function Landing({ onSignIn }: Props) {
+  return (
+    <div className="flex w-full max-w-md flex-col items-center gap-8 text-center">
+      <div className="flex flex-col gap-3">
+        <h1 className="text-3xl font-semibold text-ink-bright">
+          roaster<span className="text-amber">·me</span>
+        </h1>
+        <p className="text-lg font-semibold text-ink-bright">
+          Your flight roster, shared with the people waiting for you
+        </p>
+        <p className="text-sm text-ink-muted">
+          Cabin-crew roster app: enter trips fast, report-time-first, family follows along.
+        </p>
+      </div>
+
+      {/* Mock next-duty card — static sample, mirrors CrewHome's next duty card */}
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-edge bg-surface p-4 text-left">
+        <div>
+          <p className="text-lg font-semibold text-ink-bright">DXB → AKL</p>
+          <p className="text-sm text-ink-muted">EK448</p>
+        </div>
+
+        <div className="rounded border border-edge bg-raised p-3">
+          <p className="text-xs uppercase text-ink-muted">Report</p>
+          <p className="num text-3xl font-semibold text-amber-num">08:45</p>
+          <p className="text-sm text-ink-muted">
+            leave home by <span className="num">07:50</span>
+          </p>
+        </div>
+
+        <p className="num text-sm text-ink-muted">dep 10:45 → arr 06:20+1</p>
+      </div>
+
+      <ul className="flex w-full flex-col gap-3 text-left text-sm">
+        <li className="flex gap-2">
+          <span className="text-amber" aria-hidden="true">
+            •
+          </span>
+          <span className="text-ink">Report-time-first schedule — built for crew, not passengers</span>
+        </li>
+        <li className="flex gap-2">
+          <span className="text-amber" aria-hidden="true">
+            •
+          </span>
+          <span className="text-ink">One-tap trip entry with airport autofill</span>
+        </li>
+        <li className="flex gap-2">
+          <span className="text-amber" aria-hidden="true">
+            •
+          </span>
+          <span className="text-ink">
+            Share with family — they see when you're home{" "}
+            <span className="rounded border border-edge px-1.5 py-0.5 text-xs text-ink-muted">
+              coming soon
+            </span>
+          </span>
+        </li>
+      </ul>
+
+      <button
+        type="button"
+        onClick={onSignIn}
+        className="w-full rounded bg-amber px-3 py-3 font-medium text-ground hover:brightness-110"
+      >
+        Sign in with email
+      </button>
+    </div>
+  );
+}
