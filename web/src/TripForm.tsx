@@ -361,7 +361,7 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
                   <p className="text-ink-bright">
                     {leg.origin} → {leg.dest}
                   </p>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <label htmlFor={`autofill-dep-${leg.legSeq}`} className="text-sm text-ink-muted">
                       Dep
                     </label>
@@ -371,20 +371,24 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
                       type="time"
                       value={leg.depTime}
                       onChange={(e) => updateAutofillLeg(index, { depTime: e.target.value })}
-                      className="num rounded border border-edge bg-surface px-2 py-1 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
+                      className="num min-w-[5.5rem] rounded border border-edge bg-surface px-2 py-1 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
                     />
                     <label htmlFor={`autofill-arr-${leg.legSeq}`} className="text-sm text-ink-muted">
                       Arr
                     </label>
-                    <input
-                      id={`autofill-arr-${leg.legSeq}`}
-                      data-testid="autofill-arr"
-                      type="time"
-                      value={leg.arrTime}
-                      onChange={(e) => updateAutofillLeg(index, { arrTime: e.target.value })}
-                      className="num rounded border border-edge bg-surface px-2 py-1 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
-                    />
-                    {leg.dayOffset > 0 && <sup className="num text-ink-muted">+{leg.dayOffset} day</sup>}
+                    <span className="inline-flex items-center gap-0.5">
+                      <input
+                        id={`autofill-arr-${leg.legSeq}`}
+                        data-testid="autofill-arr"
+                        type="time"
+                        value={leg.arrTime}
+                        onChange={(e) => updateAutofillLeg(index, { arrTime: e.target.value })}
+                        className="num min-w-[5.5rem] rounded border border-edge bg-surface px-2 py-1 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
+                      />
+                      {leg.dayOffset > 0 && (
+                        <sup className="num text-ink-muted">+{leg.dayOffset}</sup>
+                      )}
+                    </span>
                   </div>
 
                   {isEditingReport ? (
