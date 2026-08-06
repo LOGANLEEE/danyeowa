@@ -283,6 +283,71 @@ describe("CalendarHome", () => {
     vi.useRealTimers();
   });
 
+  it("hides the stale 'No trips yet' empty state and its CTA once a day is marked optimistically (fresh account, first add)", async () => {
+    vi.mocked(getTrips).mockResolvedValue([]);
+    vi.mocked(confirmSchedule).mockResolvedValue(undefined);
+    vi.mocked(lookupSchedule).mockResolvedValue({
+      legs: [
+        {
+          legSeq: 0,
+          origin: "DXB",
+          dest: "LHR",
+          depLocal: "09:15",
+          arrLocal: "13:35",
+          dayOffset: 0,
+          originTz: "Asia/Dubai",
+          destTz: "Europe/London",
+          confirmCount: 3,
+        },
+      ],
+    });
+    vi.mocked(createTrip).mockResolvedValue({
+      id: "trip-fresh",
+      userId: "u1",
+      label: null,
+      createdAt: Date.now(),
+      flights: [
+        {
+          id: "fresh-f1",
+          tripId: "trip-fresh",
+          userId: "u1",
+          flightNo: "EK001",
+          origin: "DXB",
+          dest: "LHR",
+          depUtc: "2026-08-20T05:15:00.000Z",
+          arrUtc: "2026-08-20T12:35:00.000Z",
+          reportUtc: "2026-08-20T03:45:00.000Z",
+          depTz: "Asia/Dubai",
+          arrTz: "Europe/London",
+          source: "manual",
+          notes: null,
+          legSeq: 0,
+        },
+      ],
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    render(<CalendarHome now={now} />);
+    expect(await screen.findByText(/no trips yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /add your first/i })).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+    await user.type(screen.getByTestId("flightno-input"), "ek001");
+    await vi.advanceTimersByTimeAsync(400);
+    await screen.findByTestId("autofill-card");
+    await user.click(screen.getByRole("button", { name: /add to roster/i }));
+    await screen.findByTestId("rapid-banner");
+
+    // The sheet is still open (rapid-entry chaining), but the empty-state text/CTA behind
+    // it must be gone now that a day has been marked optimistically - trips is still []
+    // (no refetch until Done), so without this fix the stale empty state would still show.
+    expect(screen.queryByText(/no trips yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add your first/i })).not.toBeInTheDocument();
+
+    vi.useRealTimers();
+  });
+
   it("skips to the next trip-free day when today already has a trip", async () => {
     vi.mocked(getTrips).mockResolvedValue([inProgressTrip]);
     // now falls on inProgressTrip's away span (2026-08-09..2026-08-12 Asia/Dubai).

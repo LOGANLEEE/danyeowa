@@ -109,14 +109,22 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           onOpenTrip={() => {}}
           optimisticIsoDates={optimisticDays}
         />
-        <p className="text-ink-muted">No trips yet — add your first</p>
-        <button
-          type="button"
-          onClick={() => setSheetIsoDate(localDateKey(now.toISOString(), homeTz))}
-          className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
-        >
-          Add your first trip
-        </button>
+        {/* trips stays [] during rapid entry (no refetch until dismiss) - once a day has
+            been marked optimistically, this "no trips yet" empty state + its CTA would
+            otherwise stay stale, visible behind the open sheet, contradicting what the
+            grid above already shows. */}
+        {optimisticDays.size === 0 && (
+          <>
+            <p className="text-ink-muted">No trips yet — add your first</p>
+            <button
+              type="button"
+              onClick={() => setSheetIsoDate(localDateKey(now.toISOString(), homeTz))}
+              className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+            >
+              Add your first trip
+            </button>
+          </>
+        )}
         {sheetIsoDate && (
           <DaySheet
             isoDate={sheetIsoDate}

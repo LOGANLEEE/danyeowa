@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, EK412, pickCalendarDay, signInThroughUi, signOutThroughUi } from "./helpers";
+import { E2E_EMAIL, EK412, humanDateLabel, pickCalendarDay, signInThroughUi, signOutThroughUi } from "./helpers";
 
 /**
  * Full e2e coverage of the Plan 6 tabbed, calendar-first UX against a real `wrangler dev`
@@ -81,8 +81,8 @@ test("sign-in -> calendar home -> day sheet -> autofill add -> rapid chain -> Tr
 
   const banner = page.getByTestId("rapid-banner");
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText(`Added ${firstIso}`);
-  await expect(page.getByTestId("rapid-next-date")).toHaveText(suggestedNext);
+  await expect(banner).toContainText(`Added ${humanDateLabel(firstIso)}`);
+  await expect(page.getByTestId("rapid-next-date")).toHaveText(humanDateLabel(suggestedNext));
 
   // Flight-no field cleared + refocused. Recent-flight chips derive from the trips already
   // fetched when the sheet opened (no live update mid-session — see useRecentFlights),
@@ -109,7 +109,7 @@ test("sign-in -> calendar home -> day sheet -> autofill add -> rapid chain -> Tr
   await recentChip.click();
   await expect(autofillCard).toBeVisible();
   await page.getByRole("button", { name: /add to roster/i }).click();
-  await expect(banner).toContainText(`Added ${suggestedNext}`);
+  await expect(banner).toContainText(`Added ${humanDateLabel(suggestedNext)}`);
 
   // Done again -> the first pairing's span AND the second pairing's span are all marked.
   await page.getByTestId("done-button").click();

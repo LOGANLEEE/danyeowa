@@ -110,4 +110,29 @@ describe("useRecentFlights", () => {
     };
     expect(useRecentFlights([trip])).toEqual(["EK449", "EK448"]);
   });
+
+  it("puts session flight numbers first, most-recent-added first, ahead of anything from trips", () => {
+    // Fresh session (trips=[]) - useRecentFlights alone would see nothing; the caller's
+    // own session-local adds (most-recent-first) must still surface as chips.
+    expect(useRecentFlights([], ["EK412"])).toEqual(["EK412"]);
+    expect(useRecentFlights([], ["EK002", "EK412"])).toEqual(["EK002", "EK412"]);
+  });
+
+  it("de-duplicates a session flight number that also appears in trips, keeping the session slot", () => {
+    const trips = [tripWith("t1", "EK001", "2026-08-01T00:00:00.000Z")];
+    const result = useRecentFlights(trips, ["EK001"]);
+    expect(result.filter((f) => f === "EK001")).toHaveLength(1);
+    expect(result).toEqual(["EK001"]);
+  });
+
+  it("still caps the merged (session + trips) result at 4", () => {
+    const trips = [
+      tripWith("t1", "EK001", "2026-08-01T00:00:00.000Z"),
+      tripWith("t2", "EK002", "2026-08-02T00:00:00.000Z"),
+      tripWith("t3", "EK003", "2026-08-03T00:00:00.000Z"),
+    ];
+    const result = useRecentFlights(trips, ["EK412", "EK413"]);
+    expect(result).toHaveLength(4);
+    expect(result).toEqual(["EK412", "EK413", "EK003", "EK002"]);
+  });
 });

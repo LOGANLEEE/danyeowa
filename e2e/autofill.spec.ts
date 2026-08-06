@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { UNKNOWN_FLIGHT_NO, pickCalendarDay, signInThroughUi, signOutThroughUi } from "./helpers";
+import { UNKNOWN_FLIGHT_NO, humanDateLabel, pickCalendarDay, signInThroughUi, signOutThroughUi } from "./helpers";
 
 /**
  * Manual-fallback + multi-leg coverage for the day sheet's add flow, complementing
@@ -78,9 +78,9 @@ test("manual-entry fallback joins the rapid chain, then EK384 multi-leg smoke", 
   // flight-no field + Done, on the day after PICKED_DATE (nothing else on the roster to skip).
   const banner = page.getByTestId("rapid-banner");
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText(`Added ${PICKED_DATE}`);
+  await expect(banner).toContainText(`Added ${humanDateLabel(PICKED_DATE)}`);
   const nextIso = "2026-11-13";
-  await expect(page.getByTestId("rapid-next-date")).toHaveText(nextIso);
+  await expect(page.getByTestId("rapid-next-date")).toHaveText(humanDateLabel(nextIso));
   await expect(page.getByTestId("flightno-input")).toHaveValue("");
 
   // --- Second manual add on the suggested next date, via the same open sheet. ---
@@ -97,7 +97,7 @@ test("manual-entry fallback joins the rapid chain, then EK384 multi-leg smoke", 
   await depInput.fill(`${nextIso}T09:15`);
   await page.getByLabel(/arrival \(local\)/i).fill(`${nextIso}T13:35`);
   await page.getByRole("button", { name: /add to roster/i }).click();
-  await expect(banner).toContainText(`Added ${nextIso}`);
+  await expect(banner).toContainText(`Added ${humanDateLabel(nextIso)}`);
 
   await page.getByTestId("done-button").click();
   await expect(sheet).not.toBeVisible();

@@ -1,9 +1,21 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import DaySheet from "./DaySheet";
+import DaySheet, { humanDateLabel } from "./DaySheet";
 import { confirmSchedule, createTrip, deleteTrip, getAirport, lookupSchedule, patchFlight } from "./api";
 import type { TripWithFlights } from "./api";
+
+describe("humanDateLabel", () => {
+  it("formats a local ISO date as weekday short + day + month short", () => {
+    expect(humanDateLabel("2026-08-20", "Asia/Dubai")).toBe("Thu 20 Aug");
+  });
+
+  it("uses the given home tz's own calendar, not UTC's", () => {
+    // 2026-08-20 noon UTC is already 2026-08-21 early morning in Pacific/Auckland
+    // (UTC+12), proving the tz argument actually shifts the rendered calendar date.
+    expect(humanDateLabel("2026-08-20", "Pacific/Auckland")).toBe("Fri 21 Aug");
+  });
+});
 
 vi.mock("./api", () => ({
   createTrip: vi.fn(),
@@ -146,7 +158,24 @@ describe("DaySheet", () => {
       userId: "u1",
       label: null,
       createdAt: Date.now(),
-      flights: [],
+      flights: [
+        {
+          id: "new-f1",
+          tripId: "trip-1",
+          userId: "u1",
+          flightNo: "EK001",
+          origin: "DXB",
+          dest: "LHR",
+          depUtc: "2026-08-20T05:15:00.000Z",
+          arrUtc: "2026-08-20T12:35:00.000Z",
+          reportUtc: "2026-08-20T03:45:00.000Z",
+          depTz: "Asia/Dubai",
+          arrTz: "Europe/London",
+          source: "manual",
+          notes: null,
+          legSeq: 0,
+        },
+      ],
     });
     const onChanged = vi.fn();
     const onClose = vi.fn();
@@ -199,6 +228,11 @@ describe("DaySheet", () => {
     const input = screen.getByTestId("flightno-input") as HTMLInputElement;
     expect(input.value).toBe("");
     expect(document.activeElement).toBe(input);
+
+    // Fresh session (trips=[] - useRecentFlights alone would see nothing until the next
+    // refetch): the just-added flight is still offered as a recent-flight chip immediately,
+    // fed from this session's own adds rather than the (stale-until-Done) trips prop.
+    expect(screen.getByTestId("recent-chip-EK001")).toBeInTheDocument();
   });
 
   it("rapid entry: recent-flight chips render from the trips fixture, and tapping one fills + immediately looks up", async () => {
@@ -295,7 +329,7 @@ describe("DaySheet", () => {
     await user.click(screen.getByRole("button", { name: /add to roster/i }));
 
     const banner = await screen.findByTestId("rapid-banner");
-    expect(banner).toHaveTextContent("2026-08-22");
+    expect(banner).toHaveTextContent("Sat 22 Aug");
   });
 
   it("rapid entry: next-date suggestion skips the FULL span of a pre-existing multi-day trip (not just its departure date)", async () => {
@@ -356,7 +390,7 @@ describe("DaySheet", () => {
     // Must skip past the entire existing span (21st-23rd), landing on the 24th - not the
     // 21st (the trip's own dep date, which would be the bug if only dep were checked).
     const banner = await screen.findByTestId("rapid-banner");
-    expect(banner).toHaveTextContent("2026-08-24");
+    expect(banner).toHaveTextContent("Mon 24 Aug");
   });
 
   it("rapid entry: next-date suggestion skips the FULL span of a multi-day trip just added this session (EK412-shape, DXB->SYD->CHC)", async () => {
@@ -444,7 +478,7 @@ describe("DaySheet", () => {
     // "next:" must be the day AFTER the trip's span ends (2026-08-23), not 2026-08-21 or
     // 2026-08-22 - both of which fall inside the just-saved trip's own away-span.
     const banner = await screen.findByTestId("rapid-banner");
-    expect(banner).toHaveTextContent("2026-08-23");
+    expect(banner).toHaveTextContent("Sun 23 Aug");
   });
 
   it("rapid entry: tapping the next-date label shows a 7-day date strip to adjust", async () => {

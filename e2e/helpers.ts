@@ -59,6 +59,23 @@ export const EK412 = {
 };
 
 /**
+ * Humanizes a local ISO calendar date ("YYYY-MM-DD") as "Thu 10 Sep" (weekday short + day
+ * + month short), matching DaySheet.tsx's humanDateLabel — the rapid-entry banner renders
+ * dates this way, not as raw ISO. All the ISO dates this suite feeds in (EK412.pickedDate
+ * etc.) are already home-base (Asia/Dubai) local calendar dates, so formatting in UTC here
+ * (rather than re-deriving Asia/Dubai) reads the same calendar day back out.
+ */
+export function humanDateLabel(iso: string): string {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  return fmt.format(new Date(`${iso}T00:00:00.000Z`));
+}
+
+/**
  * Clicks a calendar day cell identified by `iso` ("YYYY-MM-DD"), advancing the visible
  * month via the "next month" chevron first if the cell isn't rendered yet (the day-picker
  * and trip calendars both default to the current month view and only render 6 weeks of

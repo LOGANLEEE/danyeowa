@@ -88,12 +88,17 @@ function legEditsFrom(flight: Flight): LegEdits {
   };
 }
 
+/** Humanizes a local ISO calendar date ("YYYY-MM-DD") as "Wed 20 Aug" (weekday short + day
+ * + month short) using the home tz's own calendar — reuses formatLocal's withDate branch
+ * (weekday/day/month/hour/minute) by feeding it a synthetic noon-UTC instant for that
+ * calendar date (noon avoids any tz day-boundary slippage for all realistic offsets), then
+ * drops the time portion. */
+export function humanDateLabel(isoDate: string, homeTz: string): string {
+  return formatLocal(`${isoDate}T12:00:00.000Z`, homeTz, { withDate: true }).split(" ").slice(0, 3).join(" ");
+}
+
 function dayTitle(isoDate: string, homeTz: string, hasTrip: boolean): string {
-  // Render the picked calendar date's weekday/day/month using the home tz, matching the
-  // rest of the app's date formatting (formatLocal's withDate branch) by feeding it a
-  // synthetic noon-UTC instant for that calendar date (noon avoids any tz day-boundary
-  // slippage for all realistic offsets).
-  const label = formatLocal(`${isoDate}T12:00:00.000Z`, homeTz, { withDate: true }).split(" ").slice(0, 3).join(" ");
+  const label = humanDateLabel(isoDate, homeTz);
   return hasTrip ? label : `${label} — add trip`;
 }
 
@@ -343,7 +348,11 @@ function AddTripContent({
   const [lastAdded, setLastAdded] = useState<string | null>(null);
   const [nextDate, setNextDate] = useState<string | null>(null);
   const [showDateStrip, setShowDateStrip] = useState(false);
-  const recentFlights = useRecentFlights(trips);
+  // Flight numbers added THIS session, most-recent-first — `trips` is stale until the
+  // sheet's next refetch (only fires on dismiss), so a fresh session needs its own record
+  // to offer the just-added flight as a chip immediately, not just after Done.
+  const [sessionFlightNos, setSessionFlightNos] = useState<string[]>([]);
+  const recentFlights = useRecentFlights(trips, sessionFlightNos);
 
   // Single shared post-save transition for BOTH entry paths (autofill and manual): stamps
   // the rapid-entry "added" state, advances to the next suggested date, marks the day
@@ -373,6 +382,10 @@ function AddTripContent({
       setPickedDate(suggestion);
       setShowDateStrip(false);
       onAdded(addedDate);
+      const savedFlightNo = createdTrip.flights[0]?.flightNo;
+      if (savedFlightNo) {
+        setSessionFlightNos((prev) => [savedFlightNo, ...prev.filter((f) => f !== savedFlightNo)]);
+      }
       entry.switchToFlightNo();
       entry.setFlightNo("");
     },
@@ -391,7 +404,7 @@ function AddTripContent({
       <div className="flex flex-col gap-4">
         {lastAdded && (
           <div data-testid="rapid-banner" className="rounded border border-edge bg-raised p-3 text-sm text-ink">
-            <p>✓ Added {lastAdded}</p>
+            <p>✓ Added {humanDateLabel(lastAdded, homeTz)}</p>
             <p>
               next:{" "}
               <button
@@ -400,7 +413,7 @@ function AddTripContent({
                 onClick={() => setShowDateStrip((v) => !v)}
                 className="underline decoration-dotted"
               >
-                {nextDate}
+                {nextDate && humanDateLabel(nextDate, homeTz)}
               </button>
             </p>
             {showDateStrip && (
