@@ -1,0 +1,1522 @@
+[
+  {
+    "flightNo": "EK001",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "LHR",
+    "depLocal": "08:35",
+    "arrLocal": "12:40",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK002",
+    "legSeq": 0,
+    "origin": "LHR",
+    "dest": "DXB",
+    "depLocal": "14:15",
+    "arrLocal": "00:35",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK003",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "LHR",
+    "depLocal": "20:15",
+    "arrLocal": "00:25",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK004",
+    "legSeq": 0,
+    "origin": "LHR",
+    "dest": "DXB",
+    "depLocal": "21:40",
+    "arrLocal": "08:15",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK073",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "CDG",
+    "depLocal": "08:25",
+    "arrLocal": "13:45",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK074",
+    "legSeq": 0,
+    "origin": "CDG",
+    "dest": "DXB",
+    "depLocal": "21:15",
+    "arrLocal": "07:15",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK203",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "JFK",
+    "depLocal": "02:45",
+    "arrLocal": "08:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK204",
+    "legSeq": 0,
+    "origin": "JFK",
+    "dest": "DXB",
+    "depLocal": "22:35",
+    "arrLocal": "20:00",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK412",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "SYD",
+    "depLocal": "10:15",
+    "arrLocal": "06:00",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK412",
+    "legSeq": 1,
+    "origin": "SYD",
+    "dest": "CHC",
+    "depLocal": "07:45",
+    "arrLocal": "12:55",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK413",
+    "legSeq": 0,
+    "origin": "CHC",
+    "dest": "SYD",
+    "depLocal": "14:00",
+    "arrLocal": "16:00",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK413",
+    "legSeq": 1,
+    "origin": "SYD",
+    "dest": "DXB",
+    "depLocal": "21:40",
+    "arrLocal": "06:15",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK448",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "AKL",
+    "depLocal": "10:25",
+    "arrLocal": "10:05",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK449",
+    "legSeq": 0,
+    "origin": "AKL",
+    "dest": "DXB",
+    "depLocal": "20:20",
+    "arrLocal": "05:05",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK384",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BKK",
+    "depLocal": "09:20",
+    "arrLocal": "18:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK384",
+    "legSeq": 1,
+    "origin": "BKK",
+    "dest": "HKG",
+    "depLocal": "14:30",
+    "arrLocal": "18:20",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK385",
+    "legSeq": 0,
+    "origin": "HKG",
+    "dest": "BKK",
+    "depLocal": "20:20",
+    "arrLocal": "22:10",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK385",
+    "legSeq": 1,
+    "origin": "BKK",
+    "dest": "DXB",
+    "depLocal": "00:05",
+    "arrLocal": "03:55",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK404",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "MEL",
+    "depLocal": "21:50",
+    "arrLocal": "18:15",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK405",
+    "legSeq": 0,
+    "origin": "MEL",
+    "dest": "DXB",
+    "depLocal": "09:35",
+    "arrLocal": "17:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK500",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BOM",
+    "depLocal": "21:40",
+    "arrLocal": "02:25",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK501",
+    "legSeq": 0,
+    "origin": "BOM",
+    "dest": "DXB",
+    "depLocal": "04:15",
+    "arrLocal": "06:10",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK318",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "NRT",
+    "depLocal": "02:55",
+    "arrLocal": "18:30",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK319",
+    "legSeq": 0,
+    "origin": "NRT",
+    "dest": "DXB",
+    "depLocal": "21:50",
+    "arrLocal": "04:05",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK011",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "LGW",
+    "depLocal": "08:50",
+    "arrLocal": "13:10",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK012",
+    "legSeq": 0,
+    "origin": "LGW",
+    "dest": "DXB",
+    "depLocal": "14:35",
+    "arrLocal": "00:45",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK029",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "MAN",
+    "depLocal": "08:05",
+    "arrLocal": "12:20",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK030",
+    "legSeq": 0,
+    "origin": "MAN",
+    "dest": "DXB",
+    "depLocal": "14:05",
+    "arrLocal": "00:35",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK043",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "DME",
+    "depLocal": "03:35",
+    "arrLocal": "08:10",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK044",
+    "legSeq": 0,
+    "origin": "DME",
+    "dest": "DXB",
+    "depLocal": "09:55",
+    "arrLocal": "16:00",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK087",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "ZRH",
+    "depLocal": "08:20",
+    "arrLocal": "12:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK088",
+    "legSeq": 0,
+    "origin": "ZRH",
+    "dest": "DXB",
+    "depLocal": "14:00",
+    "arrLocal": "23:10",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK141",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "AMS",
+    "depLocal": "03:20",
+    "arrLocal": "07:45",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK142",
+    "legSeq": 0,
+    "origin": "AMS",
+    "dest": "DXB",
+    "depLocal": "09:35",
+    "arrLocal": "19:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK211",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "IAH",
+    "depLocal": "09:35",
+    "arrLocal": "15:10",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK212",
+    "legSeq": 0,
+    "origin": "IAH",
+    "dest": "DXB",
+    "depLocal": "19:50",
+    "arrLocal": "20:00",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK215",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "LAX",
+    "depLocal": "08:30",
+    "arrLocal": "13:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK216",
+    "legSeq": 0,
+    "origin": "LAX",
+    "dest": "DXB",
+    "depLocal": "22:40",
+    "arrLocal": "06:05",
+    "dayOffset": 2,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK241",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "YYZ",
+    "depLocal": "03:15",
+    "arrLocal": "09:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK242",
+    "legSeq": 0,
+    "origin": "YYZ",
+    "dest": "DXB",
+    "depLocal": "13:10",
+    "arrLocal": "10:55",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK261",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "GRU",
+    "depLocal": "09:50",
+    "arrLocal": "17:10",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK262",
+    "legSeq": 0,
+    "origin": "GRU",
+    "dest": "DXB",
+    "depLocal": "21:35",
+    "arrLocal": "22:30",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK322",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "ICN",
+    "depLocal": "03:50",
+    "arrLocal": "17:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK323",
+    "legSeq": 0,
+    "origin": "ICN",
+    "dest": "DXB",
+    "depLocal": "19:35",
+    "arrLocal": "00:30",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK432",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BNE",
+    "depLocal": "02:25",
+    "arrLocal": "22:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK433",
+    "legSeq": 0,
+    "origin": "BNE",
+    "dest": "DXB",
+    "depLocal": "13:05",
+    "arrLocal": "20:30",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK524",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "HYD",
+    "depLocal": "04:05",
+    "arrLocal": "08:55",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK525",
+    "legSeq": 0,
+    "origin": "HYD",
+    "dest": "DXB",
+    "depLocal": "10:35",
+    "arrLocal": "12:40",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK612",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "KHI",
+    "depLocal": "09:15",
+    "arrLocal": "11:45",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK613",
+    "legSeq": 0,
+    "origin": "KHI",
+    "dest": "DXB",
+    "depLocal": "13:25",
+    "arrLocal": "15:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK652",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "CMB",
+    "depLocal": "03:10",
+    "arrLocal": "10:00",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK653",
+    "legSeq": 0,
+    "origin": "CMB",
+    "dest": "DXB",
+    "depLocal": "11:40",
+    "arrLocal": "15:10",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK706",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "SEZ",
+    "depLocal": "02:35",
+    "arrLocal": "07:00",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK707",
+    "legSeq": 0,
+    "origin": "SEZ",
+    "dest": "DXB",
+    "depLocal": "08:40",
+    "arrLocal": "15:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK760",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "JNB",
+    "depLocal": "08:45",
+    "arrLocal": "14:05",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK761",
+    "legSeq": 0,
+    "origin": "JNB",
+    "dest": "DXB",
+    "depLocal": "22:35",
+    "arrLocal": "07:35",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK772",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "CPT",
+    "depLocal": "08:35",
+    "arrLocal": "14:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK773",
+    "legSeq": 0,
+    "origin": "CPT",
+    "dest": "DXB",
+    "depLocal": "21:35",
+    "arrLocal": "07:00",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK038",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BHX",
+    "depLocal": "08:50",
+    "arrLocal": "13:00",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK039",
+    "legSeq": 0,
+    "origin": "BHX",
+    "dest": "DXB",
+    "depLocal": "14:35",
+    "arrLocal": "00:50",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK021",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "EDI",
+    "depLocal": "08:15",
+    "arrLocal": "12:50",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK022",
+    "legSeq": 0,
+    "origin": "EDI",
+    "dest": "DXB",
+    "depLocal": "14:45",
+    "arrLocal": "00:55",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK151",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "DUB",
+    "depLocal": "08:35",
+    "arrLocal": "13:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK152",
+    "legSeq": 0,
+    "origin": "DUB",
+    "dest": "DXB",
+    "depLocal": "14:55",
+    "arrLocal": "01:05",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK047",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "FRA",
+    "depLocal": "08:15",
+    "arrLocal": "12:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK048",
+    "legSeq": 0,
+    "origin": "FRA",
+    "dest": "DXB",
+    "depLocal": "14:05",
+    "arrLocal": "23:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK057",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "MUC",
+    "depLocal": "08:35",
+    "arrLocal": "12:45",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK058",
+    "legSeq": 0,
+    "origin": "MUC",
+    "dest": "DXB",
+    "depLocal": "14:20",
+    "arrLocal": "23:55",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK107",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "FCO",
+    "depLocal": "08:20",
+    "arrLocal": "12:20",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK108",
+    "legSeq": 0,
+    "origin": "FCO",
+    "dest": "DXB",
+    "depLocal": "13:55",
+    "arrLocal": "23:25",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK097",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BCN",
+    "depLocal": "08:20",
+    "arrLocal": "12:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK098",
+    "legSeq": 0,
+    "origin": "BCN",
+    "dest": "DXB",
+    "depLocal": "14:15",
+    "arrLocal": "00:05",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK123",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "MAD",
+    "depLocal": "08:10",
+    "arrLocal": "12:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK124",
+    "legSeq": 0,
+    "origin": "MAD",
+    "dest": "DXB",
+    "depLocal": "14:15",
+    "arrLocal": "00:15",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK131",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "IST",
+    "depLocal": "08:55",
+    "arrLocal": "11:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK132",
+    "legSeq": 0,
+    "origin": "IST",
+    "dest": "DXB",
+    "depLocal": "13:00",
+    "arrLocal": "19:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK051",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BRU",
+    "depLocal": "08:25",
+    "arrLocal": "12:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK052",
+    "legSeq": 0,
+    "origin": "BRU",
+    "dest": "DXB",
+    "depLocal": "14:05",
+    "arrLocal": "23:45",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK149",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "CPH",
+    "depLocal": "08:20",
+    "arrLocal": "12:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK150",
+    "legSeq": 0,
+    "origin": "CPH",
+    "dest": "DXB",
+    "depLocal": "14:05",
+    "arrLocal": "23:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK163",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "ARN",
+    "depLocal": "08:15",
+    "arrLocal": "12:40",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK164",
+    "legSeq": 0,
+    "origin": "ARN",
+    "dest": "DXB",
+    "depLocal": "14:15",
+    "arrLocal": "23:45",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK221",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BOS",
+    "depLocal": "09:20",
+    "arrLocal": "14:55",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK222",
+    "legSeq": 0,
+    "origin": "BOS",
+    "dest": "DXB",
+    "depLocal": "18:35",
+    "arrLocal": "18:30",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK231",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "ORD",
+    "depLocal": "09:00",
+    "arrLocal": "14:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK232",
+    "legSeq": 0,
+    "origin": "ORD",
+    "dest": "DXB",
+    "depLocal": "18:00",
+    "arrLocal": "18:15",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK225",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "SFO",
+    "depLocal": "08:40",
+    "arrLocal": "13:30",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK226",
+    "legSeq": 0,
+    "origin": "SFO",
+    "dest": "DXB",
+    "depLocal": "23:50",
+    "arrLocal": "07:15",
+    "dayOffset": 2,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK235",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "SEA",
+    "depLocal": "09:10",
+    "arrLocal": "13:40",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK236",
+    "legSeq": 0,
+    "origin": "SEA",
+    "dest": "DXB",
+    "depLocal": "22:55",
+    "arrLocal": "06:15",
+    "dayOffset": 2,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK217",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "DFW",
+    "depLocal": "09:25",
+    "arrLocal": "14:50",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK218",
+    "legSeq": 0,
+    "origin": "DFW",
+    "dest": "DXB",
+    "depLocal": "19:10",
+    "arrLocal": "19:05",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK205",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "MIA",
+    "depLocal": "09:40",
+    "arrLocal": "16:00",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK206",
+    "legSeq": 0,
+    "origin": "MIA",
+    "dest": "DXB",
+    "depLocal": "20:45",
+    "arrLocal": "20:20",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK247",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "EZE",
+    "depLocal": "09:55",
+    "arrLocal": "19:40",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK248",
+    "legSeq": 0,
+    "origin": "EZE",
+    "dest": "DXB",
+    "depLocal": "22:15",
+    "arrLocal": "23:50",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK354",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "PVG",
+    "depLocal": "03:45",
+    "arrLocal": "16:45",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK355",
+    "legSeq": 0,
+    "origin": "PVG",
+    "dest": "DXB",
+    "depLocal": "18:55",
+    "arrLocal": "23:40",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK302",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "PEK",
+    "depLocal": "03:35",
+    "arrLocal": "16:25",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK303",
+    "legSeq": 0,
+    "origin": "PEK",
+    "dest": "DXB",
+    "depLocal": "18:35",
+    "arrLocal": "23:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK362",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "CAN",
+    "depLocal": "03:40",
+    "arrLocal": "16:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK363",
+    "legSeq": 0,
+    "origin": "CAN",
+    "dest": "DXB",
+    "depLocal": "18:25",
+    "arrLocal": "22:55",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK372",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "TPE",
+    "depLocal": "03:15",
+    "arrLocal": "17:20",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK373",
+    "legSeq": 0,
+    "origin": "TPE",
+    "dest": "DXB",
+    "depLocal": "19:30",
+    "arrLocal": "23:55",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK418",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BKK",
+    "depLocal": "03:15",
+    "arrLocal": "12:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK419",
+    "legSeq": 0,
+    "origin": "BKK",
+    "dest": "DXB",
+    "depLocal": "14:20",
+    "arrLocal": "17:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK346",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "SIN",
+    "depLocal": "09:35",
+    "arrLocal": "21:25",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK347",
+    "legSeq": 0,
+    "origin": "SIN",
+    "dest": "DXB",
+    "depLocal": "23:55",
+    "arrLocal": "04:20",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK342",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "KUL",
+    "depLocal": "09:15",
+    "arrLocal": "20:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK343",
+    "legSeq": 0,
+    "origin": "KUL",
+    "dest": "DXB",
+    "depLocal": "22:45",
+    "arrLocal": "02:55",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK358",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "CGK",
+    "depLocal": "09:05",
+    "arrLocal": "19:55",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK359",
+    "legSeq": 0,
+    "origin": "CGK",
+    "dest": "DXB",
+    "depLocal": "22:00",
+    "arrLocal": "01:55",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK336",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "MNL",
+    "depLocal": "03:25",
+    "arrLocal": "17:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK337",
+    "legSeq": 0,
+    "origin": "MNL",
+    "dest": "DXB",
+    "depLocal": "19:45",
+    "arrLocal": "23:45",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK392",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "SGN",
+    "depLocal": "09:20",
+    "arrLocal": "20:05",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK393",
+    "legSeq": 0,
+    "origin": "SGN",
+    "dest": "DXB",
+    "depLocal": "22:15",
+    "arrLocal": "02:00",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK568",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BLR",
+    "depLocal": "03:55",
+    "arrLocal": "09:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK569",
+    "legSeq": 0,
+    "origin": "BLR",
+    "dest": "DXB",
+    "depLocal": "11:15",
+    "arrLocal": "13:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK510",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "DEL",
+    "depLocal": "04:00",
+    "arrLocal": "08:55",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK511",
+    "legSeq": 0,
+    "origin": "DEL",
+    "dest": "DXB",
+    "depLocal": "10:35",
+    "arrLocal": "12:20",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK540",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "MAA",
+    "depLocal": "03:45",
+    "arrLocal": "09:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK541",
+    "legSeq": 0,
+    "origin": "MAA",
+    "dest": "DXB",
+    "depLocal": "11:15",
+    "arrLocal": "13:05",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK576",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "CCU",
+    "depLocal": "04:10",
+    "arrLocal": "10:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK577",
+    "legSeq": 0,
+    "origin": "CCU",
+    "dest": "DXB",
+    "depLocal": "12:15",
+    "arrLocal": "14:40",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK862",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "AMM",
+    "depLocal": "08:50",
+    "arrLocal": "10:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK863",
+    "legSeq": 0,
+    "origin": "AMM",
+    "dest": "DXB",
+    "depLocal": "12:15",
+    "arrLocal": "18:25",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK958",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BEY",
+    "depLocal": "08:15",
+    "arrLocal": "10:20",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK959",
+    "legSeq": 0,
+    "origin": "BEY",
+    "dest": "DXB",
+    "depLocal": "12:00",
+    "arrLocal": "18:00",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK800",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "BAH",
+    "depLocal": "08:00",
+    "arrLocal": "08:45",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK801",
+    "legSeq": 0,
+    "origin": "BAH",
+    "dest": "DXB",
+    "depLocal": "09:45",
+    "arrLocal": "12:30",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK840",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "DOH",
+    "depLocal": "08:10",
+    "arrLocal": "08:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK841",
+    "legSeq": 0,
+    "origin": "DOH",
+    "dest": "DXB",
+    "depLocal": "09:45",
+    "arrLocal": "12:10",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK816",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "KWI",
+    "depLocal": "07:55",
+    "arrLocal": "09:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK817",
+    "legSeq": 0,
+    "origin": "KWI",
+    "dest": "DXB",
+    "depLocal": "10:15",
+    "arrLocal": "13:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK804",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "RUH",
+    "depLocal": "08:05",
+    "arrLocal": "09:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK805",
+    "legSeq": 0,
+    "origin": "RUH",
+    "dest": "DXB",
+    "depLocal": "10:15",
+    "arrLocal": "13:25",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK868",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "JED",
+    "depLocal": "08:00",
+    "arrLocal": "09:30",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK869",
+    "legSeq": 0,
+    "origin": "JED",
+    "dest": "DXB",
+    "depLocal": "10:30",
+    "arrLocal": "14:00",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK884",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "CAI",
+    "depLocal": "08:35",
+    "arrLocal": "10:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK885",
+    "legSeq": 0,
+    "origin": "CAI",
+    "dest": "DXB",
+    "depLocal": "12:15",
+    "arrLocal": "18:20",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK768",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "NBO",
+    "depLocal": "09:05",
+    "arrLocal": "12:55",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK769",
+    "legSeq": 0,
+    "origin": "NBO",
+    "dest": "DXB",
+    "depLocal": "14:35",
+    "arrLocal": "21:40",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK784",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "ADD",
+    "depLocal": "09:15",
+    "arrLocal": "12:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK785",
+    "legSeq": 0,
+    "origin": "ADD",
+    "dest": "DXB",
+    "depLocal": "13:55",
+    "arrLocal": "20:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK792",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "LOS",
+    "depLocal": "09:30",
+    "arrLocal": "15:35",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK793",
+    "legSeq": 0,
+    "origin": "LOS",
+    "dest": "DXB",
+    "depLocal": "17:15",
+    "arrLocal": "05:15",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK783",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "ACC",
+    "depLocal": "09:25",
+    "arrLocal": "15:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK782",
+    "legSeq": 0,
+    "origin": "ACC",
+    "dest": "DXB",
+    "depLocal": "17:00",
+    "arrLocal": "05:00",
+    "dayOffset": 1,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK553",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "AMD",
+    "depLocal": "04:20",
+    "arrLocal": "08:40",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK552",
+    "legSeq": 0,
+    "origin": "AMD",
+    "dest": "DXB",
+    "depLocal": "10:20",
+    "arrLocal": "12:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK522",
+    "legSeq": 0,
+    "origin": "DXB",
+    "dest": "COK",
+    "depLocal": "03:35",
+    "arrLocal": "09:15",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  },
+  {
+    "flightNo": "EK523",
+    "legSeq": 0,
+    "origin": "COK",
+    "dest": "DXB",
+    "depLocal": "10:55",
+    "arrLocal": "13:20",
+    "dayOffset": 0,
+    "daysOfWeek": "1234567"
+  }
+]

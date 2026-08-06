@@ -15,6 +15,13 @@
       "when": 1785943142740,
       "tag": "0001_military_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786018336606,
+      "tag": "0002_sweet_baron_zemo",
+      "breakpoints": true
     }
   ]
 }
