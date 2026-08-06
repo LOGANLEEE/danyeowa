@@ -1,4 +1,8 @@
-type EmailEnv = { RESEND_API_KEY?: string; DEV_OTP_FALLBACK?: string };
+type EmailEnv = { RESEND_API_KEY?: string; DEV_OTP_FALLBACK?: string; EMAIL_FROM?: string };
+
+// Resend test mode (no verified domain) only accepts this sender and only
+// delivers to the Resend account owner's own address.
+const DEFAULT_FROM = "Roaster Me <onboarding@resend.dev>";
 
 let lastDevOtp: string | null = null;
 export const getLastDevOtp = () => lastDevOtp;
@@ -19,7 +23,7 @@ export async function sendOtpEmail(env: EmailEnv, to: string, otp: string) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "Roaster Me <auth@roaster-me.dev>",
+      from: env.EMAIL_FROM ?? DEFAULT_FROM,
       to: [to],
       subject: "Your sign-in code",
       html: `<p>Your code is <strong>${otp}</strong>. It expires in 5 minutes.</p>`,
