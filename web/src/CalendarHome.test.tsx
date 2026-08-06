@@ -53,6 +53,49 @@ const aklTrip: TripWithFlights = {
   ],
 };
 
+// 3-day DXB->AKL->DXB trip, home base Asia/Dubai (origin of the first leg).
+// first dep 2026-08-10 02:15 Dubai local; last arr 2026-08-12 18:00 Dubai local.
+const inProgressTrip: TripWithFlights = {
+  id: "trip-2",
+  userId: "u1",
+  label: null,
+  createdAt: Date.parse("2026-08-09T00:00:00.000Z"),
+  flights: [
+    {
+      id: "g1",
+      tripId: "trip-2",
+      userId: "u1",
+      flightNo: "EK448",
+      origin: "DXB",
+      dest: "AKL",
+      depUtc: "2026-08-09T22:15:00.000Z",
+      arrUtc: "2026-08-10T16:20:00.000Z",
+      reportUtc: "2026-08-09T20:45:00.000Z",
+      depTz: "Asia/Dubai",
+      arrTz: "Pacific/Auckland",
+      source: "manual",
+      notes: null,
+      legSeq: 0,
+    },
+    {
+      id: "g2",
+      tripId: "trip-2",
+      userId: "u1",
+      flightNo: "EK449",
+      origin: "AKL",
+      dest: "DXB",
+      depUtc: "2026-08-12T04:00:00.000Z",
+      arrUtc: "2026-08-12T14:00:00.000Z",
+      reportUtc: "2026-08-12T02:30:00.000Z",
+      depTz: "Pacific/Auckland",
+      arrTz: "Asia/Dubai",
+      source: "manual",
+      notes: null,
+      legSeq: 1,
+    },
+  ],
+};
+
 describe("CalendarHome", () => {
   it("renders the month calendar and a compact next-duty card", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
@@ -63,9 +106,10 @@ describe("CalendarHome", () => {
     expect(await screen.findByTestId("calendar-next")).toBeInTheDocument();
     expect(screen.getByText("Mon")).toBeInTheDocument();
 
-    // Next-duty card: route chain + dates line, flight/trip-length muted line, report line.
+    // Next-duty card: FULL route chain (every stop, not just endpoints) + dates line,
+    // flight/trip-length muted line, report line.
     const card = screen.getByTestId("next-duty-card");
-    expect(card).toHaveTextContent("DXB → AKL");
+    expect(card).toHaveTextContent("DXB → SIN → AKL");
     expect(card).toHaveTextContent("EK448");
     expect(card).toHaveTextContent(/trip 2 days/i);
 
@@ -130,5 +174,34 @@ describe("CalendarHome", () => {
     await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
 
     expect(onOpenTrip).toHaveBeenCalledWith(aklTrip);
+  });
+
+  it("shows the active pairing progress card when a trip spans now, with correct day X of N", async () => {
+    vi.mocked(getTrips).mockResolvedValue([inProgressTrip]);
+    // Mid-trip: 2026-08-11T10:00:00Z is Aug 11 local in Asia/Dubai (home base), the 2nd of 3
+    // local days spanned by the trip (first dep local day Aug 10, last arr local day Aug 12).
+    const midTripNow = new Date("2026-08-11T10:00:00.000Z");
+
+    render(<CalendarHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={midTripNow} />);
+
+    const card = await screen.findByTestId("pairing-progress-card");
+    expect(card).toHaveTextContent(/trip.*3 days/i);
+    const dayLabel = await screen.findByText("day 2 of 3");
+    expect(dayLabel.className).toContain("num");
+    expect(card).toHaveTextContent("DXB");
+    expect(card).toHaveTextContent("AKL");
+  });
+
+  it("does not show the pairing progress card for a fully future trip", async () => {
+    vi.mocked(getTrips).mockResolvedValue([inProgressTrip]);
+    // Genuinely before the trip's first departure (2026-08-09T22:15:00.000Z) - not the
+    // module-level `now`, which is actually mid-trip for this fixture.
+    const fullyFutureNow = new Date("2026-08-01T00:00:00.000Z");
+    render(
+      <CalendarHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={fullyFutureNow} />,
+    );
+
+    await screen.findByTestId("next-duty-card");
+    expect(screen.queryByTestId("pairing-progress-card")).not.toBeInTheDocument();
   });
 });

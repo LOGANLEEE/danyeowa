@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { dayOffset, formatLocal, relativeUntil } from "@roaster/shared";
+import { dayOffset, formatLocal, layoverHours, relativeUntil, tripProgress } from "@roaster/shared";
 import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 import TripsCalendar from "./TripsCalendar";
@@ -13,8 +13,9 @@ type Props = {
 
 const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
 
-/** Calendar tab: month grid (trip days marked) + a compact next-duty card below it.
- * The upcoming-list and active-pairing views live on the Trips tab (see TripsView.tsx). */
+/** Calendar tab: month grid (trip days marked) + an active-pairing progress card (when a
+ * trip spans `now`) + a compact next-duty card. The upcoming list lives on the Trips tab
+ * (see TripsView.tsx). */
 export default function CalendarHome({ onAddTrip, onOpenTrip, onPickDay, now }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
   const nowMs = now.getTime();
@@ -55,6 +56,11 @@ export default function CalendarHome({ onAddTrip, onOpenTrip, onPickDay, now }: 
   const lastLeg = legs[legs.length - 1]!;
   const tripDays = new Set(legs.map((leg) => formatLocal(leg.depUtc, leg.depTz, { withDate: true }).slice(0, 6)))
     .size;
+  // Full route chain (every stop in order), not just endpoints - e.g. a 2-leg
+  // DXB->SYD->CHC schedule renders "DXB → SYD → CHC", not "DXB → CHC".
+  const routeChain = [legs[0]!.origin, ...legs.map((leg) => leg.dest)].filter(
+    (stop, index, all) => index === 0 || stop !== all[index - 1],
+  );
 
   const leaveHomeUtc = new Date(Date.parse(nextDuty.reportUtc) - LEAVE_HOME_LEAD_MS).toISOString();
   const arrOffset = dayOffset(firstLeg.depUtc, lastLeg.arrUtc, firstLeg.depTz, lastLeg.arrTz);
@@ -62,6 +68,20 @@ export default function CalendarHome({ onAddTrip, onOpenTrip, onPickDay, now }: 
   function openNextDuty() {
     if (nextDutyTrip) onOpenTrip(nextDutyTrip);
   }
+
+  // Active pairing: a trip whose first departure has passed and last arrival hasn't (spans
+  // `now`). Home base tz = origin tz of the trip's first leg. Ported from the old CrewHome -
+  // glance-critical mid-trip status per UX research §2.
+  const activePairing = trips
+    .map((trip) => {
+      const tripLegs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
+      const first = tripLegs[0];
+      const last = tripLegs[tripLegs.length - 1];
+      if (!first || !last) return null;
+      const progress = tripProgress(first.depUtc, last.arrUtc, first.depTz, nowMs);
+      return progress ? { trip, legs: tripLegs, first, last, progress } : null;
+    })
+    .find((entry) => entry !== null);
 
   return (
     <div className="entrance flex w-full max-w-xl flex-col gap-4">
@@ -75,14 +95,52 @@ export default function CalendarHome({ onAddTrip, onOpenTrip, onPickDay, now }: 
         onOpenTrip={onOpenTrip}
       />
 
+      {activePairing && (
+        <div
+          data-testid="pairing-progress-card"
+          className="stagger-1 flex flex-col gap-3 rounded-lg border border-edge bg-card p-4"
+        >
+          <div className="flex items-baseline justify-between">
+            <p className="text-sm text-ink">Trip · {activePairing.progress.totalDays} days</p>
+            <p className="num text-sm text-ink-muted">
+              day {activePairing.progress.currentDay} of {activePairing.progress.totalDays}
+            </p>
+          </div>
+
+          <p className="num text-sm text-ink-muted">
+            {activePairing.legs.map((leg, index) => {
+              const prevLeg = activePairing.legs[index - 1];
+              const layover = prevLeg ? layoverHours(prevLeg.arrUtc, leg.depUtc) : null;
+              return (
+                <span key={leg.id}>
+                  {layover !== null && ` ····· ${layover.toFixed(0)}h ····· `}
+                  {leg.origin} → {leg.dest}
+                </span>
+              );
+            })}
+          </p>
+
+          <div className="flex gap-1">
+            {Array.from({ length: activePairing.progress.totalDays }, (_, i) => i + 1).map((day) => (
+              <div
+                key={day}
+                className={`h-1.5 flex-1 rounded-full ${
+                  day <= activePairing.progress.currentDay ? "bg-accent" : "bg-accent-soft"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       <button
         type="button"
         data-testid="next-duty-card"
         onClick={openNextDuty}
-        className="stagger-1 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
+        className="stagger-2 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
       >
         <p className="font-semibold text-ink">
-          {firstLeg.origin} → {lastLeg.dest}
+          {routeChain.join(" → ")}
           {arrOffset > 0 && <sup>+{arrOffset}</sup>} ·{" "}
           <span className="num">
             {formatLocal(firstLeg.depUtc, firstLeg.depTz, { withDate: true })} –{" "}
