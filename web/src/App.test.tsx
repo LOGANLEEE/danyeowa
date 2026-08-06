@@ -37,7 +37,7 @@ describe("App", () => {
     // Exactly one h1 on the page — the Landing hero — no duplicate with the header chrome.
     expect(screen.getAllByRole("heading", { name: /roaster/i, level: 1 })).toHaveLength(1);
     expect(await screen.findByText(/api: online/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /sign in with email/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
   });
 
@@ -45,7 +45,7 @@ describe("App", () => {
     stubSignedOutFetch();
     const user = userEvent.setup();
     render(<App />);
-    await user.click(await screen.findByRole("button", { name: /sign in with email/i }));
+    await user.click(await screen.findByRole("button", { name: /^sign in$/i }));
     expect(await screen.findByLabelText(/email/i)).toBeInTheDocument();
   });
 });

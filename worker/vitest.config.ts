@@ -13,6 +13,8 @@ export default defineConfig(async () => {
             TEST_MIGRATIONS: migrations,
             BETTER_AUTH_SECRET: "test-secret-not-for-production-0000000",
             DEV_OTP_FALLBACK: "true",
+            GOOGLE_CLIENT_ID: "test-google-client-id",
+            GOOGLE_CLIENT_SECRET: "test-google-client-secret",
           },
         },
       }),

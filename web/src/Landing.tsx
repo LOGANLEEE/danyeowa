@@ -66,7 +66,7 @@ export default function Landing({ onSignIn }: Props) {
         onClick={onSignIn}
         className="w-full rounded bg-amber px-3 py-3 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
       >
-        Sign in with email
+        Sign in
       </button>
     </div>
   );

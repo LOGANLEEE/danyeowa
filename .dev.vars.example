@@ -19,3 +19,10 @@ BETTER_AUTH_URL=http://localhost:8787
 # it must only ever exist in .dev.vars, the e2e runner's env, and vitest bindings, so
 # the route 404s in every deployed environment.
 E2E_TEST_MODE=true
+
+# Google OAuth client ID — also set as a public var in wrangler.jsonc for prod.
+GOOGLE_CLIENT_ID=<your-google-oauth-client-id>
+
+# Google OAuth client secret — uploaded as a Worker secret in prod
+# (`wrangler secret put GOOGLE_CLIENT_SECRET`). Never commit the real value.
+GOOGLE_CLIENT_SECRET=<your-google-oauth-client-secret>
