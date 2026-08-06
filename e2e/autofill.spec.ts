@@ -68,8 +68,8 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
   // --- Scenario 1: known flight EK412 -> autofill card -> save -> report time = dep-90m. ---
-  await page.getByRole("button", { name: /add (your first )?trip/i }).click();
   await pickCalendarDay(page, PICKED_DATE);
+  await expect(page.getByTestId("day-sheet")).toBeVisible();
   await page.getByTestId("flightno-input").fill(EK412.flightNo);
 
   const autofillCard = page.getByTestId("autofill-card");
@@ -84,7 +84,7 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
   // Report chip (leg 0) shows the computed default (dep - 90min local) before save.
   await expect(page.getByTestId("report-chip").first()).toContainText(EK412.reportLocal);
 
-  await page.getByRole("button", { name: /^add trip$/i }).click();
+  await page.getByRole("button", { name: /add to roster/i }).click();
 
   // Calendar home's next-duty card shows the FULL route chain - every stop in order, not
   // just endpoints - since EK412 is a 2-leg DXB->SYD->CHC schedule: "DXB → SYD → CHC".
@@ -101,8 +101,8 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
   // --- Scenario 2: unknown flight XX999 -> lookup miss -> manual expand -> full save. ---
-  await page.getByRole("button", { name: /add (your first )?trip/i }).click();
   await pickCalendarDay(page, PICKED_DATE);
+  await expect(page.getByTestId("day-sheet")).toBeVisible();
   await page.getByTestId("flightno-input").fill(UNKNOWN_FLIGHT_NO);
   await expect(page.getByText(/unknown flight/i)).toBeVisible();
   await expect(page.getByTestId("autofill-card")).not.toBeVisible();
@@ -120,7 +120,7 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
   await page.getByLabel(/^dest$/i).blur();
   await depInput.fill(`${PICKED_DATE}T09:15`);
   await page.getByLabel(/arrival \(local\)/i).fill(`${PICKED_DATE}T13:35`);
-  await page.getByRole("button", { name: /^add trip$/i }).click();
+  await page.getByRole("button", { name: /add to roster/i }).click();
 
   dutyCard = page.getByTestId("next-duty-card");
   await expect(dutyCard).toBeVisible();
@@ -133,8 +133,8 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
   // --- Scenario 3: multi-leg smoke - EK384 lookup renders both legs in the autofill card. ---
-  await page.getByRole("button", { name: /add (your first )?trip/i }).click();
   await pickCalendarDay(page, PICKED_DATE);
+  await expect(page.getByTestId("day-sheet")).toBeVisible();
   await page.getByTestId("flightno-input").fill(EK384.flightNo);
 
   await expect(autofillCard).toBeVisible();
@@ -145,6 +145,8 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
   await expect(page.getByTestId("autofill-dep")).toHaveCount(2);
   await expect(page.getByTestId("autofill-arr")).toHaveCount(2);
 
-  // Not saving this one - no seeded trip to clean up. Sign out to leave a clean session.
+  // Not saving this one - no seeded trip to clean up. Dismiss the sheet (its scrim would
+  // otherwise intercept the tab-bar clicks in signOutThroughUi) then sign out.
+  await page.getByTestId("sheet-close").click();
   await signOutThroughUi(page);
 });

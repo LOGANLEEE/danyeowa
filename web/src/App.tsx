@@ -21,9 +21,11 @@ export default function App() {
   const [signedOutView, setSignedOutView] = useState<SignedOutView>("landing");
   const [activeTab, setActiveTab] = useState<TabName>("calendar");
   const [showTripForm, setShowTripForm] = useState(false);
-  const [tripFormInitialDate, setTripFormInitialDate] = useState<string | undefined>(undefined);
   const [selectedTrip, setSelectedTrip] = useState<TripWithFlights | null>(null);
   const [tripsVersion, setTripsVersion] = useState(0);
+  // Bumped to ask CalendarHome to open the day sheet for today (or the next trip-free day) -
+  // fired by the tab bar's center + button, from any tab.
+  const [openTodayToken, setOpenTodayToken] = useState(0);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -85,12 +87,10 @@ export default function App() {
           )
         ) : showTripForm ? (
           <TripForm
-            initialDate={tripFormInitialDate}
             now={now}
             homeTz={Intl.DateTimeFormat().resolvedOptions().timeZone}
             onSubmitted={() => {
               setShowTripForm(false);
-              setTripFormInitialDate(undefined);
               setTripsVersion((v) => v + 1);
             }}
           />
@@ -115,19 +115,10 @@ export default function App() {
             now={now}
           />
         ) : (
-          // Calendar tab: month grid + next-duty card. Day taps and the next-duty card still
-          // route into the existing TripForm/TripDetail flow for now — T4 replaces this with
-          // the DaySheet.
-          <CalendarHome
-            key={tripsVersion}
-            onAddTrip={() => setShowTripForm(true)}
-            onOpenTrip={setSelectedTrip}
-            onPickDay={(isoDate) => {
-              setTripFormInitialDate(isoDate);
-              setShowTripForm(true);
-            }}
-            now={now}
-          />
+          // Calendar tab: month grid + next-duty card. Day taps and the next-duty card open
+          // the DaySheet directly (CalendarHome owns it) to view/edit/delete an existing trip
+          // or add one on an empty day.
+          <CalendarHome key={tripsVersion} now={now} openTodayToken={openTodayToken} />
         )}
       </main>
 
@@ -139,9 +130,14 @@ export default function App() {
             setSelectedTrip(null);
             setActiveTab(tab);
           }}
-          // Plan6 T4 rewires this to open the day sheet for today/next free day; for now it
-          // routes into the existing TripForm flow.
-          onAdd={() => setShowTripForm(true)}
+          // Opens the day sheet for today (or the next trip-free day) on the calendar tab,
+          // regardless of which tab was active when + was tapped.
+          onAdd={() => {
+            setShowTripForm(false);
+            setSelectedTrip(null);
+            setActiveTab("calendar");
+            setOpenTodayToken((v) => v + 1);
+          }}
         />
       )}
 

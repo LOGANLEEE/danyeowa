@@ -1,28 +1,87 @@
-import { useEffect, useState } from "react";
-import { dayOffset, formatLocal, layoverHours, relativeUntil, tripProgress } from "@roaster/shared";
+import { useEffect, useRef, useState } from "react";
+import {
+  dayOffset,
+  formatLocal,
+  layoverHours,
+  localDateKey,
+  relativeUntil,
+  tripProgress,
+  tripDaysInMonth,
+} from "@roaster/shared";
 import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
+import DaySheet from "./DaySheet";
 import TripsCalendar from "./TripsCalendar";
 
 type Props = {
-  onAddTrip: () => void;
-  onOpenTrip: (trip: TripWithFlights) => void;
-  onPickDay: (isoDate: string) => void;
   now: Date;
+  /** Bumped by the parent (e.g. the tab bar's center + button) to open the day sheet for
+   * today, or the next trip-free day if today already has a trip. */
+  openTodayToken?: number;
 };
 
 const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
 
 /** Calendar tab: month grid (trip days marked) + an active-pairing progress card (when a
- * trip spans `now`) + a compact next-duty card. The upcoming list lives on the Trips tab
- * (see TripsView.tsx). */
-export default function CalendarHome({ onAddTrip, onOpenTrip, onPickDay, now }: Props) {
+ * trip spans `now`) + a compact next-duty card. Tapping any day, or the next-duty card,
+ * opens the DaySheet (view+edit an existing trip, or add one on an empty day). The upcoming
+ * list lives on the Trips tab (see TripsView.tsx). */
+export default function CalendarHome({ now, openTodayToken }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
+  const [sheetIsoDate, setSheetIsoDate] = useState<string | null>(null);
   const nowMs = now.getTime();
 
-  useEffect(() => {
+  function refetch() {
     getTrips().then(setTrips);
+  }
+
+  useEffect(() => {
+    refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const homeTz = trips?.[0]?.flights[0]?.depTz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // Finds the trip (if any) covering a given local calendar date, by checking every trip's
+  // away-day span for that date's month against tripDaysInMonth (mirrors TripsCalendar's own
+  // per-day lookup so the sheet always matches what the grid renders).
+  function tripForDay(iso: string): TripWithFlights | null {
+    if (!trips) return null;
+    const [yearStr, monthStr] = iso.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    for (const trip of trips) {
+      const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
+      const first = legs[0];
+      const last = legs[legs.length - 1];
+      if (!first || !last) continue;
+      const spanDays = tripDaysInMonth([{ firstDepUtc: first.depUtc, lastArrUtc: last.arrUtc }], year, month, homeTz);
+      if (spanDays.has(iso)) return trip;
+    }
+    return null;
+  }
+
+  // Opens the sheet for today, or the next trip-free day after today when today already has
+  // a trip — used by the tab bar's center + button. Tracks the LAST SEEN token (initialized
+  // to the current value, not 0) so a remount with an already-bumped token (e.g. `key` change
+  // from an unrelated trip edit) doesn't spuriously reopen the sheet — only an actual change
+  // does.
+  const lastSeenToken = useRef(openTodayToken);
+  useEffect(() => {
+    if (openTodayToken === lastSeenToken.current || trips === null) return;
+    lastSeenToken.current = openTodayToken;
+    const today = localDateKey(now.toISOString(), homeTz);
+    let candidate = today;
+    for (let i = 0; i < 366; i++) {
+      if (!tripForDay(candidate)) {
+        setSheetIsoDate(candidate);
+        return;
+      }
+      const [y, m, d] = candidate.split("-").map(Number) as [number, number, number];
+      candidate = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTodayToken, trips]);
 
   if (trips === null) {
     return <p className="text-ink-muted">loading…</p>;
@@ -37,15 +96,31 @@ export default function CalendarHome({ onAddTrip, onOpenTrip, onPickDay, now }: 
 
   if (!nextDuty) {
     return (
-      <div className="entrance flex flex-col items-center gap-4 text-center">
+      <div className="entrance flex w-full max-w-xl flex-col items-center gap-4 text-center">
+        <TripsCalendar
+          now={now}
+          trips={trips}
+          homeTz={homeTz}
+          onPickDay={(iso) => setSheetIsoDate(iso)}
+          onOpenTrip={() => {}}
+        />
         <p className="text-ink-muted">No trips yet — add your first</p>
         <button
           type="button"
-          onClick={onAddTrip}
+          onClick={() => setSheetIsoDate(localDateKey(now.toISOString(), homeTz))}
           className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
         >
           Add your first trip
         </button>
+        {sheetIsoDate && (
+          <DaySheet
+            isoDate={sheetIsoDate}
+            trip={tripForDay(sheetIsoDate)}
+            homeTz={homeTz}
+            onClose={() => setSheetIsoDate(null)}
+            onChanged={refetch}
+          />
+        )}
       </div>
     );
   }
@@ -66,7 +141,7 @@ export default function CalendarHome({ onAddTrip, onOpenTrip, onPickDay, now }: 
   const arrOffset = dayOffset(firstLeg.depUtc, lastLeg.arrUtc, firstLeg.depTz, lastLeg.arrTz);
 
   function openNextDuty() {
-    if (nextDutyTrip) onOpenTrip(nextDutyTrip);
+    setSheetIsoDate(localDateKey(firstLeg.depUtc, firstLeg.depTz));
   }
 
   // Active pairing: a trip whose first departure has passed and last arrival hasn't (spans
@@ -89,10 +164,11 @@ export default function CalendarHome({ onAddTrip, onOpenTrip, onPickDay, now }: 
         now={now}
         trips={trips}
         homeTz={nextDuty.depTz}
-        // T3: day taps still route into the existing TripForm/TripDetail flow via
-        // onPickDay/onOpenTrip - T4 replaces this with the DaySheet.
-        onPickDay={onPickDay}
-        onOpenTrip={onOpenTrip}
+        onPickDay={(iso) => setSheetIsoDate(iso)}
+        onOpenTrip={(trip) => {
+          const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
+          setSheetIsoDate(localDateKey(legs[0]!.depUtc, legs[0]!.depTz));
+        }}
       />
 
       {activePairing && (
@@ -157,6 +233,16 @@ export default function CalendarHome({ onAddTrip, onOpenTrip, onPickDay, now }: 
           <span className="num">{relativeUntil(nextDuty.reportUtc, nowMs)}</span>
         </p>
       </button>
+
+      {sheetIsoDate && (
+        <DaySheet
+          isoDate={sheetIsoDate}
+          trip={tripForDay(sheetIsoDate)}
+          homeTz={homeTz}
+          onClose={() => setSheetIsoDate(null)}
+          onChanged={refetch}
+        />
+      )}
     </div>
   );
 }

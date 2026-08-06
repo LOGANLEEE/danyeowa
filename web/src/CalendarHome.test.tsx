@@ -7,6 +7,12 @@ import type { TripWithFlights } from "./api";
 
 vi.mock("./api", () => ({
   getTrips: vi.fn(),
+  createTrip: vi.fn(),
+  getAirport: vi.fn(),
+  lookupSchedule: vi.fn(),
+  confirmSchedule: vi.fn(),
+  deleteTrip: vi.fn(),
+  patchFlight: vi.fn(),
 }));
 
 // AKL 2-leg trip fixture: DXB -> SIN -> AKL, "now" fixed well before the first report time.
@@ -100,7 +106,7 @@ describe("CalendarHome", () => {
   it("renders the month calendar and a compact next-duty card", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
 
-    render(<CalendarHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
+    render(<CalendarHome now={now} />);
 
     // Calendar grid renders (chevrons + weekday row).
     expect(await screen.findByTestId("calendar-next")).toBeInTheDocument();
@@ -122,58 +128,64 @@ describe("CalendarHome", () => {
   it("marks a trip day on the grid", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
 
-    render(<CalendarHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
+    render(<CalendarHome now={now} />);
 
     const day = await screen.findByTestId("calendar-day-2026-08-11");
     expect(day.className).toContain("bg-accent-soft");
   });
 
-  it("shows an empty state with an add-trip action when there are no trips", async () => {
+  it("shows an empty state with an add-trip action that opens the day sheet", async () => {
     vi.mocked(getTrips).mockResolvedValue([]);
-    const onAddTrip = vi.fn();
-
-    render(<CalendarHome onAddTrip={onAddTrip} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
-
-    expect(await screen.findByText(/no trips yet/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add your first/i })).toBeInTheDocument();
-  });
-
-  it("clicking the next-duty card calls onOpenTrip with that flight's trip", async () => {
-    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
-    const onOpenTrip = vi.fn();
     const user = userEvent.setup();
 
-    render(<CalendarHome onAddTrip={vi.fn()} onOpenTrip={onOpenTrip} onPickDay={vi.fn()} now={now} />);
+    render(<CalendarHome now={now} />);
+
+    expect(await screen.findByText(/no trips yet/i)).toBeInTheDocument();
+    const addButton = screen.getByRole("button", { name: /add your first/i });
+    expect(addButton).toBeInTheDocument();
+
+    await user.click(addButton);
+    expect(await screen.findByTestId("day-sheet")).toBeInTheDocument();
+  });
+
+  it("clicking the next-duty card opens the day sheet showing that trip", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
 
     await user.click(await screen.findByTestId("next-duty-card"));
 
-    expect(onOpenTrip).toHaveBeenCalledWith(aklTrip);
+    const sheet = await screen.findByTestId("day-sheet");
+    expect(sheet).toHaveTextContent("EK448");
+    expect(sheet).toHaveTextContent("EK449");
   });
 
-  it("calls onPickDay when a calendar day without a trip is tapped", async () => {
+  it("opens the day sheet's add flow when a calendar day without a trip is tapped", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
-    const onPickDay = vi.fn();
     const user = userEvent.setup();
 
-    render(<CalendarHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={onPickDay} now={now} />);
+    render(<CalendarHome now={now} />);
     await screen.findByTestId("calendar-next");
 
     // now = 2026-08-10; pick a later day in the same month with no trip coverage.
     await user.click(screen.getByTestId("calendar-day-2026-08-20"));
 
-    expect(onPickDay).toHaveBeenCalledWith("2026-08-20");
+    const sheet = await screen.findByTestId("day-sheet");
+    expect(sheet).toHaveTextContent(/add trip/i);
+    expect(screen.getByTestId("flightno-input")).toBeInTheDocument();
   });
 
-  it("calls onOpenTrip when tapping a trip day on the grid", async () => {
+  it("opens the day sheet showing the trip when tapping a trip day on the grid", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
-    const onOpenTrip = vi.fn();
     const user = userEvent.setup();
 
-    render(<CalendarHome onAddTrip={vi.fn()} onOpenTrip={onOpenTrip} onPickDay={vi.fn()} now={now} />);
+    render(<CalendarHome now={now} />);
 
     await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
 
-    expect(onOpenTrip).toHaveBeenCalledWith(aklTrip);
+    const sheet = await screen.findByTestId("day-sheet");
+    expect(sheet).toHaveTextContent("EK448");
   });
 
   it("shows the active pairing progress card when a trip spans now, with correct day X of N", async () => {
@@ -182,7 +194,7 @@ describe("CalendarHome", () => {
     // local days spanned by the trip (first dep local day Aug 10, last arr local day Aug 12).
     const midTripNow = new Date("2026-08-11T10:00:00.000Z");
 
-    render(<CalendarHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={midTripNow} />);
+    render(<CalendarHome now={midTripNow} />);
 
     const card = await screen.findByTestId("pairing-progress-card");
     expect(card).toHaveTextContent(/trip.*3 days/i);
@@ -197,11 +209,34 @@ describe("CalendarHome", () => {
     // Genuinely before the trip's first departure (2026-08-09T22:15:00.000Z) - not the
     // module-level `now`, which is actually mid-trip for this fixture.
     const fullyFutureNow = new Date("2026-08-01T00:00:00.000Z");
-    render(
-      <CalendarHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={fullyFutureNow} />,
-    );
+    render(<CalendarHome now={fullyFutureNow} />);
 
     await screen.findByTestId("next-duty-card");
     expect(screen.queryByTestId("pairing-progress-card")).not.toBeInTheDocument();
+  });
+
+  it("opens the day sheet for today when openTodayToken changes and today is trip-free", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const { rerender } = render(<CalendarHome now={now} openTodayToken={0} />);
+    await screen.findByTestId("next-duty-card");
+
+    rerender(<CalendarHome now={now} openTodayToken={1} />);
+
+    const sheet = await screen.findByTestId("day-sheet");
+    expect(sheet).toHaveTextContent(/add trip/i);
+  });
+
+  it("skips to the next trip-free day when today already has a trip", async () => {
+    vi.mocked(getTrips).mockResolvedValue([inProgressTrip]);
+    // now falls on inProgressTrip's away span (2026-08-09..2026-08-12 Asia/Dubai).
+    const { rerender } = render(<CalendarHome now={new Date("2026-08-10T10:00:00.000Z")} openTodayToken={0} />);
+    await screen.findByTestId("next-duty-card");
+
+    rerender(<CalendarHome now={new Date("2026-08-10T10:00:00.000Z")} openTodayToken={1} />);
+
+    const sheet = await screen.findByTestId("day-sheet");
+    // Skips past the trip's away days (through 2026-08-12) to the first free day after.
+    expect(sheet).toHaveTextContent(/add trip/i);
+    expect(sheet).not.toHaveTextContent("EK448");
   });
 });

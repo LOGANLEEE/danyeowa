@@ -44,18 +44,20 @@ test("landing -> sign in -> create, edit, delete trip -> sign out", async ({ pag
   // Empty state.
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
-  // Create a 1-leg trip via the calendar-first stepper: pick a day, type the known
-  // flight number (EK001, a real seeded DXB->LHR schedule row), then edit the
-  // autofilled times inline to the fixture's exact values before saving.
-  await page.getByRole("button", { name: /add (your first )?trip/i }).click();
+  // Create a 1-leg trip by tapping the target day on the calendar, which opens the day
+  // sheet's add flow for that day: type the known flight number (EK001, a real seeded
+  // DXB->LHR schedule row), then edit the autofilled times inline to the fixture's exact
+  // values before saving.
   await pickCalendarDay(page, FIXTURE.dep.slice(0, 10));
+  const sheet = page.getByTestId("day-sheet");
+  await expect(sheet).toBeVisible();
   await page.getByTestId("flightno-input").fill(FIXTURE.flightNo);
 
   const autofillCard = page.getByTestId("autofill-card");
   await expect(autofillCard).toBeVisible();
   await page.getByTestId("autofill-dep").fill(FIXTURE.depTime);
   await page.getByTestId("autofill-arr").fill(FIXTURE.arrTime);
-  await page.getByRole("button", { name: /^add trip$/i }).click();
+  await page.getByRole("button", { name: /add to roster/i }).click();
 
   // Crew home shows the computed report time: dep 09:15 - 90min = 07:45.
   const dutyCard = page.getByTestId("next-duty-card");
@@ -64,14 +66,16 @@ test("landing -> sign in -> create, edit, delete trip -> sign out", async ({ pag
 
   // Open detail, edit dep +1h, save.
   await dutyCard.click();
+  await expect(sheet).toBeVisible();
   await page.getByTestId("edit-leg").click();
   await page.getByLabel(/departure \(local\)/i).fill(FIXTURE.depEdited);
   await page.getByTestId("save-leg").click();
 
-  // Back on detail (not editing) the report time reflects the new departure: 08:45.
-  await expect(page.getByText(`Report ${FIXTURE.reportAfter}`)).toBeVisible();
+  // Back on the sheet's summary (not editing) the report time reflects the new departure:
+  // 08:45. Scoped to the sheet - the next-duty card behind it also mentions "Report 08:45".
+  await expect(sheet.getByText(`Report ${FIXTURE.reportAfter}`)).toBeVisible();
 
-  // Delete trip -> confirm -> back to empty state.
+  // Delete trip -> confirm -> sheet closes -> back to empty state.
   await page.getByTestId("delete-trip").click();
   await page.getByTestId("confirm-delete").click();
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
@@ -99,18 +103,18 @@ test("calendar tab: tap a future day, create a trip, see the away marker, then c
   }
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
-  // Seed the first trip via the empty-state CTA (stepper flow, already covered by the main
-  // lifecycle spec) before exercising the calendar's tap-to-add path.
-  await page.getByRole("button", { name: /add (your first )?trip/i }).click();
+  // Seed the first trip via the calendar's tap-to-add path (day sheet) before exercising it
+  // a second time below.
+  await page.getByTestId("tab-calendar").click();
   await pickCalendarDay(page, FIXTURE.dep.slice(0, 10));
+  await expect(page.getByTestId("day-sheet")).toBeVisible();
   await page.getByTestId("flightno-input").fill(FIXTURE.flightNo);
   await expect(page.getByTestId("autofill-card")).toBeVisible();
   await page.getByTestId("autofill-dep").fill(FIXTURE.depTime);
   await page.getByTestId("autofill-arr").fill(FIXTURE.arrTime);
-  await page.getByRole("button", { name: /^add trip$/i }).click();
+  await page.getByRole("button", { name: /add to roster/i }).click();
 
   // Calendar tab is home post-T3: the month grid renders alongside the next-duty card.
-  await page.getByTestId("tab-calendar").click();
   await expect(page.getByTestId("next-duty-card")).toBeVisible();
   await expect(page.getByTestId("calendar-next")).toBeVisible();
 
@@ -128,9 +132,10 @@ test("calendar tab: tap a future day, create a trip, see the away marker, then c
 
   await page.getByTestId(`calendar-day-${iso}`).click();
 
-  // TripForm's flight-no step opens (calendar step was skipped - date already known).
-  // An unrecognized flight number falls back to manual entry, prefilled with the
-  // picked day, time empty.
+  // The day sheet's add flow opens for the tapped day. An unrecognized flight number falls
+  // back to manual entry, prefilled with the picked day, time empty.
+  const sheet = page.getByTestId("day-sheet");
+  await expect(sheet).toBeVisible();
   await page.getByTestId("flightno-input").fill(UNKNOWN_FLIGHT_NO);
   await expect(page.getByText(/unknown flight/i)).toBeVisible();
   await page.getByTestId("manual-expand").click();
@@ -145,12 +150,12 @@ test("calendar tab: tap a future day, create a trip, see the away marker, then c
   await page.getByLabel(/^dest$/i).blur();
   await depInput.fill(`${iso}T09:15`);
   await page.getByLabel(/arrival \(local\)/i).fill(`${iso}T13:35`);
-  await page.getByRole("button", { name: /^add trip$/i }).click();
+  await page.getByRole("button", { name: /add to roster/i }).click();
 
-  // Back on the calendar tab - navigate to the same month and see the away marker.
+  // Back on the calendar tab: unlike the old full-screen stepper, the day sheet's close
+  // doesn't remount CalendarHome, so the month view stays right where it was left (the
+  // target month) - no need to re-navigate. See the away marker directly.
   await page.getByTestId("next-duty-card").waitFor();
-  await page.getByTestId("calendar-next").click();
-  await page.getByTestId("calendar-next").click();
   const dayCell = page.getByTestId(`calendar-day-${iso}`);
   await expect(dayCell).toHaveClass(/bg-accent-soft/);
 
