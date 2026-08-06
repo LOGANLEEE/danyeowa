@@ -82,13 +82,15 @@ test("landing -> sign in -> create, edit, delete trip -> sign out", async ({ pag
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
 });
 
-test("calendar view: tap a future day, create a trip, see the away marker, switch back to list", async ({
+test("calendar tab: tap a future day, create a trip, see the away marker, then check the Trips tab list", async ({
   page,
 }) => {
   await signInThroughUi(page);
 
   // Clean slate: this test can leave up to two trips behind on a failed run (the seed trip
   // plus the calendar-created one), so loop until every trip is gone rather than deleting once.
+  // The Trips tab (not Calendar) is where the upcoming-list rows live post-Plan6-T3.
+  await page.getByTestId("tab-trips").click();
   const existingRow = page.getByTestId("next-duty-card").or(page.getByTestId("upcoming-row").first());
   while (await existingRow.isVisible().catch(() => false)) {
     await existingRow.click();
@@ -97,10 +99,8 @@ test("calendar view: tap a future day, create a trip, see the away marker, switc
   }
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
-  // The view toggle + calendar only appear once a trip exists (next-duty card requires
-  // upcoming duty data), so seed the first trip via the empty-state CTA (stepper flow,
-  // already covered by the main lifecycle spec) before exercising the calendar's
-  // tap-to-add path.
+  // Seed the first trip via the empty-state CTA (stepper flow, already covered by the main
+  // lifecycle spec) before exercising the calendar's tap-to-add path.
   await page.getByRole("button", { name: /add (your first )?trip/i }).click();
   await pickCalendarDay(page, FIXTURE.dep.slice(0, 10));
   await page.getByTestId("flightno-input").fill(FIXTURE.flightNo);
@@ -108,11 +108,10 @@ test("calendar view: tap a future day, create a trip, see the away marker, switc
   await page.getByTestId("autofill-dep").fill(FIXTURE.depTime);
   await page.getByTestId("autofill-arr").fill(FIXTURE.arrTime);
   await page.getByRole("button", { name: /^add trip$/i }).click();
-  await expect(page.getByTestId("next-duty-card")).toBeVisible();
 
-  // Switch to Calendar (CrewHome's list/calendar view toggle - scoped to <main> since the
-  // tab bar now also has a "Calendar" button).
-  await page.getByRole("main").getByRole("button", { name: /^calendar$/i }).click();
+  // Calendar tab is home post-T3: the month grid renders alongside the next-duty card.
+  await page.getByTestId("tab-calendar").click();
+  await expect(page.getByTestId("next-duty-card")).toBeVisible();
   await expect(page.getByTestId("calendar-next")).toBeVisible();
 
   // Advance two months so the picked day is guaranteed in the future regardless of today's
@@ -148,32 +147,25 @@ test("calendar view: tap a future day, create a trip, see the away marker, switc
   await page.getByLabel(/arrival \(local\)/i).fill(`${iso}T13:35`);
   await page.getByRole("button", { name: /^add trip$/i }).click();
 
-  // Back on CrewHome (list view is not forced back - the view choice persists) - ensure
-  // Calendar is showing, navigate to the same month, and see the away marker.
+  // Back on the calendar tab - navigate to the same month and see the away marker.
   await page.getByTestId("next-duty-card").waitFor();
-  if (!(await page.getByTestId("calendar-next").isVisible().catch(() => false))) {
-    await page.getByRole("main").getByRole("button", { name: /^calendar$/i }).click();
-  }
   await page.getByTestId("calendar-next").click();
   await page.getByTestId("calendar-next").click();
   const dayCell = page.getByTestId(`calendar-day-${iso}`);
-  await expect(dayCell.locator(".bg-accent-soft")).toBeVisible();
+  await expect(dayCell).toHaveClass(/bg-accent-soft/);
 
-  // Switch back to list view.
-  await page.getByRole("button", { name: /^list$/i }).click();
-  await expect(page.getByTestId("next-duty-card")).toBeVisible();
-  await expect(page.getByTestId("calendar-next")).not.toBeVisible();
+  // Trips tab shows both upcoming rows.
+  await page.getByTestId("tab-trips").click();
+  await expect(page.getByTestId("upcoming-row")).toHaveCount(2);
 
-  // Clean up: delete both trips created by this test (next-duty-card always opens the
-  // earliest upcoming trip; repeat until back to the empty state). Deleting remounts
-  // CrewHome (App.tsx bumps `key`), so wait for either the next-duty-card or the empty
-  // state to (re-)settle before deciding whether to continue.
+  // Clean up: delete both trips created by this test (the first upcoming row always
+  // resolves to the earliest trip; repeat until back to the empty state).
   for (let i = 0; i < 5; i++) {
-    const nextDutyCard = page.getByTestId("next-duty-card");
+    const firstRow = page.getByTestId("upcoming-row").first();
     const emptyState = page.getByText(/no trips yet/i);
-    await Promise.race([nextDutyCard.waitFor(), emptyState.waitFor()]);
+    await Promise.race([firstRow.waitFor(), emptyState.waitFor()]);
     if (await emptyState.isVisible().catch(() => false)) break;
-    await nextDutyCard.click();
+    await firstRow.click();
     await page.getByTestId("delete-trip").click();
     await page.getByTestId("confirm-delete").click();
   }

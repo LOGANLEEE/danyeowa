@@ -86,10 +86,13 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
 
   await page.getByRole("button", { name: /^add trip$/i }).click();
 
-  // Crew home: trip saved with the seeded route and the exact computed report time.
+  // Calendar home's next-duty card shows the whole trip's route chain (first leg origin ->
+  // last leg dest: DXB -> CHC, since EK412 is a 2-leg DXB->SYD->CHC schedule), not just the
+  // next flight's own leg - plus the exact computed report time for that next flight.
   let dutyCard = page.getByTestId("next-duty-card");
   await expect(dutyCard).toBeVisible();
-  await expect(dutyCard).toContainText(`${EK412.origin} → ${EK412.dest}`);
+  await expect(dutyCard).toContainText(`${EK412.origin} → CHC`);
+  await expect(dutyCard).toContainText(EK412.flightNo);
   await expect(dutyCard).toContainText(EK412.reportLocal);
 
   // Cleanup before the next scenario.

@@ -154,24 +154,16 @@ export default function TripsCalendar({
               disabled={disabled}
               onClick={() => handleDayClick(cell.iso)}
               className={[
-                "flex flex-col items-center gap-0.5 rounded border py-1.5 transition-colors duration-[120ms]",
-                isToday ? "border-accent" : "border-edge",
+                "flex flex-col items-center gap-0.5 rounded-lg border py-1.5 transition-colors duration-[120ms]",
+                hasTrip ? "border-transparent bg-accent-soft" : "border-edge",
+                isToday ? "ring-2 ring-accent" : "",
                 !cell.inMonth ? "opacity-40" : "",
                 isPast && !hasTrip ? "opacity-60" : "",
                 disabled ? "cursor-default" : "hover:bg-raised",
               ].join(" ")}
             >
               <span className="num text-sm text-ink">{cell.day}</span>
-              {hasTrip && (
-                <span
-                  className={
-                    mark === "away"
-                      ? "h-1.5 w-1.5 rounded-full bg-accent-soft"
-                      : "h-1 w-3 rounded-full bg-accent-soft"
-                  }
-                  aria-hidden="true"
-                />
-              )}
+              {hasTrip && <span className="h-1 w-3 rounded-full bg-accent" aria-hidden="true" />}
             </button>
           );
         })}

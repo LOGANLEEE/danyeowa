@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { HealthResponse, Me } from "@roaster/shared";
 import type { TripWithFlights } from "./api";
 import { authClient } from "./auth-client";
-import CrewHome from "./CrewHome";
+import CalendarHome from "./CalendarHome";
 import Landing from "./Landing";
 import Login from "./Login";
 import SettingsView from "./SettingsView";
@@ -11,6 +11,7 @@ import TabBar from "./TabBar";
 import type { TabName } from "./TabBar";
 import TripDetail from "./TripDetail";
 import TripForm from "./TripForm";
+import TripsView from "./TripsView";
 
 type SignedOutView = "landing" | "login";
 
@@ -106,10 +107,18 @@ export default function App() {
           <ShareView />
         ) : activeTab === "settings" ? (
           <SettingsView email={me.email} onSignOut={handleSignOut} />
+        ) : activeTab === "trips" ? (
+          <TripsView
+            key={tripsVersion}
+            onAddTrip={() => setShowTripForm(true)}
+            onOpenTrip={setSelectedTrip}
+            now={now}
+          />
         ) : (
-          // "calendar" and "trips" both render CrewHome unchanged for now — T3 splits its
-          // content (calendar+next-duty card vs. upcoming list) between the two tabs.
-          <CrewHome
+          // Calendar tab: month grid + next-duty card. Day taps and the next-duty card still
+          // route into the existing TripForm/TripDetail flow for now — T4 replaces this with
+          // the DaySheet.
+          <CalendarHome
             key={tripsVersion}
             onAddTrip={() => setShowTripForm(true)}
             onOpenTrip={setSelectedTrip}
