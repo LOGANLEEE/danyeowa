@@ -20,7 +20,6 @@
   ],
   "vars": {
     // remove when RESEND_API_KEY is set
-    "DEV_OTP_FALLBACK": "true",
     "BETTER_AUTH_URL": "https://roaster-me.logan-lee.workers.dev"
   },
   "observability": { "enabled": true }
