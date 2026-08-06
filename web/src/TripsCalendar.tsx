@@ -11,6 +11,10 @@ type Props = {
   /** "picker": pure date-picker mode for the add-trip stepper - no trip markers, no open-trip
    * behavior, but today-gating (future days only) stays the same as the default trip view. */
   mode?: "picker";
+  /** ISO dates added this rapid-entry session but not yet reflected in `trips` (no refetch
+   * happened yet) — marked on the grid like a trip day, but tapping still opens the add flow
+   * since there's no trip object for them yet. */
+  optimisticIsoDates?: ReadonlySet<string>;
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -36,6 +40,7 @@ export default function TripsCalendar({
   onPickDay,
   onOpenTrip,
   mode,
+  optimisticIsoDates,
 }: Props) {
   const isPicker = mode === "picker";
   // "Today" and the initial view month must use the home-base LOCAL date, not the UTC date -
@@ -67,6 +72,10 @@ export default function TripsCalendar({
     viewMonth,
     homeTz,
   );
+  const monthPrefix = `${viewYear}-${String(viewMonth).padStart(2, "0")}`;
+  for (const iso of optimisticIsoDates ?? []) {
+    if (iso.startsWith(monthPrefix) && !dayMarks.has(iso)) dayMarks.set(iso, "away");
+  }
 
   // Per-day trip lookup for the click handler: which trip (if any) covers a given ISO date.
   const tripByDay = new Map<string, TripWithFlights>();

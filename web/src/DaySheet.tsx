@@ -1,20 +1,44 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Flight, LegPatch } from "@roaster/shared";
-import { formatLocal, wallToUtc } from "@roaster/shared";
+import { addDaysIso, formatLocal, localDateKey, wallToUtc } from "@roaster/shared";
 import { deleteTrip, patchFlight } from "./api";
 import type { TripWithFlights } from "./api";
+import { useRecentFlights } from "./useRecentFlights";
 import { useTripEntry } from "./useTripEntry";
+
+/** Whether `isoDate` falls within any trip's away-span (first departure's to last arrival's
+ * local calendar date), in `homeTz`. Used by rapid-entry's next-date suggestion to skip days
+ * that already have a trip — a lightweight day-membership check (candidates are always a
+ * handful of days out), unlike the month-scoped `tripDaysInMonth` used by the calendar grid. */
+function isDayOccupied(isoDate: string, trips: TripWithFlights[], homeTz: string): boolean {
+  return trips.some((trip) => {
+    const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
+    const first = legs[0];
+    const last = legs[legs.length - 1];
+    if (!first || !last) return false;
+    const firstDay = localDateKey(first.depUtc, homeTz);
+    const lastDay = localDateKey(last.arrUtc, homeTz);
+    return isoDate >= firstDay && isoDate <= lastDay;
+  });
+}
 
 type Props = {
   /** Local ISO date ("YYYY-MM-DD") this sheet is open for. */
   isoDate: string;
   /** The trip covering this day, or null when the day is empty. */
   trip: TripWithFlights | null;
+  /** All trips already fetched by the caller — used for recent-flight chips and to skip
+   * occupied days when suggesting the next rapid-entry date. No extra fetch. */
+  trips: TripWithFlights[];
   homeTz: string;
   onClose: () => void;
-  /** Called after a successful add, edit, or delete — caller should refetch trips. */
+  /** Called once, on dismiss (Done / scrim / close / Escape) — caller should refetch trips.
+   * NOT called per-add during rapid entry, to keep chaining snappy. */
   onChanged: () => void;
+  /** Called after each successful add with the isoDate that was added, so the caller can mark
+   * the day optimistically (no refetch needed for that). */
+  onAdded: (isoDate: string) => void;
 };
 
 type LegEdits = { dep: string; arr: string; report: string };
@@ -261,57 +285,156 @@ function ExistingTripContent({
   );
 }
 
+/** Finds the next trip-free day after `fromIsoDate`, skipping days occupied by an existing
+ * trip or one added earlier this rapid-entry session (`justAdded`). */
+function nextFreeDate(
+  fromIsoDate: string,
+  trips: TripWithFlights[],
+  justAdded: ReadonlySet<string>,
+  homeTz: string,
+): string {
+  let candidate = addDaysIso(fromIsoDate, 1);
+  for (let i = 0; i < 366; i++) {
+    if (!justAdded.has(candidate) && !isDayOccupied(candidate, trips, homeTz)) return candidate;
+    candidate = addDaysIso(candidate, 1);
+  }
+  return candidate;
+}
+
 /** Empty-day content: flight-no -> autofill preview -> "Add to roster", with an inline
- * manual fallback on a lookup miss. Driven entirely by useTripEntry. */
+ * manual fallback on a lookup miss. Driven entirely by useTripEntry. After a successful add,
+ * chains into a rapid-entry "added" state (Plan 6 Task 5): the sheet stays open, the flight
+ * field clears + refocuses, recent-flight chips offer a one-tap re-add, and a next-date
+ * suggestion (skipping occupied days, including ones just added) advances the picked date for
+ * the next entry — without a per-add refetch (the parent marks the day optimistically). */
 function AddTripContent({
   isoDate,
   homeTz,
-  onChanged,
-  onClose,
+  trips,
+  onDone,
+  onAdded,
 }: {
   isoDate: string;
   homeTz: string;
-  onChanged: () => void;
-  onClose: () => void;
+  trips: TripWithFlights[];
+  /** Dismisses the sheet — fires the parent's single refetch, then closes. */
+  onDone: () => void;
+  onAdded: (isoDate: string) => void;
 }) {
   const flightNoInputRef = useRef<HTMLInputElement>(null);
+  const [pickedDate, setPickedDate] = useState(isoDate);
+  const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
+  const [lastAdded, setLastAdded] = useState<string | null>(null);
+  const [nextDate, setNextDate] = useState<string | null>(null);
+  const [showDateStrip, setShowDateStrip] = useState(false);
+  const recentFlights = useRecentFlights(trips);
+
   const entry = useTripEntry({
-    pickedDate: isoDate,
+    pickedDate,
     homeTz,
     onSubmitted: () => {
-      onChanged();
-      onClose();
+      const addedDate = pickedDate;
+      const updatedJustAdded = new Set(justAdded).add(addedDate);
+      setJustAdded(updatedJustAdded);
+      setLastAdded(addedDate);
+      const suggestion = nextFreeDate(addedDate, trips, updatedJustAdded, homeTz);
+      setNextDate(suggestion);
+      setPickedDate(suggestion);
+      setShowDateStrip(false);
+      onAdded(addedDate);
+      entry.setFlightNo("");
     },
   });
 
   useEffect(() => {
     if (entry.mode === "flightno") flightNoInputRef.current?.focus();
-  }, [entry.mode]);
+  }, [entry.mode, lastAdded]);
+
+  function chooseChip(flightNo: string) {
+    entry.setFlightNo(flightNo);
+  }
 
   if (entry.mode === "flightno") {
     return (
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void entry.handleAutofillSubmit();
-        }}
-        className="flex flex-col gap-4"
-      >
-        <label htmlFor="flightno-input" className="text-sm text-ink-muted">
-          Flight number
-        </label>
-        <input
-          id="flightno-input"
-          data-testid="flightno-input"
-          ref={flightNoInputRef}
-          autoFocus
-          value={entry.flightNo}
-          onChange={(e) => entry.setFlightNo(e.target.value.toUpperCase())}
-          placeholder="e.g. EK412"
-          className="num rounded border border-edge bg-raised px-3 py-2 text-lg text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
-        />
+      <div className="flex flex-col gap-4">
+        {lastAdded && (
+          <div data-testid="rapid-banner" className="rounded border border-edge bg-raised p-3 text-sm text-ink">
+            <p>✓ Added {lastAdded}</p>
+            <p>
+              next:{" "}
+              <button
+                type="button"
+                data-testid="rapid-next-date"
+                onClick={() => setShowDateStrip((v) => !v)}
+                className="underline decoration-dotted"
+              >
+                {nextDate}
+              </button>
+            </p>
+            {showDateStrip && (
+              <div data-testid="rapid-date-strip" className="mt-2 flex flex-wrap gap-1">
+                {Array.from({ length: 7 }, (_, i) => addDaysIso(lastAdded, i + 1)).map((candidate) => (
+                  <button
+                    key={candidate}
+                    type="button"
+                    onClick={() => {
+                      setPickedDate(candidate);
+                      setNextDate(candidate);
+                      setShowDateStrip(false);
+                    }}
+                    className={[
+                      "num rounded border px-2 py-1 text-xs transition-colors duration-[120ms]",
+                      candidate === pickedDate
+                        ? "border-accent text-accent"
+                        : "border-edge text-ink-muted hover:border-ink-muted",
+                    ].join(" ")}
+                  >
+                    {candidate.slice(5)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-        {entry.autofillLegs && entry.autofillFlightNo && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void entry.handleAutofillSubmit();
+          }}
+          className="flex flex-col gap-4"
+        >
+          <label htmlFor="flightno-input" className="text-sm text-ink-muted">
+            Flight number
+          </label>
+          <input
+            id="flightno-input"
+            data-testid="flightno-input"
+            ref={flightNoInputRef}
+            autoFocus
+            value={entry.flightNo}
+            onChange={(e) => entry.setFlightNo(e.target.value.toUpperCase())}
+            placeholder="e.g. EK412"
+            className="num rounded border border-edge bg-raised px-3 py-2 text-lg text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
+          />
+
+          {recentFlights.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {recentFlights.map((flightNo) => (
+                <button
+                  key={flightNo}
+                  type="button"
+                  data-testid={`recent-chip-${flightNo}`}
+                  onClick={() => chooseChip(flightNo)}
+                  className="rounded-full border border-edge px-3 py-1 text-sm text-ink transition-colors duration-[120ms] hover:border-accent"
+                >
+                  {flightNo}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {entry.autofillLegs && entry.autofillFlightNo && (
           <div data-testid="autofill-card" className="flex flex-col gap-3 rounded border border-edge bg-raised p-4">
             {entry.autofillLegs.map((leg, index) => {
               const reportLocal = entry.reportLocalFor(leg);
@@ -404,7 +527,19 @@ function AddTripContent({
             {entry.error}
           </p>
         )}
-      </form>
+        </form>
+
+        {lastAdded && (
+          <button
+            type="button"
+            data-testid="done-button"
+            onClick={onDone}
+            className="rounded border border-edge px-3 py-2 font-medium text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+          >
+            Done for now
+          </button>
+        )}
+      </div>
     );
   }
 
@@ -519,7 +654,7 @@ function AddTripContent({
 /** Bottom sheet: tap any calendar day to view its trip (edit/delete) or add one on an empty
  * day. Fixed, portal-rendered, dismissible via scrim tap or Escape. Focus moves into the
  * sheet on open and returns to the previously focused element on close. */
-export default function DaySheet({ isoDate, trip, homeTz, onClose, onChanged }: Props) {
+export default function DaySheet({ isoDate, trip, trips, homeTz, onClose, onChanged, onAdded }: Props) {
   const sheetRef = useRef<HTMLDivElement>(null);
   // Captured lazily on the initial render (before any effects run) so it reflects whatever
   // had focus BEFORE the sheet opened, not a child's own autofocus effect (e.g. the add
@@ -528,6 +663,13 @@ export default function DaySheet({ isoDate, trip, homeTz, onClose, onChanged }: 
   const previouslyFocused = useRef<HTMLElement | null>(null);
   if (previouslyFocused.current === null) {
     previouslyFocused.current = document.activeElement as HTMLElement | null;
+  }
+
+  // Single dismiss path for scrim/close-button/Escape/"Done for now" - fires exactly one
+  // refetch (onChanged) regardless of how many adds happened during rapid entry, then closes.
+  function handleDismiss() {
+    onChanged();
+    onClose();
   }
 
   useEffect(() => {
@@ -539,11 +681,12 @@ export default function DaySheet({ isoDate, trip, homeTz, onClose, onChanged }: 
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") handleDismiss();
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose, onChanged]);
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -551,7 +694,7 @@ export default function DaySheet({ isoDate, trip, homeTz, onClose, onChanged }: 
         type="button"
         data-testid="sheet-scrim"
         aria-label="Close"
-        onClick={onClose}
+        onClick={handleDismiss}
         className="absolute inset-0 bg-black/40"
       />
       <div
@@ -571,7 +714,7 @@ export default function DaySheet({ isoDate, trip, homeTz, onClose, onChanged }: 
             type="button"
             data-testid="sheet-close"
             aria-label="Close"
-            onClick={onClose}
+            onClick={handleDismiss}
             className="rounded border border-edge px-2 py-1 text-sm text-ink-muted transition-colors duration-[120ms] hover:border-ink-muted"
           >
             Close
@@ -581,7 +724,13 @@ export default function DaySheet({ isoDate, trip, homeTz, onClose, onChanged }: 
         {trip ? (
           <ExistingTripContent trip={trip} onChanged={onChanged} onClose={onClose} />
         ) : (
-          <AddTripContent isoDate={isoDate} homeTz={homeTz} onChanged={onChanged} onClose={onClose} />
+          <AddTripContent
+            isoDate={isoDate}
+            homeTz={homeTz}
+            trips={trips}
+            onDone={handleDismiss}
+            onAdded={onAdded}
+          />
         )}
       </div>
     </div>,

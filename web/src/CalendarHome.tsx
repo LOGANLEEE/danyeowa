@@ -29,10 +29,14 @@ const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
 export default function CalendarHome({ now, openTodayToken }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
   const [sheetIsoDate, setSheetIsoDate] = useState<string | null>(null);
+  // Days added this rapid-entry session, marked on the grid immediately without a refetch -
+  // cleared whenever the sheet dismisses and actually refetches (its own data now covers them).
+  const [optimisticDays, setOptimisticDays] = useState<Set<string>>(new Set());
   const nowMs = now.getTime();
 
   function refetch() {
     getTrips().then(setTrips);
+    setOptimisticDays(new Set());
   }
 
   useEffect(() => {
@@ -103,6 +107,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           homeTz={homeTz}
           onPickDay={(iso) => setSheetIsoDate(iso)}
           onOpenTrip={() => {}}
+          optimisticIsoDates={optimisticDays}
         />
         <p className="text-ink-muted">No trips yet — add your first</p>
         <button
@@ -116,9 +121,11 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           <DaySheet
             isoDate={sheetIsoDate}
             trip={tripForDay(sheetIsoDate)}
+            trips={trips}
             homeTz={homeTz}
             onClose={() => setSheetIsoDate(null)}
             onChanged={refetch}
+            onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
           />
         )}
       </div>
@@ -169,6 +176,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
           setSheetIsoDate(localDateKey(legs[0]!.depUtc, legs[0]!.depTz));
         }}
+        optimisticIsoDates={optimisticDays}
       />
 
       {activePairing && (
@@ -238,9 +246,11 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
         <DaySheet
           isoDate={sheetIsoDate}
           trip={tripForDay(sheetIsoDate)}
+          trips={trips}
           homeTz={homeTz}
           onClose={() => setSheetIsoDate(null)}
           onChanged={refetch}
+          onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
         />
       )}
     </div>

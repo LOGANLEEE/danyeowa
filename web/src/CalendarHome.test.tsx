@@ -1,8 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
 import CalendarHome from "./CalendarHome";
-import { getTrips } from "./api";
+import { confirmSchedule, createTrip, getTrips, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";
 
 vi.mock("./api", () => ({
@@ -103,6 +103,11 @@ const inProgressTrip: TripWithFlights = {
 };
 
 describe("CalendarHome", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.mocked(getTrips).mockClear();
+  });
+
   it("renders the month calendar and a compact next-duty card", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
 
@@ -226,6 +231,58 @@ describe("CalendarHome", () => {
     expect(sheet).toHaveTextContent(/add trip/i);
   });
 
+  it("marks a day optimistically after an add, without refetching, then refetches once on Done", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    vi.mocked(lookupSchedule).mockResolvedValue({
+      legs: [
+        {
+          legSeq: 0,
+          origin: "DXB",
+          dest: "LHR",
+          depLocal: "09:15",
+          arrLocal: "13:35",
+          dayOffset: 0,
+          originTz: "Asia/Dubai",
+          destTz: "Europe/London",
+          confirmCount: 3,
+        },
+      ],
+    });
+    vi.mocked(createTrip).mockImplementation(async () => ({
+      id: "trip-added",
+      userId: "u1",
+      label: null,
+      createdAt: Date.now(),
+      flights: [],
+    }));
+    vi.mocked(confirmSchedule).mockResolvedValue(undefined);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    render(<CalendarHome now={now} />);
+    await screen.findByTestId("calendar-next");
+
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+    await screen.findByTestId("day-sheet");
+
+    expect(getTrips).toHaveBeenCalledTimes(1);
+
+    await user.type(screen.getByTestId("flightno-input"), "ek001");
+    await vi.advanceTimersByTimeAsync(400);
+    await screen.findByTestId("autofill-card");
+    await user.click(screen.getByRole("button", { name: /add to roster/i }));
+    await waitFor(() => expect(createTrip).toHaveBeenCalled());
+    await screen.findByTestId("rapid-banner");
+
+    // No refetch fired by the add itself.
+    expect(getTrips).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByTestId("done-button"));
+    await waitFor(() => expect(getTrips).toHaveBeenCalledTimes(2));
+
+    vi.useRealTimers();
+  });
+
   it("skips to the next trip-free day when today already has a trip", async () => {
     vi.mocked(getTrips).mockResolvedValue([inProgressTrip]);
     // now falls on inProgressTrip's away span (2026-08-09..2026-08-12 Asia/Dubai).
@@ -235,8 +292,13 @@ describe("CalendarHome", () => {
     rerender(<CalendarHome now={new Date("2026-08-10T10:00:00.000Z")} openTodayToken={1} />);
 
     const sheet = await screen.findByTestId("day-sheet");
-    // Skips past the trip's away days (through 2026-08-12) to the first free day after.
+    // Skips past the trip's away days (through 2026-08-12) to the first free day after - this
+    // is the add flow (flight-no input), not an existing-trip summary (no delete/edit control
+    // for EK448's trip). Recent-flight chips legitimately surface past flight numbers like
+    // EK448 as one-tap suggestions, so a bare "not EK448 text anywhere" check would now be a
+    // false positive for the actual regression this guards against.
     expect(sheet).toHaveTextContent(/add trip/i);
-    expect(sheet).not.toHaveTextContent("EK448");
+    expect(screen.getByTestId("flightno-input")).toBeInTheDocument();
+    expect(screen.queryByTestId("delete-trip")).not.toBeInTheDocument();
   });
 });

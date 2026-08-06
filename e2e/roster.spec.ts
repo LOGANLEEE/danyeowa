@@ -59,6 +59,11 @@ test("landing -> sign in -> create, edit, delete trip -> sign out", async ({ pag
   await page.getByTestId("autofill-arr").fill(FIXTURE.arrTime);
   await page.getByRole("button", { name: /add to roster/i }).click();
 
+  // Plan 6 Task 5: the sheet stays open in the rapid-entry "added" state after a successful
+  // add (no per-add refetch) - dismiss with "Done for now" to trigger the single refetch.
+  await expect(page.getByTestId("rapid-banner")).toBeVisible();
+  await page.getByTestId("done-button").click();
+
   // Crew home shows the computed report time: dep 09:15 - 90min = 07:45.
   const dutyCard = page.getByTestId("next-duty-card");
   await expect(dutyCard).toContainText(FIXTURE.reportBefore);
@@ -114,6 +119,10 @@ test("calendar tab: tap a future day, create a trip, see the away marker, then c
   await page.getByTestId("autofill-arr").fill(FIXTURE.arrTime);
   await page.getByRole("button", { name: /add to roster/i }).click();
 
+  // Rapid-entry: sheet stays open after the add - dismiss to refetch and see the calendar.
+  await expect(page.getByTestId("rapid-banner")).toBeVisible();
+  await page.getByTestId("done-button").click();
+
   // Calendar tab is home post-T3: the month grid renders alongside the next-duty card.
   await expect(page.getByTestId("next-duty-card")).toBeVisible();
   await expect(page.getByTestId("calendar-next")).toBeVisible();
@@ -151,6 +160,11 @@ test("calendar tab: tap a future day, create a trip, see the away marker, then c
   await depInput.fill(`${iso}T09:15`);
   await page.getByLabel(/arrival \(local\)/i).fill(`${iso}T13:35`);
   await page.getByRole("button", { name: /add to roster/i }).click();
+
+  // The manual-entry path isn't part of Plan 6 Task 5's rapid-entry chaining (that's the
+  // flight-no/autofill flow) - the sheet just stays open on the manual form after a
+  // successful save. Dismiss with Close to trigger the single refetch.
+  await page.getByTestId("sheet-close").click();
 
   // Back on the calendar tab: unlike the old full-screen stepper, the day sheet's close
   // doesn't remount CalendarHome, so the month view stays right where it was left (the

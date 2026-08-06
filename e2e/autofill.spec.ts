@@ -86,6 +86,12 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
 
   await page.getByRole("button", { name: /add to roster/i }).click();
 
+  // Plan 6 Task 5: the sheet stays open in the rapid-entry "added" state after a successful
+  // add (no per-add refetch) - dismiss with "Done for now" to trigger the single refetch and
+  // return to the calendar.
+  await expect(page.getByTestId("rapid-banner")).toBeVisible();
+  await page.getByTestId("done-button").click();
+
   // Calendar home's next-duty card shows the FULL route chain - every stop in order, not
   // just endpoints - since EK412 is a 2-leg DXB->SYD->CHC schedule: "DXB → SYD → CHC".
   let dutyCard = page.getByTestId("next-duty-card");
@@ -121,6 +127,11 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
   await depInput.fill(`${PICKED_DATE}T09:15`);
   await page.getByLabel(/arrival \(local\)/i).fill(`${PICKED_DATE}T13:35`);
   await page.getByRole("button", { name: /add to roster/i }).click();
+
+  // The manual-entry path isn't part of Plan 6 Task 5's rapid-entry chaining (that's the
+  // flight-no/autofill flow) - the sheet just stays open on the manual form after a
+  // successful save. Dismiss with Close to trigger the single refetch and see the trip.
+  await page.getByTestId("sheet-close").click();
 
   dutyCard = page.getByTestId("next-duty-card");
   await expect(dutyCard).toBeVisible();
