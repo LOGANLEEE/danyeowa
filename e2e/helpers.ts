@@ -70,3 +70,9 @@ export async function signInThroughUi(page: Page, email = E2E_EMAIL): Promise<vo
   await codeInput.fill(otp);
   await page.getByRole("button", { name: /sign in/i }).click();
 }
+
+/** Signs out via the Settings tab (Plan6 T2 moved the sign-out control off the header). */
+export async function signOutThroughUi(page: Page): Promise<void> {
+  await page.getByTestId("tab-settings").click();
+  await page.getByRole("button", { name: /sign out/i }).click();
+}

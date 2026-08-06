@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, FIXTURE, UNKNOWN_FLIGHT_NO, pickCalendarDay, signInThroughUi } from "./helpers";
+import {
+  E2E_EMAIL,
+  FIXTURE,
+  UNKNOWN_FLIGHT_NO,
+  pickCalendarDay,
+  signInThroughUi,
+  signOutThroughUi,
+} from "./helpers";
 
 /**
  * Full auth + roster lifecycle against a real `wrangler dev` (local D1). Idempotent by
@@ -21,8 +28,9 @@ test("landing -> sign in -> create, edit, delete trip -> sign out", async ({ pag
 
   await signInThroughUi(page);
 
-  // Signed in: header now renders (with sign-out control).
-  await expect(page.getByRole("button", { name: /sign out/i })).toBeVisible();
+  // Signed in: header now renders (slimmed to the wordmark; sign-out moved to Settings) and
+  // the tab bar appears.
+  await expect(page.getByTestId("tab-calendar")).toBeVisible();
 
   // Clean slate: delete any trip left over from a previous failed run so the empty
   // state / create-trip assertions below are reliable.
@@ -69,7 +77,7 @@ test("landing -> sign in -> create, edit, delete trip -> sign out", async ({ pag
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
   // Sign out -> back to landing.
-  await page.getByRole("button", { name: /sign out/i }).click();
+  await signOutThroughUi(page);
   await expect(page.getByRole("heading", { name: /roaster/i, level: 1 })).toBeVisible();
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
 });
@@ -102,8 +110,9 @@ test("calendar view: tap a future day, create a trip, see the away marker, switc
   await page.getByRole("button", { name: /^add trip$/i }).click();
   await expect(page.getByTestId("next-duty-card")).toBeVisible();
 
-  // Switch to Calendar.
-  await page.getByRole("button", { name: /^calendar$/i }).click();
+  // Switch to Calendar (CrewHome's list/calendar view toggle - scoped to <main> since the
+  // tab bar now also has a "Calendar" button).
+  await page.getByRole("main").getByRole("button", { name: /^calendar$/i }).click();
   await expect(page.getByTestId("calendar-next")).toBeVisible();
 
   // Advance two months so the picked day is guaranteed in the future regardless of today's
@@ -143,7 +152,7 @@ test("calendar view: tap a future day, create a trip, see the away marker, switc
   // Calendar is showing, navigate to the same month, and see the away marker.
   await page.getByTestId("next-duty-card").waitFor();
   if (!(await page.getByTestId("calendar-next").isVisible().catch(() => false))) {
-    await page.getByRole("button", { name: /^calendar$/i }).click();
+    await page.getByRole("main").getByRole("button", { name: /^calendar$/i }).click();
   }
   await page.getByTestId("calendar-next").click();
   await page.getByTestId("calendar-next").click();
@@ -170,7 +179,7 @@ test("calendar view: tap a future day, create a trip, see the away marker, switc
   }
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
-  await page.getByRole("button", { name: /sign out/i }).click();
+  await signOutThroughUi(page);
 });
 
 test.describe.configure({ mode: "serial" });

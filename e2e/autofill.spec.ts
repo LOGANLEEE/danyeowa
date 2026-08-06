@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { UNKNOWN_FLIGHT_NO, pickCalendarDay, signInThroughUi } from "./helpers";
+import { UNKNOWN_FLIGHT_NO, pickCalendarDay, signInThroughUi, signOutThroughUi } from "./helpers";
 
 /**
  * Autofill + manual-fallback coverage for the calendar-first stepper (plan 5, task 4).
@@ -144,5 +144,5 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
   await expect(page.getByTestId("autofill-arr")).toHaveCount(2);
 
   // Not saving this one - no seeded trip to clean up. Sign out to leave a clean session.
-  await page.getByRole("button", { name: /sign out/i }).click();
+  await signOutThroughUi(page);
 });

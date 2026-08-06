@@ -5,6 +5,10 @@ import { authClient } from "./auth-client";
 import CrewHome from "./CrewHome";
 import Landing from "./Landing";
 import Login from "./Login";
+import SettingsView from "./SettingsView";
+import ShareView from "./ShareView";
+import TabBar from "./TabBar";
+import type { TabName } from "./TabBar";
 import TripDetail from "./TripDetail";
 import TripForm from "./TripForm";
 
@@ -14,6 +18,7 @@ export default function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
   const [signedOutView, setSignedOutView] = useState<SignedOutView>("landing");
+  const [activeTab, setActiveTab] = useState<TabName>("calendar");
   const [showTripForm, setShowTripForm] = useState(false);
   const [tripFormInitialDate, setTripFormInitialDate] = useState<string | undefined>(undefined);
   const [selectedTrip, setSelectedTrip] = useState<TripWithFlights | null>(null);
@@ -53,26 +58,15 @@ export default function App() {
   // no sign-out control to show — skip rendering the header band entirely there so it
   // doesn't leave an empty, bordered strip above the hero (a11y bonus: no duplicate h1s).
   const isLanding = me === null && signedOutView === "landing";
+  const isSignedIn = me !== "loading" && me !== null;
 
   return (
     <div className="flex min-h-screen flex-col bg-ground text-ink">
       {!isLanding && (
-        <header className="flex items-center justify-between border-b border-edge px-4 py-3">
-          <h1 className="text-xl font-semibold text-ink">
+        <header className="border-b border-edge px-4 py-2">
+          <h1 className="text-lg font-semibold text-ink">
             roaster<span className="text-accent">·me</span>
           </h1>
-          {me !== "loading" && me !== null && (
-            <div className="flex items-center gap-3 text-sm">
-              <span className="text-ink-muted">{me.email}</span>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="rounded border border-edge px-2 py-1 text-ink hover:border-ink-muted"
-              >
-                Sign out
-              </button>
-            </div>
-          )}
         </header>
       )}
 
@@ -105,7 +99,13 @@ export default function App() {
               setTripsVersion((v) => v + 1);
             }}
           />
+        ) : activeTab === "share" ? (
+          <ShareView />
+        ) : activeTab === "settings" ? (
+          <SettingsView email={me.email} onSignOut={handleSignOut} />
         ) : (
+          // "calendar" and "trips" both render CrewHome unchanged for now — T3 splits its
+          // content (calendar+next-duty card vs. upcoming list) between the two tabs.
           <CrewHome
             key={tripsVersion}
             onAddTrip={() => setShowTripForm(true)}
@@ -118,6 +118,20 @@ export default function App() {
           />
         )}
       </main>
+
+      {isSignedIn && (
+        <TabBar
+          active={activeTab}
+          onSelect={(tab) => {
+            setShowTripForm(false);
+            setSelectedTrip(null);
+            setActiveTab(tab);
+          }}
+          // Plan6 T4 rewires this to open the day sheet for today/next free day; for now it
+          // routes into the existing TripForm flow.
+          onAdd={() => setShowTripForm(true)}
+        />
+      )}
 
       <footer className="px-4 py-2 text-right text-xs text-ink-muted">
         {health === null ? "checking…" : health.ok ? "API: online" : "API: offline"}
