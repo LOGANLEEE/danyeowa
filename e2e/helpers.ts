@@ -30,6 +30,52 @@ export const FIXTURE = {
 export const UNKNOWN_FLIGHT_NO = "XX999";
 
 /**
+ * DXB -> SYD -> CHC, EK412 (scripts/ek-schedules.json, real seeded 2-leg schedule): a
+ * multi-day trip whose away-span (first-leg departure's to last-leg arrival's LOCAL
+ * calendar date, in the home base tz Asia/Dubai) covers TWO calendar days, not one -
+ * the shape the rapid-entry "next date" bug needed (a single-leg, same-day flight like
+ * FIXTURE/EK001 can't exercise the multi-day-span skip at all). Picked date 2026-09-10:
+ * leg 0 departs 10:15 Asia/Dubai the picked day, arrives Sydney the next day; leg 1
+ * departs Sydney the same day it arrives and lands in Christchurch a bit later - the
+ * whole pairing's away-span in Asia/Dubai local dates is 2026-09-10 through 2026-09-11
+ * (verified against shared/src/time.ts's wallToUtc/localDateKey, the same helpers
+ * DaySheet.tsx's nextFreeDate uses).
+ */
+export const EK412 = {
+  flightNo: "EK412",
+  origin: "DXB",
+  dest: "SYD",
+  depTime: "10:15",
+  arrTime: "06:00",
+  // dep 10:15 Asia/Dubai (no DST) - 90min = report 08:45 local, year-round.
+  reportLocal: "08:45",
+  pickedDate: "2026-09-10",
+  spanEndDate: "2026-09-11",
+  nextFreeDate: "2026-09-12",
+  // A second EK412 pairing re-added (via its recent-flight chip) on `nextFreeDate` spans
+  // 2026-09-12 through 2026-09-13 (same 2-day shape, one day later) - also verified against
+  // shared/src/time.ts.
+  secondPairingSpanEndDate: "2026-09-13",
+};
+
+/**
+ * Humanizes a local ISO calendar date ("YYYY-MM-DD") as "Thu 10 Sep" (weekday short + day
+ * + month short), matching DaySheet.tsx's humanDateLabel — the rapid-entry banner renders
+ * dates this way, not as raw ISO. All the ISO dates this suite feeds in (EK412.pickedDate
+ * etc.) are already home-base (Asia/Dubai) local calendar dates, so formatting in UTC here
+ * (rather than re-deriving Asia/Dubai) reads the same calendar day back out.
+ */
+export function humanDateLabel(iso: string): string {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  return fmt.format(new Date(`${iso}T00:00:00.000Z`));
+}
+
+/**
  * Clicks a calendar day cell identified by `iso` ("YYYY-MM-DD"), advancing the visible
  * month via the "next month" chevron first if the cell isn't rendered yet (the day-picker
  * and trip calendars both default to the current month view and only render 6 weeks of
@@ -69,4 +115,10 @@ export async function signInThroughUi(page: Page, email = E2E_EMAIL): Promise<vo
   const otp = await fetchLastOtp(page, email);
   await codeInput.fill(otp);
   await page.getByRole("button", { name: /sign in/i }).click();
+}
+
+/** Signs out via the Settings tab (Plan6 T2 moved the sign-out control off the header). */
+export async function signOutThroughUi(page: Page): Promise<void> {
+  await page.getByTestId("tab-settings").click();
+  await page.getByRole("button", { name: /sign out/i }).click();
 }

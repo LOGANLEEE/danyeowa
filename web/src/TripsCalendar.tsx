@@ -11,6 +11,10 @@ type Props = {
   /** "picker": pure date-picker mode for the add-trip stepper - no trip markers, no open-trip
    * behavior, but today-gating (future days only) stays the same as the default trip view. */
   mode?: "picker";
+  /** ISO dates added this rapid-entry session but not yet reflected in `trips` (no refetch
+   * happened yet) — marked on the grid like a trip day, but tapping still opens the add flow
+   * since there's no trip object for them yet. */
+  optimisticIsoDates?: ReadonlySet<string>;
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -36,6 +40,7 @@ export default function TripsCalendar({
   onPickDay,
   onOpenTrip,
   mode,
+  optimisticIsoDates,
 }: Props) {
   const isPicker = mode === "picker";
   // "Today" and the initial view month must use the home-base LOCAL date, not the UTC date -
@@ -67,6 +72,10 @@ export default function TripsCalendar({
     viewMonth,
     homeTz,
   );
+  const monthPrefix = `${viewYear}-${String(viewMonth).padStart(2, "0")}`;
+  for (const iso of optimisticIsoDates ?? []) {
+    if (iso.startsWith(monthPrefix) && !dayMarks.has(iso)) dayMarks.set(iso, "away");
+  }
 
   // Per-day trip lookup for the click handler: which trip (if any) covers a given ISO date.
   const tripByDay = new Map<string, TripWithFlights>();
@@ -118,7 +127,7 @@ export default function TripsCalendar({
         >
           ‹
         </button>
-        <p className="text-sm font-medium text-ink-bright">
+        <p className="text-sm font-medium text-ink">
           {MONTH_LABELS[viewMonth - 1]} {viewYear}
         </p>
         <button
@@ -154,24 +163,16 @@ export default function TripsCalendar({
               disabled={disabled}
               onClick={() => handleDayClick(cell.iso)}
               className={[
-                "flex flex-col items-center gap-0.5 rounded border py-1.5 transition-colors duration-[120ms]",
-                isToday ? "border-amber" : "border-edge",
+                "flex flex-col items-center gap-0.5 rounded-lg border py-1.5 transition-colors duration-[120ms]",
+                hasTrip ? "border-transparent bg-accent-soft" : "border-edge",
+                isToday ? "ring-2 ring-accent" : "",
                 !cell.inMonth ? "opacity-40" : "",
                 isPast && !hasTrip ? "opacity-60" : "",
                 disabled ? "cursor-default" : "hover:bg-raised",
               ].join(" ")}
             >
               <span className="num text-sm text-ink">{cell.day}</span>
-              {hasTrip && (
-                <span
-                  className={
-                    mark === "away"
-                      ? "h-1.5 w-1.5 rounded-full bg-away"
-                      : "h-1 w-3 rounded-full bg-away"
-                  }
-                  aria-hidden="true"
-                />
-              )}
+              {hasTrip && <span className="h-1 w-3 rounded-full bg-accent" aria-hidden="true" />}
             </button>
           );
         })}

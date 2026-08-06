@@ -23,4 +23,13 @@ describe("built CSS", () => {
     const css = readBuiltCss();
     expect(css).toMatch(/prefers-reduced-motion:\s*reduce/);
   });
+
+  it("contains both dark-theme override mechanisms", () => {
+    const css = readBuiltCss();
+    // Mechanism 1: prefers-color-scheme, gated to when no explicit data-theme is set.
+    expect(css).toMatch(/prefers-color-scheme:\s*dark/);
+    // Mechanism 2: explicit manual override via data-theme, in both directions.
+    expect(css).toMatch(/\[data-theme=(?:"|')?dark(?:"|')?\]/);
+    expect(css).toMatch(/\[data-theme=(?:"|')?light(?:"|')?\]/);
+  });
 });
