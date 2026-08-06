@@ -34,7 +34,7 @@ const trip: TripWithFlights = {
 describe("TripsCalendar", () => {
   it("renders a weekday header row and the days of the current month", () => {
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} onOpenTrip={vi.fn()} />,
+      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
     );
 
     expect(screen.getByText("Mon")).toBeInTheDocument();
@@ -49,7 +49,6 @@ describe("TripsCalendar", () => {
         trips={[trip]}
         homeTz="Asia/Dubai"
         onPickDay={vi.fn()}
-        onOpenTrip={vi.fn()}
       />,
     );
 
@@ -58,21 +57,20 @@ describe("TripsCalendar", () => {
     expect(day.querySelector(".bg-accent")).toBeTruthy();
   });
 
-  it("calls onOpenTrip when tapping a day covered by a trip", async () => {
+  it("calls onPickDay when tapping a day covered by a trip", async () => {
     const user = userEvent.setup();
-    const onOpenTrip = vi.fn();
+    const onPickDay = vi.fn();
     render(
       <TripsCalendar
         now={now}
         trips={[trip]}
         homeTz="Asia/Dubai"
-        onPickDay={vi.fn()}
-        onOpenTrip={onOpenTrip}
+        onPickDay={onPickDay}
       />,
     );
 
     await user.click(screen.getByTestId("calendar-day-2026-08-15"));
-    expect(onOpenTrip).toHaveBeenCalledWith(trip);
+    expect(onPickDay).toHaveBeenCalledWith("2026-08-15");
   });
 
   it("calls onPickDay when tapping a future day with no trip", async () => {
@@ -84,7 +82,6 @@ describe("TripsCalendar", () => {
         trips={[]}
         homeTz="Asia/Dubai"
         onPickDay={onPickDay}
-        onOpenTrip={vi.fn()}
       />,
     );
 
@@ -101,7 +98,6 @@ describe("TripsCalendar", () => {
         trips={[]}
         homeTz="Asia/Dubai"
         onPickDay={onPickDay}
-        onOpenTrip={vi.fn()}
       />,
     );
 
@@ -118,7 +114,6 @@ describe("TripsCalendar", () => {
         trips={[]}
         homeTz="Asia/Dubai"
         onPickDay={onPickDay}
-        onOpenTrip={vi.fn()}
       />,
     );
 
@@ -129,7 +124,7 @@ describe("TripsCalendar", () => {
   it("navigates to the next and previous month via chevrons", async () => {
     const user = userEvent.setup();
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} onOpenTrip={vi.fn()} />,
+      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
     );
 
     expect(screen.getByText(/august 2026/i)).toBeInTheDocument();
@@ -144,11 +139,30 @@ describe("TripsCalendar", () => {
 
   it("marks today's cell distinctly from other cells", () => {
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} onOpenTrip={vi.fn()} />,
+      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
     );
 
     const today = screen.getByTestId("calendar-day-2026-08-10");
     expect(today.className).toContain("ring-accent");
+  });
+
+  it("marks a selected day with a stronger ring, distinct from today's plain ring, when they differ", () => {
+    render(
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+        selectedIso="2026-08-20"
+      />,
+    );
+
+    const selected = screen.getByTestId("calendar-day-2026-08-20");
+    const today = screen.getByTestId("calendar-day-2026-08-10");
+    expect(selected.className).toContain("ring-accent");
+    expect(selected.className).toContain("ring-offset");
+    expect(today.className).toContain("ring-accent");
+    expect(today.className).not.toContain("ring-offset");
   });
 
   it("puts today's ring on the home-base LOCAL date, not the UTC date, when tz is ahead of UTC", () => {
@@ -161,7 +175,6 @@ describe("TripsCalendar", () => {
         trips={[]}
         homeTz="Pacific/Auckland"
         onPickDay={vi.fn()}
-        onOpenTrip={vi.fn()}
       />,
     );
 
@@ -179,7 +192,6 @@ describe("TripsCalendar", () => {
         trips={[]}
         homeTz="America/Sao_Paulo"
         onPickDay={vi.fn()}
-        onOpenTrip={vi.fn()}
       />,
     );
 

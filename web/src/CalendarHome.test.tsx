@@ -166,7 +166,7 @@ describe("CalendarHome", () => {
     expect(sheet).toHaveTextContent("EK449");
   });
 
-  it("opens the day sheet's add flow when a calendar day without a trip is tapped", async () => {
+  it("single tap on an empty calendar day selects it and shows a no-duty detail card with an Add trip button", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
     const user = userEvent.setup();
 
@@ -176,12 +176,31 @@ describe("CalendarHome", () => {
     // now = 2026-08-10; pick a later day in the same month with no trip coverage.
     await user.click(screen.getByTestId("calendar-day-2026-08-20"));
 
+    const detail = await screen.findByTestId("day-detail-card");
+    expect(detail).toHaveTextContent(/no duty/i);
+    expect(screen.getByTestId("day-detail-action")).toHaveTextContent(/add trip/i);
+    expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
+    // Selecting a day replaces the next-duty card.
+    expect(screen.queryByTestId("next-duty-card")).not.toBeInTheDocument();
+  });
+
+  it("second tap on the already-selected empty day opens the day sheet's add flow", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+    await screen.findByTestId("calendar-next");
+
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+
     const sheet = await screen.findByTestId("day-sheet");
     expect(sheet).toHaveTextContent(/add trip/i);
     expect(screen.getByTestId("flightno-input")).toBeInTheDocument();
   });
 
-  it("opens the day sheet showing the trip when tapping a trip day on the grid", async () => {
+  it("single tap on a trip day selects it and shows a trip detail card with an Edit trip button", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
     const user = userEvent.setup();
 
@@ -189,8 +208,68 @@ describe("CalendarHome", () => {
 
     await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
 
+    const detail = await screen.findByTestId("day-detail-card");
+    expect(detail).toHaveTextContent("DXB → SIN → AKL");
+    expect(detail).toHaveTextContent("EK448");
+    expect(screen.getByTestId("day-detail-action")).toHaveTextContent(/edit trip/i);
+    expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
+  });
+
+  it("second tap on the already-selected trip day opens the day sheet showing that trip", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("calendar-day-2026-08-11"));
+
     const sheet = await screen.findByTestId("day-sheet");
     expect(sheet).toHaveTextContent("EK448");
+  });
+
+  it("the detail card's action button also opens the day sheet directly", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("day-detail-action"));
+
+    const sheet = await screen.findByTestId("day-sheet");
+    expect(sheet).toHaveTextContent("EK448");
+  });
+
+  it("tapping a different day switches the selection instead of opening the sheet", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+
+    const detail = await screen.findByTestId("day-detail-card");
+    expect(detail).toHaveTextContent(/no duty/i);
+    expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
+  });
+
+  it("the detail card's clear (✕) button deselects and restores the next-duty card", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("day-detail-clear"));
+
+    expect(await screen.findByTestId("next-duty-card")).toBeInTheDocument();
+    expect(screen.queryByTestId("day-detail-card")).not.toBeInTheDocument();
   });
 
   it("shows the active pairing progress card when a trip spans now, with correct day X of N", async () => {
@@ -263,6 +342,8 @@ describe("CalendarHome", () => {
     await screen.findByTestId("calendar-next");
 
     await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
     await screen.findByTestId("day-sheet");
 
     expect(getTrips).toHaveBeenCalledTimes(1);
@@ -332,6 +413,8 @@ describe("CalendarHome", () => {
     expect(await screen.findByText(/no trips yet/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /add your first/i })).toBeInTheDocument();
 
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+    await screen.findByTestId("day-detail-card");
     await user.click(screen.getByTestId("calendar-day-2026-08-20"));
     await user.type(screen.getByTestId("flightno-input"), "ek001");
     await vi.advanceTimersByTimeAsync(400);

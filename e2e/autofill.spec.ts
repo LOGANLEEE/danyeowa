@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { UNKNOWN_FLIGHT_NO, humanDateLabel, pickCalendarDay, signInThroughUi, signOutThroughUi } from "./helpers";
+import { UNKNOWN_FLIGHT_NO, humanDateLabel, openDaySheet, signInThroughUi, signOutThroughUi } from "./helpers";
 
 /**
  * Manual-fallback + multi-leg coverage for the day sheet's add flow, complementing
@@ -52,7 +52,7 @@ test("manual-entry fallback joins the rapid chain, then EK384 multi-leg smoke", 
   await page.getByTestId("tab-calendar").click();
 
   // --- Scenario 1: unknown flight -> lookup miss -> manual expand -> full save -> rapid chain. ---
-  await pickCalendarDay(page, PICKED_DATE);
+  await openDaySheet(page, PICKED_DATE);
   const sheet = page.getByTestId("day-sheet");
   await expect(sheet).toBeVisible();
   await page.getByTestId("flightno-input").fill(UNKNOWN_FLIGHT_NO);
@@ -114,7 +114,7 @@ test("manual-entry fallback joins the rapid chain, then EK384 multi-leg smoke", 
   await page.getByTestId("tab-calendar").click();
 
   // --- Scenario 2: multi-leg smoke - EK384 lookup renders both legs in the autofill card. ---
-  await pickCalendarDay(page, PICKED_DATE);
+  await openDaySheet(page, PICKED_DATE);
   await expect(sheet).toBeVisible();
   await page.getByTestId("flightno-input").fill(EK384.flightNo);
 

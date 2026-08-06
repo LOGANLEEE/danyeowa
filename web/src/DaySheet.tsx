@@ -183,7 +183,7 @@ function LegEditor({
         data-testid="save-leg"
         disabled={saving}
         onClick={save}
-        className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+        className="min-h-[48px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
       >
         Save
       </button>
@@ -236,7 +236,7 @@ function ExistingTripContent({
                     type="button"
                     data-testid="edit-leg"
                     onClick={() => setEditingId(flight.id)}
-                    className="rounded border border-edge px-2 py-1 text-sm text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+                    className="min-h-[44px] rounded border border-edge px-3 py-1 text-sm text-ink transition-colors duration-[120ms] hover:border-ink-muted"
                   >
                     Edit
                   </button>
@@ -279,14 +279,14 @@ function ExistingTripContent({
               data-testid="confirm-delete"
               disabled={deleting}
               onClick={confirmDelete}
-              className="rounded border border-edge bg-raised px-3 py-2 font-medium text-ink transition-colors duration-[120ms] hover:border-ink-muted disabled:opacity-50"
+              className="min-h-[48px] rounded border border-edge bg-raised px-3 py-2 font-medium text-ink transition-colors duration-[120ms] hover:border-ink-muted disabled:opacity-50"
             >
               Delete
             </button>
             <button
               type="button"
               onClick={() => setConfirmingDelete(false)}
-              className="rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+              className="min-h-[48px] rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
             >
               Cancel
             </button>
@@ -297,7 +297,7 @@ function ExistingTripContent({
           type="button"
           data-testid="delete-trip"
           onClick={() => setConfirmingDelete(true)}
-          className="self-start rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+          className="min-h-[48px] self-start rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
         >
           Delete trip
         </button>
@@ -546,7 +546,7 @@ function AddTripContent({
             <button
               type="submit"
               disabled={entry.submitting}
-              className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+              className="min-h-[48px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
             >
               Add to roster
             </button>
@@ -579,7 +579,7 @@ function AddTripContent({
             type="button"
             data-testid="done-button"
             onClick={onDone}
-            className="rounded border border-edge px-3 py-2 font-medium text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+            className="min-h-[48px] rounded border border-edge px-3 py-2 font-medium text-ink transition-colors duration-[120ms] hover:border-ink-muted"
           >
             Done for now
           </button>
@@ -674,7 +674,7 @@ function AddTripContent({
       <button
         type="button"
         onClick={entry.addLeg}
-        className="rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+        className="min-h-[48px] rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
       >
         Add leg
       </button>
@@ -682,7 +682,7 @@ function AddTripContent({
       <button
         type="submit"
         disabled={entry.submitting}
-        className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+        className="min-h-[48px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
       >
         Add to roster
       </button>
@@ -760,7 +760,7 @@ export default function DaySheet({ isoDate, trip, trips, homeTz, onClose, onChan
             data-testid="sheet-close"
             aria-label="Close"
             onClick={handleDismiss}
-            className="rounded border border-edge px-2 py-1 text-sm text-ink-muted transition-colors duration-[120ms] hover:border-ink-muted"
+            className="min-h-[44px] rounded border border-edge px-3 py-1 text-sm text-ink-muted transition-colors duration-[120ms] hover:border-ink-muted"
           >
             Close
           </button>

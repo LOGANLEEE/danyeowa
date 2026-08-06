@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, EK412, humanDateLabel, pickCalendarDay, signInThroughUi, signOutThroughUi } from "./helpers";
+import { E2E_EMAIL, EK412, humanDateLabel, openDaySheet, signInThroughUi, signOutThroughUi } from "./helpers";
 
 /**
  * Full e2e coverage of the Plan 6 tabbed, calendar-first UX against a real `wrangler dev`
@@ -53,10 +53,11 @@ test("sign-in -> calendar home -> day sheet -> autofill add -> rapid chain -> Tr
   }
   await expect(emptyState).toBeVisible();
 
-  // --- Tap a day on the calendar home to open the sheet's add flow. ---
+  // --- Tap a day on the calendar home to open the sheet's add flow. Single tap selects the
+  // day (shows its detail card); a second tap opens the sheet (openDaySheet does both). ---
   await page.getByTestId("tab-calendar").click();
   const firstIso = EK412.pickedDate;
-  await pickCalendarDay(page, firstIso);
+  await openDaySheet(page, firstIso);
   const sheet = page.getByTestId("day-sheet");
   await expect(sheet).toBeVisible();
 
@@ -90,10 +91,12 @@ test("sign-in -> calendar home -> day sheet -> autofill add -> rapid chain -> Tr
   // be after Done's refetch + reopening the sheet, exercised below.
   await expect(page.getByTestId("flightno-input")).toHaveValue("");
 
-  // --- Done for now: single refetch, back to the calendar, BOTH span days marked. ---
+  // --- Done for now: single refetch, back to the calendar, BOTH span days marked. The
+  // tapped day (firstIso) stays selected through the sheet closing, so its detail card -
+  // not the next-duty card - is what's showing now. ---
   await page.getByTestId("done-button").click();
   await expect(sheet).not.toBeVisible();
-  await expect(page.getByTestId("next-duty-card")).toBeVisible();
+  await expect(page.getByTestId("day-detail-card")).toBeVisible();
   await expect(page.getByTestId(`calendar-day-${firstIso}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${EK412.spanEndDate}`)).toHaveClass(/bg-accent-soft/);
   // The day between firstIso and spanEndDate (there isn't one here - span is exactly 2
@@ -102,7 +105,7 @@ test("sign-in -> calendar home -> day sheet -> autofill add -> rapid chain -> Tr
 
   // --- Reopen the sheet on the suggested next date: now that trips have been refetched,
   // the flight is offered as a recent-flight chip. Tap it to re-add the same flight there. ---
-  await pickCalendarDay(page, suggestedNext);
+  await openDaySheet(page, suggestedNext);
   await expect(sheet).toBeVisible();
   const recentChip = page.getByTestId(`recent-chip-${EK412.flightNo}`);
   await expect(recentChip).toBeVisible();

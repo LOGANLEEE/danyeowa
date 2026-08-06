@@ -325,7 +325,7 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
     return (
       <div className="entrance flex w-full max-w-xl flex-col gap-4 rounded-lg border border-edge bg-card p-6">
         <p className="text-sm text-ink-muted">When's the trip?</p>
-        <TripsCalendar now={now} trips={[]} homeTz={homeTz} onPickDay={handlePickDay} onOpenTrip={() => {}} mode="picker" />
+        <TripsCalendar now={now} trips={[]} homeTz={homeTz} onPickDay={handlePickDay} mode="picker" />
       </div>
     );
   }

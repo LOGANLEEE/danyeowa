@@ -10,7 +10,7 @@ import {
 } from "@roaster/shared";
 import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
-import DaySheet from "./DaySheet";
+import DaySheet, { humanDateLabel } from "./DaySheet";
 import TripsCalendar from "./TripsCalendar";
 
 type Props = {
@@ -22,13 +22,124 @@ type Props = {
 
 const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
 
+/** Route chain + times + report line for a trip, shared by the next-duty card and the
+ * selected-day detail card so both read the same info vocabulary. */
+function TripSummaryLines({
+  legs,
+  nextDuty,
+  leaveHomeUtc,
+  nowMs,
+}: {
+  legs: TripWithFlights["flights"];
+  nextDuty: TripWithFlights["flights"][number];
+  leaveHomeUtc: string;
+  nowMs: number;
+}) {
+  const firstLeg = legs[0]!;
+  const lastLeg = legs[legs.length - 1]!;
+  const tripDays = new Set(legs.map((leg) => formatLocal(leg.depUtc, leg.depTz, { withDate: true }).slice(0, 6)))
+    .size;
+  const routeChain = [legs[0]!.origin, ...legs.map((leg) => leg.dest)].filter(
+    (stop, index, all) => index === 0 || stop !== all[index - 1],
+  );
+  const arrOffset = dayOffset(firstLeg.depUtc, lastLeg.arrUtc, firstLeg.depTz, lastLeg.arrTz);
+
+  return (
+    <>
+      <p className="font-semibold text-ink">
+        {routeChain.join(" → ")}
+        {arrOffset > 0 && <sup>+{arrOffset}</sup>} ·{" "}
+        <span className="num">
+          {formatLocal(firstLeg.depUtc, firstLeg.depTz, { withDate: true })} –{" "}
+          {formatLocal(lastLeg.arrUtc, lastLeg.arrTz, { withDate: true })}
+        </span>
+      </p>
+      <p className="text-sm text-ink-muted">
+        {nextDuty.flightNo} · trip {tripDays} {tripDays === 1 ? "day" : "days"}
+      </p>
+      <p className="text-sm text-ink-muted">
+        Report{" "}
+        <span className="num text-report font-semibold">{formatLocal(nextDuty.reportUtc, nextDuty.depTz)}</span>{" "}
+        · leave home <span className="num">{formatLocal(leaveHomeUtc, nextDuty.depTz)}</span> ·{" "}
+        <span className="num">{relativeUntil(nextDuty.reportUtc, nowMs)}</span>
+      </p>
+    </>
+  );
+}
+
+/** The card shown below the calendar grid while a day is selected (tap-to-detail), replacing
+ * the next-duty card for the duration of the selection. Trip day: same info vocabulary as the
+ * next-duty card plus an "Edit trip" button. Empty day: a muted no-duty line plus "Add trip". */
+function DayDetailCard({
+  isoDate,
+  trip,
+  homeTz,
+  nowMs,
+  onOpenSheet,
+  onClear,
+}: {
+  isoDate: string;
+  trip: TripWithFlights | null;
+  homeTz: string;
+  nowMs: number;
+  onOpenSheet: () => void;
+  onClear: () => void;
+}) {
+  const legs = trip ? [...trip.flights].sort((a, b) => a.legSeq - b.legSeq) : [];
+  const firstLeg = legs[0] ?? null;
+
+  return (
+    <div data-testid="day-detail-card" className="flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-1 flex-col gap-1">
+          {firstLeg ? (
+            <TripSummaryLines
+              legs={legs}
+              nextDuty={firstLeg}
+              leaveHomeUtc={new Date(Date.parse(firstLeg.reportUtc) - LEAVE_HOME_LEAD_MS).toISOString()}
+              nowMs={nowMs}
+            />
+          ) : (
+            <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
+          )}
+        </div>
+        <button
+          type="button"
+          data-testid="day-detail-clear"
+          aria-label="Clear selection"
+          onClick={onClear}
+          className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded text-ink-muted transition-colors duration-[120ms] hover:text-ink"
+        >
+          ✕
+        </button>
+      </div>
+      <button
+        type="button"
+        data-testid="day-detail-action"
+        onClick={onOpenSheet}
+        className={
+          firstLeg
+            ? "mt-2 self-start rounded border border-accent px-3 py-2 font-medium text-accent transition-colors duration-[120ms] hover:bg-accent-soft"
+            : "mt-2 self-start rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+        }
+        style={{ minHeight: "48px" }}
+      >
+        {firstLeg ? "Edit trip" : "Add trip"}
+      </button>
+    </div>
+  );
+}
+
 /** Calendar tab: month grid (trip days marked) + an active-pairing progress card (when a
- * trip spans `now`) + a compact next-duty card. Tapping any day, or the next-duty card,
- * opens the DaySheet (view+edit an existing trip, or add one on an empty day). The upcoming
- * list lives on the Trips tab (see TripsView.tsx). */
+ * trip spans `now`) + a compact next-duty card. Single tap on any day SELECTS it, showing its
+ * detail (trip summary + Edit, or "no duty" + Add) in place of the next-duty card; a second
+ * tap on the already-selected day opens the DaySheet (view+edit an existing trip, or add one
+ * on an empty day) — state-based, so rapid double-tap works naturally on mobile without a
+ * dblclick hack. The upcoming list lives on the Trips tab (see TripsView.tsx). */
 export default function CalendarHome({ now, openTodayToken }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
   const [sheetIsoDate, setSheetIsoDate] = useState<string | null>(null);
+  const [selectedIso, setSelectedIso] = useState<string | null>(null);
   // Days added this rapid-entry session, marked on the grid immediately without a refetch -
   // cleared whenever the sheet dismisses and actually refetches (its own data now covers them).
   const [optimisticDays, setOptimisticDays] = useState<Set<string>>(new Set());
@@ -87,6 +198,16 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTodayToken, trips]);
 
+  // Single tap: select (or switch selection to) the tapped day. Second tap on the day
+  // that's already selected: open the sheet instead (trip-edit or add mode).
+  function handleDayTap(iso: string) {
+    if (iso === selectedIso) {
+      setSheetIsoDate(iso);
+    } else {
+      setSelectedIso(iso);
+    }
+  }
+
   if (trips === null) {
     return <p className="text-ink-muted">loading…</p>;
   }
@@ -105,25 +226,38 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           now={now}
           trips={trips}
           homeTz={homeTz}
-          onPickDay={(iso) => setSheetIsoDate(iso)}
-          onOpenTrip={() => {}}
+          onPickDay={handleDayTap}
           optimisticIsoDates={optimisticDays}
+          selectedIso={selectedIso}
         />
-        {/* trips stays [] during rapid entry (no refetch until dismiss) - once a day has
-            been marked optimistically, this "no trips yet" empty state + its CTA would
-            otherwise stay stale, visible behind the open sheet, contradicting what the
-            grid above already shows. */}
-        {optimisticDays.size === 0 && (
-          <>
-            <p className="text-ink-muted">No trips yet — add your first</p>
-            <button
-              type="button"
-              onClick={() => setSheetIsoDate(localDateKey(now.toISOString(), homeTz))}
-              className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
-            >
-              Add your first trip
-            </button>
-          </>
+        {selectedIso ? (
+          <div className="w-full text-left">
+            <DayDetailCard
+              isoDate={selectedIso}
+              trip={tripForDay(selectedIso)}
+              homeTz={homeTz}
+              nowMs={nowMs}
+              onOpenSheet={() => setSheetIsoDate(selectedIso)}
+              onClear={() => setSelectedIso(null)}
+            />
+          </div>
+        ) : (
+          // trips stays [] during rapid entry (no refetch until dismiss) - once a day has
+          // been marked optimistically, this "no trips yet" empty state + its CTA would
+          // otherwise stay stale, visible behind the open sheet, contradicting what the
+          // grid above already shows.
+          optimisticDays.size === 0 && (
+            <>
+              <p className="text-ink-muted">No trips yet — add your first</p>
+              <button
+                type="button"
+                onClick={() => setSheetIsoDate(localDateKey(now.toISOString(), homeTz))}
+                className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+              >
+                Add your first trip
+              </button>
+            </>
+          )
         )}
         {sheetIsoDate && (
           <DaySheet
@@ -143,21 +277,8 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
   const nextDutyTrip = tripByFlightId.get(nextDuty.id) ?? null;
   const legs = nextDutyTrip ? [...nextDutyTrip.flights].sort((a, b) => a.legSeq - b.legSeq) : [nextDuty];
   const firstLeg = legs[0]!;
-  const lastLeg = legs[legs.length - 1]!;
-  const tripDays = new Set(legs.map((leg) => formatLocal(leg.depUtc, leg.depTz, { withDate: true }).slice(0, 6)))
-    .size;
-  // Full route chain (every stop in order), not just endpoints - e.g. a 2-leg
-  // DXB->SYD->CHC schedule renders "DXB → SYD → CHC", not "DXB → CHC".
-  const routeChain = [legs[0]!.origin, ...legs.map((leg) => leg.dest)].filter(
-    (stop, index, all) => index === 0 || stop !== all[index - 1],
-  );
 
   const leaveHomeUtc = new Date(Date.parse(nextDuty.reportUtc) - LEAVE_HOME_LEAD_MS).toISOString();
-  const arrOffset = dayOffset(firstLeg.depUtc, lastLeg.arrUtc, firstLeg.depTz, lastLeg.arrTz);
-
-  function openNextDuty() {
-    setSheetIsoDate(localDateKey(firstLeg.depUtc, firstLeg.depTz));
-  }
 
   // Active pairing: a trip whose first departure has passed and last arrival hasn't (spans
   // `now`). Home base tz = origin tz of the trip's first leg. Ported from the old CrewHome -
@@ -179,12 +300,9 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
         now={now}
         trips={trips}
         homeTz={nextDuty.depTz}
-        onPickDay={(iso) => setSheetIsoDate(iso)}
-        onOpenTrip={(trip) => {
-          const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
-          setSheetIsoDate(localDateKey(legs[0]!.depUtc, legs[0]!.depTz));
-        }}
+        onPickDay={handleDayTap}
         optimisticIsoDates={optimisticDays}
+        selectedIso={selectedIso}
       />
 
       {activePairing && (
@@ -225,30 +343,27 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
         </div>
       )}
 
-      <button
-        type="button"
-        data-testid="next-duty-card"
-        onClick={openNextDuty}
-        className="stagger-2 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
-      >
-        <p className="font-semibold text-ink">
-          {routeChain.join(" → ")}
-          {arrOffset > 0 && <sup>+{arrOffset}</sup>} ·{" "}
-          <span className="num">
-            {formatLocal(firstLeg.depUtc, firstLeg.depTz, { withDate: true })} –{" "}
-            {formatLocal(lastLeg.arrUtc, lastLeg.arrTz, { withDate: true })}
-          </span>
-        </p>
-        <p className="text-sm text-ink-muted">
-          {nextDuty.flightNo} · trip {tripDays} {tripDays === 1 ? "day" : "days"}
-        </p>
-        <p className="text-sm text-ink-muted">
-          Report{" "}
-          <span className="num text-report font-semibold">{formatLocal(nextDuty.reportUtc, nextDuty.depTz)}</span>{" "}
-          · leave home <span className="num">{formatLocal(leaveHomeUtc, nextDuty.depTz)}</span> ·{" "}
-          <span className="num">{relativeUntil(nextDuty.reportUtc, nowMs)}</span>
-        </p>
-      </button>
+      {selectedIso ? (
+        <div className="stagger-2">
+          <DayDetailCard
+            isoDate={selectedIso}
+            trip={tripForDay(selectedIso)}
+            homeTz={homeTz}
+            nowMs={nowMs}
+            onOpenSheet={() => setSheetIsoDate(selectedIso)}
+            onClear={() => setSelectedIso(null)}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          data-testid="next-duty-card"
+          onClick={() => setSheetIsoDate(localDateKey(firstLeg.depUtc, firstLeg.depTz))}
+          className="stagger-2 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
+        >
+          <TripSummaryLines legs={legs} nextDuty={nextDuty} leaveHomeUtc={leaveHomeUtc} nowMs={nowMs} />
+        </button>
+      )}
 
       {sheetIsoDate && (
         <DaySheet

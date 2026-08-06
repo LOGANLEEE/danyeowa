@@ -6,8 +6,10 @@ type Props = {
   now: Date;
   trips: TripWithFlights[];
   homeTz: string;
+  /** Called for any day tap in non-picker mode (empty or trip day, current or past-with-trip)
+   * — the caller owns select-vs-open-sheet semantics. In picker mode, called for future days
+   * only (date-picker behavior). */
   onPickDay: (isoDate: string) => void;
-  onOpenTrip: (trip: TripWithFlights) => void;
   /** "picker": pure date-picker mode for the add-trip stepper - no trip markers, no open-trip
    * behavior, but today-gating (future days only) stays the same as the default trip view. */
   mode?: "picker";
@@ -15,6 +17,9 @@ type Props = {
    * happened yet) — marked on the grid like a trip day, but tapping still opens the add flow
    * since there's no trip object for them yet. */
   optimisticIsoDates?: ReadonlySet<string>;
+  /** Currently selected day (tap-to-detail) - rendered with a stronger, filled ring distinct
+   * from today's outline ring. Not used in picker mode. */
+  selectedIso?: string | null;
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -38,9 +43,9 @@ export default function TripsCalendar({
   trips,
   homeTz,
   onPickDay,
-  onOpenTrip,
   mode,
   optimisticIsoDates,
+  selectedIso,
 }: Props) {
   const isPicker = mode === "picker";
   // "Today" and the initial view month must use the home-base LOCAL date, not the UTC date -
@@ -105,12 +110,12 @@ export default function TripsCalendar({
   }
 
   function handleDayClick(iso: string) {
-    const trip = tripByDay.get(iso);
-    if (trip) {
-      onOpenTrip(trip);
+    if (isPicker) {
+      if (iso >= today) onPickDay(iso);
       return;
     }
-    if (iso >= today) {
+    const trip = tripByDay.get(iso);
+    if (trip || iso >= today) {
       onPickDay(iso);
     }
   }
@@ -123,7 +128,7 @@ export default function TripsCalendar({
           data-testid="calendar-prev"
           onClick={goPrevMonth}
           aria-label="Previous month"
-          className="rounded border border-edge px-2 py-1 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+          className="min-h-[44px] min-w-[44px] rounded border border-edge px-2 py-1 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
         >
           ‹
         </button>
@@ -135,7 +140,7 @@ export default function TripsCalendar({
           data-testid="calendar-next"
           onClick={goNextMonth}
           aria-label="Next month"
-          className="rounded border border-edge px-2 py-1 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+          className="min-h-[44px] min-w-[44px] rounded border border-edge px-2 py-1 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
         >
           ›
         </button>
@@ -150,6 +155,7 @@ export default function TripsCalendar({
       <div className="grid grid-cols-7 gap-1">
         {grid.flat().map((cell) => {
           const isToday = cell.iso === today;
+          const isSelected = cell.iso === selectedIso;
           const isPast = cell.iso < today;
           const mark = dayMarks.get(cell.iso);
           const hasTrip = mark !== undefined;
@@ -163,9 +169,11 @@ export default function TripsCalendar({
               disabled={disabled}
               onClick={() => handleDayClick(cell.iso)}
               className={[
-                "flex flex-col items-center gap-0.5 rounded-lg border py-1.5 transition-colors duration-[120ms]",
+                "flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border py-2 transition-colors duration-[120ms]",
                 hasTrip ? "border-transparent bg-accent-soft" : "border-edge",
-                isToday ? "ring-2 ring-accent" : "",
+                // Selected (tap-to-detail) gets a stronger, filled ring - visually distinct
+                // from today's plain outline ring so both can be told apart when they coincide.
+                isSelected ? "ring-2 ring-accent ring-offset-1 ring-offset-ground" : isToday ? "ring-2 ring-accent" : "",
                 !cell.inMonth ? "opacity-40" : "",
                 isPast && !hasTrip ? "opacity-60" : "",
                 disabled ? "cursor-default" : "hover:bg-raised",
