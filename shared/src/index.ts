@@ -69,3 +69,33 @@ export const AirportSchema = z.object({
 });
 
 export type Airport = z.infer<typeof AirportSchema>;
+
+const flightNoSchema = z.string().regex(/^[A-Z]{2}\d{1,4}$/i);
+
+export type ScheduleLeg = {
+  legSeq: number;
+  origin: string;
+  dest: string;
+  depLocal: string;
+  arrLocal: string;
+  dayOffset: number;
+  originTz: string;
+  destTz: string;
+  confirmCount: number;
+};
+
+export type ScheduleLookupResponse = {
+  legs: ScheduleLeg[];
+};
+
+export const ScheduleConfirmSchema = z.object({
+  flightNo: flightNoSchema,
+  legSeq: z.number().int().min(0),
+  origin: iataSchema,
+  dest: iataSchema,
+  depLocal: z.string(),
+  arrLocal: z.string(),
+  dayOffset: z.number().int(),
+});
+
+export type ScheduleConfirmInput = z.infer<typeof ScheduleConfirmSchema>;

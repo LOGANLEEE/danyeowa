@@ -67,6 +67,23 @@ export function localDateKey(utcIso: string, tz: string): string {
   return fmt.format(new Date(utcIso));
 }
 
+/**
+ * ISO weekday (Monday=1 .. Sunday=7) of `dateIso` ("YYYY-MM-DD", timezone-agnostic —
+ * pass a value already resolved to the local calendar date, e.g. via `localDateKey`).
+ *
+ * Assumption: flight_schedules.days_of_week encodes days 1-7 as Monday-first (ISO
+ * weekday), matching this function. All current seed rows use "1234567" (operates
+ * daily), so this convention is currently unverified against a real partial-week
+ * schedule — if a future seed row with a non-daily pattern turns out to disagree,
+ * this is the function to flip.
+ */
+export function isoWeekday(dateIso: string): number {
+  const [year, month, day] = dateIso.split("-").map(Number) as [number, number, number];
+  // Date.UTC's month is 0-indexed; getUTCDay() returns 0=Sun..6=Sat — remap to 1=Mon..7=Sun.
+  const jsDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return jsDay === 0 ? 7 : jsDay;
+}
+
 /** Local calendar day for `utcIso` in `tz`, as an epoch-ms midnight-UTC marker (day-granularity only, not a real instant). */
 export function localDayEpoch(utcIso: string, tz: string): number {
   const [year, month, day] = localDateKey(utcIso, tz).split("-").map(Number) as [
