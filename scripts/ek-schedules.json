@@ -144,8 +144,8 @@
     "legSeq": 0,
     "origin": "DXB",
     "dest": "BKK",
-    "depLocal": "09:20",
-    "arrLocal": "18:35",
+    "depLocal": "02:50",
+    "arrLocal": "12:30",
     "dayOffset": 0,
     "daysOfWeek": "1234567"
   },
@@ -154,8 +154,8 @@
     "legSeq": 1,
     "origin": "BKK",
     "dest": "HKG",
-    "depLocal": "14:30",
-    "arrLocal": "18:20",
+    "depLocal": "14:15",
+    "arrLocal": "18:15",
     "dayOffset": 0,
     "daysOfWeek": "1234567"
   },
@@ -164,8 +164,8 @@
     "legSeq": 0,
     "origin": "HKG",
     "dest": "BKK",
-    "depLocal": "20:20",
-    "arrLocal": "22:10",
+    "depLocal": "21:30",
+    "arrLocal": "23:45",
     "dayOffset": 0,
     "daysOfWeek": "1234567"
   },
@@ -174,9 +174,9 @@
     "legSeq": 1,
     "origin": "BKK",
     "dest": "DXB",
-    "depLocal": "00:05",
-    "arrLocal": "03:55",
-    "dayOffset": 1,
+    "depLocal": "01:35",
+    "arrLocal": "04:40",
+    "dayOffset": 0,
     "daysOfWeek": "1234567"
   },
   {

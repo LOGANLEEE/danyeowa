@@ -192,9 +192,13 @@ export function addDaysIso(dateIso: string, days: number): string {
   return isoDate(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
-/** A schedule leg's own dep-to-arr day delta, as returned by `GET /api/schedule/lookup`. */
+/** A schedule leg's own dep-to-arr day delta and clock times, as returned by `GET /api/schedule/lookup`. */
 export type ScheduleLegOffset = {
   dayOffset: number;
+  /** Local departure clock time, "HH:MM". Used to detect an impossible same-day connection. */
+  depLocal: string;
+  /** Local arrival clock time, "HH:MM". Used to detect an impossible same-day connection. */
+  arrLocal: string;
 };
 
 /**
@@ -207,18 +211,39 @@ export type ScheduleLegOffset = {
  * duration, only each leg's own times). So the running "days since picked date" carries
  * leg (N-1)'s arrival-date offset forward as leg N's departure-date offset.
  *
- * Example (EK384 DXB->BKK->HKG, both legs dayOffset 0): both legs depart on `pickedIso`.
- * Example (EK412 DXB->SYD dayOffset 1, then SYD->CHC dayOffset 0): leg 1 (SYD->CHC)
- * departs on `pickedIso + 1` (leg 0's arrival day), landing the same day.
+ * Safety net: schedule reference data (seed or crowd-confirmed) can be wrong or represent
+ * a connection that only makes sense a day later than its stated day_offset implies. After
+ * assigning leg N's candidate date, if leg N's departure clock time is EARLIER than leg
+ * (N-1)'s arrival clock time (both compared as local wall-clock HH:MM, ignoring which
+ * airport/tz they're in - this is a same-day-connection sanity check, not a real elapsed-time
+ * calculation), that would mean leg N departs before leg (N-1) lands, which is impossible for
+ * a connecting itinerary. In that case leg N's date is rolled forward by one day.
+ *
+ * Example (EK385 HKG->BKK->DXB, both legs dayOffset 0): leg 0 arrives BKK 23:45; leg 1's
+ * stated dep 01:35 is a genuine cross-midnight ground connection (not a data error), so
+ * leg 1 rolls forward to `pickedIso + 1` despite dayOffset 0 - the roll-forward net handles
+ * legitimate overnight layovers exactly the same way it would guard against bad seed data
+ * (see task-3-report.md for the EK384 case this was written to catch).
+ * Example (EK412 DXB->SYD dayOffset 1, then SYD->CHC dayOffset 0): leg 1 (SYD->CHC) departs
+ * 07:45, after leg 0's 06:00 arrival, so no extra roll - it departs on `pickedIso + 1` as
+ * `dayOffset` alone already implies.
  *
  * Returns one departure-date ISO string per leg, same order/length as `legs`.
  */
 export function legDatesFromPicked(pickedIso: string, legs: ScheduleLegOffset[]): string[] {
   const depDates: string[] = [];
   let cumulativeOffsetDays = 0;
+  let prevArrLocal: string | null = null;
   for (const leg of legs) {
+    if (prevArrLocal !== null && leg.depLocal < prevArrLocal) {
+      // Stated day_offset would have this leg depart before the previous leg lands
+      // (same-day wall-clock comparison) - roll forward a day to make the connection
+      // physically possible.
+      cumulativeOffsetDays += 1;
+    }
     depDates.push(addDaysIso(pickedIso, cumulativeOffsetDays));
     cumulativeOffsetDays += leg.dayOffset;
+    prevArrLocal = leg.arrLocal;
   }
   return depDates;
 }
