@@ -54,7 +54,7 @@ describe("TripsCalendar", () => {
     );
 
     const day = screen.getByTestId("calendar-day-2026-08-15");
-    expect(day.querySelector(".bg-away")).toBeTruthy();
+    expect(day.querySelector(".bg-accent-soft")).toBeTruthy();
   });
 
   it("calls onOpenTrip when tapping a day covered by a trip", async () => {
@@ -147,7 +147,7 @@ describe("TripsCalendar", () => {
     );
 
     const today = screen.getByTestId("calendar-day-2026-08-10");
-    expect(today.className).toContain("border-amber");
+    expect(today.className).toContain("border-accent");
   });
 
   it("puts today's ring on the home-base LOCAL date, not the UTC date, when tz is ahead of UTC", () => {
@@ -164,8 +164,8 @@ describe("TripsCalendar", () => {
       />,
     );
 
-    expect(screen.getByTestId("calendar-day-2026-08-11").className).toContain("border-amber");
-    expect(screen.getByTestId("calendar-day-2026-08-10").className).not.toContain("border-amber");
+    expect(screen.getByTestId("calendar-day-2026-08-11").className).toContain("border-accent");
+    expect(screen.getByTestId("calendar-day-2026-08-10").className).not.toContain("border-accent");
   });
 
   it("puts today's ring on the home-base LOCAL date, not the UTC date, when tz is behind UTC", () => {
@@ -182,7 +182,7 @@ describe("TripsCalendar", () => {
       />,
     );
 
-    expect(screen.getByTestId("calendar-day-2026-08-09").className).toContain("border-amber");
-    expect(screen.getByTestId("calendar-day-2026-08-10").className).not.toContain("border-amber");
+    expect(screen.getByTestId("calendar-day-2026-08-09").className).toContain("border-accent");
+    expect(screen.getByTestId("calendar-day-2026-08-10").className).not.toContain("border-accent");
   });
 });

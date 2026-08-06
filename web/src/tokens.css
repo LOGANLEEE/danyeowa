@@ -1,16 +1,63 @@
 @theme {
-  --color-ground: #121418;
-  --color-surface: #191d24;
-  --color-raised: #1a2027;
-  --color-edge: #2b3442;
-  --color-ink: #dfe4ec;
-  --color-ink-bright: #f2f5fa;
+  --color-ground: #fafafa;
+  --color-card: #ffffff;
+  --color-raised: #f2f3f5;
+  --color-ink: #1b1d22;
+  --color-ink-muted: #6a7078;
+  --color-accent: #2f6fed;
+  --color-accent-soft: #e8f0fe;
+  --color-ok: #1e9e6a;
+  --color-edge: #ececea;
+  --color-danger: #d9463c;
+  --color-report: #2f6fed;
+}
+
+/* Dark overrides: two mechanisms, both must win over the @theme light defaults above.
+   1) prefers-color-scheme, only when the user hasn't set an explicit theme (data-theme absent
+      or "system").
+   2) explicit [data-theme="dark"], for the manual override — wins regardless of OS scheme. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --color-ground: #15171c;
+    --color-card: #1d2027;
+    --color-raised: #23262e;
+    --color-ink: #e8ebf1;
+    --color-ink-muted: #8b93a3;
+    --color-accent: #7ea6f5;
+    --color-accent-soft: #223047;
+    --color-ok: #8fd3b6;
+    --color-edge: #2a2e37;
+    --color-danger: #e0655f;
+    --color-report: #ffd57e;
+  }
+}
+
+:root[data-theme="dark"] {
+  --color-ground: #15171c;
+  --color-card: #1d2027;
+  --color-raised: #23262e;
+  --color-ink: #e8ebf1;
   --color-ink-muted: #8b93a3;
-  --color-amber: #e2a63d;
-  --color-amber-num: #ffd57e;
+  --color-accent: #7ea6f5;
+  --color-accent-soft: #223047;
   --color-ok: #8fd3b6;
-  --color-away: #9db8e8;
-  --color-violation: #e0655f;
+  --color-edge: #2a2e37;
+  --color-danger: #e0655f;
+  --color-report: #ffd57e;
+}
+
+:root[data-theme="light"] {
+  --color-ground: #fafafa;
+  --color-card: #ffffff;
+  --color-raised: #f2f3f5;
+  --color-ink: #1b1d22;
+  --color-ink-muted: #6a7078;
+  --color-accent: #2f6fed;
+  --color-accent-soft: #e8f0fe;
+  --color-ok: #1e9e6a;
+  --color-edge: #ececea;
+  --color-danger: #d9463c;
+  --color-report: #2f6fed;
 }
 
 .num {
@@ -27,18 +74,51 @@
   --stagger-step: 60ms;
 }
 
-/* Background depth: fixed, subtle radial glow on the ground only (not on cards). */
+/* Background depth: fixed. Light theme leans clean (near-none wash); dark keeps a subtle glow. */
 body {
   background-color: var(--color-ground);
-  background-image:
-    radial-gradient(ellipse 120% 60% at 50% 0%, rgba(226, 166, 61, 0.04) 0%, rgba(226, 166, 61, 0.028) 15%, rgba(226, 166, 61, 0.016) 25%, rgba(226, 166, 61, 0.008) 32%, rgba(226, 166, 61, 0.003) 38%, rgba(226, 166, 61, 0) 40%),
-    radial-gradient(ellipse 90% 70% at 100% 100%, rgba(157, 184, 232, 0.02) 0%, rgba(157, 184, 232, 0.012) 20%, rgba(157, 184, 232, 0.006) 32%, rgba(157, 184, 232, 0.002) 45%, rgba(157, 184, 232, 0) 60%);
+  background-image: radial-gradient(
+    ellipse 120% 60% at 50% 0%,
+    rgba(47, 111, 237, 0.03) 0%,
+    rgba(47, 111, 237, 0.018) 20%,
+    rgba(47, 111, 237, 0.008) 32%,
+    rgba(47, 111, 237, 0) 40%
+  );
   background-attachment: fixed;
 }
 
-/* Hairline: 1px ~10%-white border for raised surfaces (second, cheap depth cue). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) body {
+    background-image:
+      radial-gradient(ellipse 120% 60% at 50% 0%, rgba(255, 213, 126, 0.04) 0%, rgba(255, 213, 126, 0.028) 15%, rgba(255, 213, 126, 0.016) 25%, rgba(255, 213, 126, 0.008) 32%, rgba(255, 213, 126, 0.003) 38%, rgba(255, 213, 126, 0) 40%),
+      radial-gradient(ellipse 90% 70% at 100% 100%, rgba(126, 166, 245, 0.02) 0%, rgba(126, 166, 245, 0.012) 20%, rgba(126, 166, 245, 0.006) 32%, rgba(126, 166, 245, 0.002) 45%, rgba(126, 166, 245, 0) 60%);
+  }
+}
+
+[data-theme="dark"] body {
+  background-image:
+    radial-gradient(ellipse 120% 60% at 50% 0%, rgba(255, 213, 126, 0.04) 0%, rgba(255, 213, 126, 0.028) 15%, rgba(255, 213, 126, 0.016) 25%, rgba(255, 213, 126, 0.008) 32%, rgba(255, 213, 126, 0.003) 38%, rgba(255, 213, 126, 0) 40%),
+    radial-gradient(ellipse 90% 70% at 100% 100%, rgba(126, 166, 245, 0.02) 0%, rgba(126, 166, 245, 0.012) 20%, rgba(126, 166, 245, 0.006) 32%, rgba(126, 166, 245, 0.002) 45%, rgba(126, 166, 245, 0) 60%);
+}
+
+/* Hairline: 1px subtle border for raised surfaces (second, cheap depth cue).
+   Light: soft dark-on-light hairline + shadow (mock calls for soft shadows in light).
+   Dark: ~10%-white hairline, no shadow. */
 .hairline {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) .hairline {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
+  }
+}
+
+[data-theme="dark"] .hairline {
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
 }
 
 /* Entrance: base = opacity-only (reduced-motion-safe default). */

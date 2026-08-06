@@ -76,7 +76,7 @@ export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Prop
         <button
           type="button"
           onClick={onAddTrip}
-          className="rounded bg-amber px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+          className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
         >
           Add your first trip
         </button>
@@ -103,7 +103,7 @@ export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Prop
           type="button"
           onClick={() => selectView("list")}
           className={`rounded px-2 py-1 transition-colors duration-[120ms] ${
-            view === "list" ? "hairline text-ink-bright" : "text-ink-muted"
+            view === "list" ? "hairline text-ink" : "text-ink-muted"
           }`}
         >
           List
@@ -112,7 +112,7 @@ export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Prop
           type="button"
           onClick={() => selectView("calendar")}
           className={`rounded px-2 py-1 transition-colors duration-[120ms] ${
-            view === "calendar" ? "hairline text-ink-bright" : "text-ink-muted"
+            view === "calendar" ? "hairline text-ink" : "text-ink-muted"
           }`}
         >
           Calendar
@@ -127,10 +127,10 @@ export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Prop
           const trip = tripByFlightId.get(nextDuty.id);
           if (trip) onOpenTrip(trip);
         }}
-        className="stagger-1 flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
+        className="stagger-1 flex flex-col gap-3 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
       >
         <div>
-          <p className="text-lg font-semibold text-ink-bright">
+          <p className="text-lg font-semibold text-ink">
             {nextDuty.origin} → {nextDuty.dest}
           </p>
           <p className="text-sm text-ink-muted">{nextDuty.flightNo}</p>
@@ -138,7 +138,7 @@ export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Prop
 
         <div className="rounded border border-edge bg-raised p-3">
           <p className="text-xs uppercase text-ink-muted">Report</p>
-          <p className="num text-3xl font-semibold text-amber-num">
+          <p className="num text-3xl font-semibold text-report">
             {formatLocal(nextDuty.reportUtc, nextDuty.depTz)}
           </p>
           <p className="text-sm text-ink-muted">
@@ -157,10 +157,10 @@ export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Prop
       {activePairing && (
         <div
           data-testid="pairing-progress-card"
-          className="stagger-2 flex flex-col gap-3 rounded-lg border border-edge bg-surface p-4"
+          className="stagger-2 flex flex-col gap-3 rounded-lg border border-edge bg-card p-4"
         >
           <div className="flex items-baseline justify-between">
-            <p className="text-sm text-ink-bright">Trip · {activePairing.progress.totalDays} days</p>
+            <p className="text-sm text-ink">Trip · {activePairing.progress.totalDays} days</p>
             <p className="num text-sm text-ink-muted">
               day {activePairing.progress.currentDay} of {activePairing.progress.totalDays}
             </p>
@@ -185,9 +185,9 @@ export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Prop
                 key={day}
                 className={`h-1.5 flex-1 rounded-full ${
                   day < activePairing.progress.currentDay
-                    ? "bg-amber"
+                    ? "bg-accent"
                     : day === activePairing.progress.currentDay
-                      ? "bg-amber-num"
+                      ? "bg-report"
                       : "bg-edge"
                 }`}
               />
@@ -242,7 +242,7 @@ export default function CrewHome({ onAddTrip, onOpenTrip, onPickDay, now }: Prop
       <button
         type="button"
         onClick={onAddTrip}
-        className="self-start rounded border border-amber px-3 py-2 text-amber transition-colors duration-[120ms] hover:bg-amber/10 active:scale-[0.98]"
+        className="self-start rounded border border-accent px-3 py-2 text-accent transition-colors duration-[120ms] hover:bg-accent/10 active:scale-[0.98]"
       >
         Add trip
       </button>

@@ -106,10 +106,10 @@ describe("CrewHome", () => {
 
     render(<CrewHome onAddTrip={vi.fn()} onOpenTrip={vi.fn()} onPickDay={vi.fn()} now={now} />);
 
-    // REPORT box: prominent amber .num element showing the local report time at origin (DXB, Asia/Dubai, UTC+4).
+    // REPORT box: prominent .num element showing the local report time at origin (DXB, Asia/Dubai, UTC+4).
     const reportTime = await screen.findByText("04:45");
     expect(reportTime.className).toContain("num");
-    expect(reportTime.className).toContain("text-amber-num");
+    expect(reportTime.className).toContain("text-report");
 
     // Status band / countdown text present.
     expect(screen.getByText(/next report/i)).toBeInTheDocument();

@@ -118,7 +118,7 @@ export default function TripsCalendar({
         >
           ‹
         </button>
-        <p className="text-sm font-medium text-ink-bright">
+        <p className="text-sm font-medium text-ink">
           {MONTH_LABELS[viewMonth - 1]} {viewYear}
         </p>
         <button
@@ -155,7 +155,7 @@ export default function TripsCalendar({
               onClick={() => handleDayClick(cell.iso)}
               className={[
                 "flex flex-col items-center gap-0.5 rounded border py-1.5 transition-colors duration-[120ms]",
-                isToday ? "border-amber" : "border-edge",
+                isToday ? "border-accent" : "border-edge",
                 !cell.inMonth ? "opacity-40" : "",
                 isPast && !hasTrip ? "opacity-60" : "",
                 disabled ? "cursor-default" : "hover:bg-raised",
@@ -166,8 +166,8 @@ export default function TripsCalendar({
                 <span
                   className={
                     mark === "away"
-                      ? "h-1.5 w-1.5 rounded-full bg-away"
-                      : "h-1 w-3 rounded-full bg-away"
+                      ? "h-1.5 w-1.5 rounded-full bg-accent-soft"
+                      : "h-1 w-3 rounded-full bg-accent-soft"
                   }
                   aria-hidden="true"
                 />

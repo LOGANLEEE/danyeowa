@@ -58,8 +58,8 @@ export default function App() {
     <div className="flex min-h-screen flex-col bg-ground text-ink">
       {!isLanding && (
         <header className="flex items-center justify-between border-b border-edge px-4 py-3">
-          <h1 className="text-xl font-semibold text-ink-bright">
-            roaster<span className="text-amber">·me</span>
+          <h1 className="text-xl font-semibold text-ink">
+            roaster<span className="text-accent">·me</span>
           </h1>
           {me !== "loading" && me !== null && (
             <div className="flex items-center gap-3 text-sm">

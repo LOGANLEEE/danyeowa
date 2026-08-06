@@ -61,7 +61,7 @@ export default function Login({ onSignedIn, onBack }: Props) {
     return (
       <form
         onSubmit={handleSendCode}
-        className="entrance flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
+        className="entrance flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-card p-6"
       >
         {onBack && (
           <button
@@ -75,7 +75,7 @@ export default function Login({ onSignedIn, onBack }: Props) {
         <button
           type="button"
           onClick={handleGoogleSignIn}
-          className="flex items-center justify-center gap-2 rounded border border-edge bg-surface px-3 py-2 font-medium text-ink-bright transition-colors duration-[120ms] hover:bg-raised"
+          className="flex items-center justify-center gap-2 rounded border border-edge bg-card px-3 py-2 font-medium text-ink transition-colors duration-[120ms] hover:bg-raised"
         >
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
             <path
@@ -112,11 +112,11 @@ export default function Login({ onSignedIn, onBack }: Props) {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
+          className="rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
         />
         <button
           type="submit"
-          className="rounded bg-amber px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+          className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
         >
           Send code
         </button>
@@ -132,7 +132,7 @@ export default function Login({ onSignedIn, onBack }: Props) {
   return (
     <form
       onSubmit={handleSignIn}
-      className="entrance flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-surface p-6"
+      className="entrance flex w-full max-w-sm flex-col gap-3 rounded-lg border border-edge bg-card p-6"
     >
       {onBack && (
         <button
@@ -155,11 +155,11 @@ export default function Login({ onSignedIn, onBack }: Props) {
         required
         value={code}
         onChange={(e) => setCode(e.target.value)}
-        className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-amber"
+        className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
       />
       <button
         type="submit"
-        className="rounded bg-amber px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+        className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
       >
         Sign in
       </button>

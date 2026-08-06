@@ -148,7 +148,7 @@ test("calendar view: tap a future day, create a trip, see the away marker, switc
   await page.getByTestId("calendar-next").click();
   await page.getByTestId("calendar-next").click();
   const dayCell = page.getByTestId(`calendar-day-${iso}`);
-  await expect(dayCell.locator(".bg-away")).toBeVisible();
+  await expect(dayCell.locator(".bg-accent-soft")).toBeVisible();
 
   // Switch back to list view.
   await page.getByRole("button", { name: /^list$/i }).click();
