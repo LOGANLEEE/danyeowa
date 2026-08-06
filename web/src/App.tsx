@@ -70,7 +70,10 @@ export default function App() {
         </header>
       )}
 
-      <main className="flex flex-1 flex-col items-center px-4 py-6">
+      <main
+        className={`flex flex-1 flex-col items-center px-4 py-6 ${isSignedIn ? "pb-24" : ""}`}
+        style={isSignedIn ? { paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" } : undefined}
+      >
         {me === "loading" ? (
           <p className="text-ink-muted">loading…</p>
         ) : me === null ? (
@@ -133,9 +136,14 @@ export default function App() {
         />
       )}
 
-      <footer className="px-4 py-2 text-right text-xs text-ink-muted">
-        {health === null ? "checking…" : health.ok ? "API: online" : "API: offline"}
-      </footer>
+      {/* Hidden signed-in: the fixed TabBar now owns the bottom of the viewport, and this
+          API-status footer isn't part of the signed-in mock. Simpler than repositioning it
+          above the tab bar for a debug-only readout. */}
+      {!isSignedIn && (
+        <footer className="px-4 py-2 text-right text-xs text-ink-muted">
+          {health === null ? "checking…" : health.ok ? "API: online" : "API: offline"}
+        </footer>
+      )}
     </div>
   );
 }

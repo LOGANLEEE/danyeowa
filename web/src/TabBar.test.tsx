@@ -14,6 +14,15 @@ describe("TabBar", () => {
     expect(screen.getByTestId("tab-settings")).toBeInTheDocument();
   });
 
+  it("is pinned to the viewport bottom (fixed, not an in-flow flex child)", () => {
+    render(<TabBar active="calendar" onSelect={vi.fn()} onAdd={vi.fn()} />);
+
+    const nav = screen.getByTestId("tab-calendar").closest("nav");
+    expect(nav).not.toBeNull();
+    expect(nav!.className).toContain("fixed");
+    expect(nav!.className).toContain("bottom-0");
+  });
+
   it("marks the active tab with accent styling", () => {
     render(<TabBar active="trips" onSelect={vi.fn()} onAdd={vi.fn()} />);
 

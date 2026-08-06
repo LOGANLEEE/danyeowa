@@ -72,7 +72,7 @@ export default function TabBar({ active, onSelect, onAdd }: Props) {
 
   return (
     <nav
-      className="flex items-center justify-around border-t border-edge bg-card px-2 pt-2"
+      className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-edge bg-card px-2 pt-2"
       style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
     >
       <button type="button" data-testid="tab-calendar" onClick={() => onSelect("calendar")} className={tabClass("calendar")}>
