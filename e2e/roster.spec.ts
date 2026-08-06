@@ -6,6 +6,11 @@ import { E2E_EMAIL, FIXTURE, signInThroughUi } from "./helpers";
  * construction: signs in as a fixed test account, and any leftover trip from a prior
  * failed run is deleted by the "empty state" step below (or the delete step at the end
  * of a clean run) before a new trip is created — so re-running never accumulates state.
+ *
+ * Auth coverage stays on the email OTP path only: Google's real OAuth consent screen
+ * actively blocks automated sign-in, so there's no reliable way to drive the "Continue
+ * with Google" button through Playwright. That path is covered by unit tests (Login.test.tsx)
+ * that assert authClient.signIn.social is called correctly, plus manual verification.
  */
 test("landing -> sign in -> create, edit, delete trip -> sign out", async ({ page }) => {
   // Landing renders with no header band (App.tsx renders no <header> at all when signed
@@ -64,7 +69,7 @@ test("landing -> sign in -> create, edit, delete trip -> sign out", async ({ pag
   // Sign out -> back to landing.
   await page.getByRole("button", { name: /sign out/i }).click();
   await expect(page.getByRole("heading", { name: /roaster/i, level: 1 })).toBeVisible();
-  await expect(page.getByRole("button", { name: /sign in with email/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
 });
 
 test("calendar view: tap a future day, create a trip, see the away marker, switch back to list", async ({

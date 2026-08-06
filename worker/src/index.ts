@@ -11,6 +11,8 @@ export type Env = {
   DEV_OTP_FALLBACK?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
   /**
    * Test-only escape hatch: enables GET /api/__e2e/last-otp so the Playwright suite can
    * retrieve a dev-fallback OTP without a real inbox. Must NEVER be set in wrangler.jsonc

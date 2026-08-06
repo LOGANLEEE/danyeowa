@@ -11,11 +11,19 @@ export type AuthEnv = {
   DEV_OTP_FALLBACK?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
 };
 
 export const createAuth = (env: AuthEnv) => {
   if (!env.BETTER_AUTH_SECRET) {
     throw new Error("BETTER_AUTH_SECRET is required");
+  }
+  if (!env.GOOGLE_CLIENT_ID) {
+    throw new Error("GOOGLE_CLIENT_ID is required");
+  }
+  if (!env.GOOGLE_CLIENT_SECRET) {
+    throw new Error("GOOGLE_CLIENT_SECRET is required");
   }
   return betterAuth({
     secret: env.BETTER_AUTH_SECRET,
@@ -32,6 +40,12 @@ export const createAuth = (env: AuthEnv) => {
       ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
     },
     database: drizzleAdapter(drizzle(env.DB, { schema }), { provider: "sqlite", schema }),
+    socialProviders: {
+      google: {
+        clientId: env.GOOGLE_CLIENT_ID,
+        clientSecret: env.GOOGLE_CLIENT_SECRET,
+      },
+    },
     plugins: [
       emailOTP({
         otpLength: 6,

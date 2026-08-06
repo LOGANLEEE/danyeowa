@@ -7,7 +7,7 @@ import { authClient } from "./auth-client";
 vi.mock("./auth-client", () => ({
   authClient: {
     emailOtp: { sendVerificationOtp: vi.fn() },
-    signIn: { emailOtp: vi.fn() },
+    signIn: { emailOtp: vi.fn(), social: vi.fn() },
   },
 }));
 
@@ -15,6 +15,25 @@ describe("Login", () => {
   beforeEach(() => {
     vi.mocked(authClient.emailOtp.sendVerificationOtp).mockReset();
     vi.mocked(authClient.signIn.emailOtp).mockReset();
+    vi.mocked(authClient.signIn.social).mockReset();
+  });
+
+  it("signs in with Google when the Google button is clicked", async () => {
+    const user = userEvent.setup();
+    vi.mocked(authClient.signIn.social).mockResolvedValue({
+      data: {},
+      error: null,
+    } as never);
+    const onSignedIn = vi.fn();
+
+    render(<Login onSignedIn={onSignedIn} />);
+
+    await user.click(screen.getByRole("button", { name: /continue with google/i }));
+
+    expect(authClient.signIn.social).toHaveBeenCalledWith({
+      provider: "google",
+      callbackURL: "/",
+    });
   });
 
   it("sends an OTP for the entered email, then signs in with the code", async () => {

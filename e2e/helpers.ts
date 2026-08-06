@@ -32,7 +32,7 @@ async function fetchLastOtp(page: Page, email: string): Promise<string> {
 /** Drives the full landing -> CTA -> email OTP sign-in flow via the real UI. */
 export async function signInThroughUi(page: Page, email = E2E_EMAIL): Promise<void> {
   await page.goto("/");
-  await page.getByRole("button", { name: /sign in with email/i }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByLabel(/email/i).fill(email);
   await page.getByRole("button", { name: /send code/i }).click();
 

@@ -14,7 +14,7 @@ describe("Landing", () => {
     const user = userEvent.setup();
     const onSignIn = vi.fn();
     render(<Landing onSignIn={onSignIn} />);
-    await user.click(screen.getByRole("button", { name: /sign in with email/i }));
+    await user.click(screen.getByRole("button", { name: /^sign in$/i }));
     expect(onSignIn).toHaveBeenCalledTimes(1);
   });
 });
