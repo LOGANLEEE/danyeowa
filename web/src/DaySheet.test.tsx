@@ -298,6 +298,155 @@ describe("DaySheet", () => {
     expect(banner).toHaveTextContent("2026-08-22");
   });
 
+  it("rapid entry: next-date suggestion skips the FULL span of a pre-existing multi-day trip (not just its departure date)", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(lookupSchedule).mockResolvedValue({
+      legs: [
+        {
+          legSeq: 0,
+          origin: "DXB",
+          dest: "LHR",
+          depLocal: "09:15",
+          arrLocal: "13:35",
+          dayOffset: 0,
+          originTz: "Asia/Dubai",
+          destTz: "Europe/London",
+          confirmCount: 3,
+        },
+      ],
+    });
+    vi.mocked(createTrip).mockResolvedValue({
+      id: "trip-2",
+      userId: "u1",
+      label: null,
+      createdAt: Date.now(),
+      flights: [],
+    });
+
+    // Existing trip's away-span (Asia/Dubai local) runs 2026-08-21 through 2026-08-23 -
+    // three days, not just its departure date. isDayOccupied already used the full
+    // first-leg-dep..last-leg-arr span (only `justAdded`, the just-added-this-session set,
+    // had the single-date bug) - this locks in that existing-trip behavior stays correct.
+    const multiDayTrip: TripWithFlights = {
+      ...trip,
+      id: "multi-day",
+      flights: [
+        { ...trip.flights[0]!, id: "md-f1", legSeq: 0, depUtc: "2026-08-21T02:15:00.000Z", arrUtc: "2026-08-21T07:30:00.000Z" },
+        { ...trip.flights[0]!, id: "md-f2", legSeq: 1, depUtc: "2026-08-23T10:00:00.000Z", arrUtc: "2026-08-23T14:00:00.000Z" },
+      ],
+    };
+
+    render(
+      <DaySheet
+        isoDate="2026-08-20"
+        trip={null}
+        trips={[multiDayTrip]}
+        homeTz="Asia/Dubai"
+        onClose={vi.fn()}
+        onChanged={vi.fn()}
+        onAdded={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("flightno-input"), "ek001");
+    await vi.advanceTimersByTimeAsync(400);
+    await screen.findByTestId("autofill-card");
+    await user.click(screen.getByRole("button", { name: /add to roster/i }));
+
+    // Must skip past the entire existing span (21st-23rd), landing on the 24th - not the
+    // 21st (the trip's own dep date, which would be the bug if only dep were checked).
+    const banner = await screen.findByTestId("rapid-banner");
+    expect(banner).toHaveTextContent("2026-08-24");
+  });
+
+  it("rapid entry: next-date suggestion skips the FULL span of a multi-day trip just added this session (EK412-shape, DXB->SYD->CHC)", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(lookupSchedule).mockResolvedValue({
+      legs: [
+        {
+          legSeq: 0,
+          origin: "DXB",
+          dest: "SYD",
+          depLocal: "10:15",
+          arrLocal: "06:00",
+          dayOffset: 1,
+          originTz: "Asia/Dubai",
+          destTz: "Australia/Sydney",
+          confirmCount: 3,
+        },
+        {
+          legSeq: 1,
+          origin: "SYD",
+          dest: "CHC",
+          depLocal: "08:00",
+          arrLocal: "13:00",
+          dayOffset: 0,
+          originTz: "Australia/Sydney",
+          destTz: "Pacific/Auckland",
+          confirmCount: 3,
+        },
+      ],
+    });
+    // Picked date 2026-08-20 (Asia/Dubai); the saved trip's away-span in Asia/Dubai runs
+    // 2026-08-20 (dep) through 2026-08-22 (arr) - three local calendar days.
+    vi.mocked(createTrip).mockResolvedValue({
+      id: "trip-ek412",
+      userId: "u1",
+      label: null,
+      createdAt: Date.now(),
+      flights: [
+        {
+          id: "ek412-f1",
+          tripId: "trip-ek412",
+          userId: "u1",
+          flightNo: "EK412",
+          origin: "DXB",
+          dest: "SYD",
+          depUtc: "2026-08-20T06:15:00.000Z",
+          arrUtc: "2026-08-21T00:00:00.000Z",
+          reportUtc: "2026-08-20T04:45:00.000Z",
+          depTz: "Asia/Dubai",
+          arrTz: "Australia/Sydney",
+          source: "manual",
+          notes: null,
+          legSeq: 0,
+        },
+        {
+          id: "ek412-f2",
+          tripId: "trip-ek412",
+          userId: "u1",
+          flightNo: "EK412",
+          origin: "SYD",
+          dest: "CHC",
+          depUtc: "2026-08-21T22:00:00.000Z",
+          // 2026-08-22T10:00:00Z is 2026-08-22 14:00 in Asia/Dubai (UTC+4) - the trip's
+          // away-span in the sheet's homeTz ends on the 22nd, not the 20th.
+          arrUtc: "2026-08-22T10:00:00.000Z",
+          reportUtc: "2026-08-21T20:30:00.000Z",
+          depTz: "Australia/Sydney",
+          arrTz: "Pacific/Auckland",
+          source: "manual",
+          notes: null,
+          legSeq: 1,
+        },
+      ],
+    });
+
+    render(
+      <DaySheet isoDate="2026-08-20" trip={null} trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
+    );
+
+    await user.type(screen.getByTestId("flightno-input"), "ek412");
+    await vi.advanceTimersByTimeAsync(400);
+    await screen.findByTestId("autofill-card");
+    await user.click(screen.getByRole("button", { name: /add to roster/i }));
+
+    // "next:" must be the day AFTER the trip's span ends (2026-08-23), not 2026-08-21 or
+    // 2026-08-22 - both of which fall inside the just-saved trip's own away-span.
+    const banner = await screen.findByTestId("rapid-banner");
+    expect(banner).toHaveTextContent("2026-08-23");
+  });
+
   it("rapid entry: tapping the next-date label shows a 7-day date strip to adjust", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     vi.mocked(lookupSchedule).mockResolvedValue({

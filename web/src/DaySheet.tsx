@@ -7,19 +7,35 @@ import type { TripWithFlights } from "./api";
 import { useRecentFlights } from "./useRecentFlights";
 import { useTripEntry } from "./useTripEntry";
 
+/** A trip's away-span as local calendar dates (first departure's to last arrival's local
+ * date, in `homeTz`) — null if the trip has no flights. */
+function tripSpan(trip: TripWithFlights, homeTz: string): { firstDay: string; lastDay: string } | null {
+  const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
+  const first = legs[0];
+  const last = legs[legs.length - 1];
+  if (!first || !last) return null;
+  return { firstDay: localDateKey(first.depUtc, homeTz), lastDay: localDateKey(last.arrUtc, homeTz) };
+}
+
+/** Every local calendar date (YYYY-MM-DD) in a trip's away-span, inclusive. */
+function tripSpanDays(trip: TripWithFlights, homeTz: string): string[] {
+  const span = tripSpan(trip, homeTz);
+  if (!span) return [];
+  const days: string[] = [];
+  for (let day = span.firstDay; day <= span.lastDay; day = addDaysIso(day, 1)) {
+    days.push(day);
+  }
+  return days;
+}
+
 /** Whether `isoDate` falls within any trip's away-span (first departure's to last arrival's
  * local calendar date), in `homeTz`. Used by rapid-entry's next-date suggestion to skip days
  * that already have a trip — a lightweight day-membership check (candidates are always a
  * handful of days out), unlike the month-scoped `tripDaysInMonth` used by the calendar grid. */
 function isDayOccupied(isoDate: string, trips: TripWithFlights[], homeTz: string): boolean {
   return trips.some((trip) => {
-    const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
-    const first = legs[0];
-    const last = legs[legs.length - 1];
-    if (!first || !last) return false;
-    const firstDay = localDateKey(first.depUtc, homeTz);
-    const lastDay = localDateKey(last.arrUtc, homeTz);
-    return isoDate >= firstDay && isoDate <= lastDay;
+    const span = tripSpan(trip, homeTz);
+    return span !== null && isoDate >= span.firstDay && isoDate <= span.lastDay;
   });
 }
 
@@ -337,9 +353,19 @@ function AddTripContent({
   const entry = useTripEntry({
     pickedDate,
     homeTz,
-    onSubmitted: () => {
+    onSubmitted: (createdTrip) => {
       const addedDate = pickedDate;
-      const updatedJustAdded = new Set(justAdded).add(addedDate);
+      // Mark every local calendar day the SAVED trip actually spans as occupied, not just
+      // the tapped date — a multi-leg trip (e.g. a 3-day EK412 DXB->SYD->CHC) away-spans
+      // several days, and "next:" must skip past all of them, not land back inside the trip.
+      const spanDays = tripSpanDays(createdTrip, homeTz);
+      const updatedJustAdded = new Set(justAdded);
+      if (spanDays.length > 0) {
+        for (const day of spanDays) updatedJustAdded.add(day);
+      } else {
+        // Defensive fallback if the server ever returns a trip with no flights.
+        updatedJustAdded.add(addedDate);
+      }
       setJustAdded(updatedJustAdded);
       setLastAdded(addedDate);
       const suggestion = nextFreeDate(addedDate, trips, updatedJustAdded, homeTz);

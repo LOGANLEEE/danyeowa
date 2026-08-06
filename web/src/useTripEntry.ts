@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Airport, LegInput, ScheduleLeg } from "@roaster/shared";
 import { TripInputSchema, addDaysIso, legDatesFromPicked, reportDefault, wallToUtc } from "@roaster/shared";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
+import type { TripWithFlights } from "./api";
 
 export type LegDraft = {
   flightNo: string;
@@ -75,7 +76,10 @@ type Options = {
   /** Local ISO date ("YYYY-MM-DD") of the day this entry is for. */
   pickedDate: string;
   homeTz: string;
-  onSubmitted: () => void;
+  /** Called after a successful save with the created trip (server-resolved depTz/arrTz
+   * included) — callers that need the full saved span (e.g. rapid-entry's next-date
+   * suggestion) don't have to re-derive it from client-side draft state. */
+  onSubmitted: (trip: TripWithFlights) => void;
 };
 
 /**
@@ -256,13 +260,13 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
 
     setSubmitting(true);
     try {
-      await createTrip(parsed.data);
+      const created = await createTrip(parsed.data);
       // Fire-and-forget: report the (possibly edited) saved times back to the crowd layer.
       // Never blocks the UX and errors are ignored.
       for (const payload of confirmPayloads) {
         confirmSchedule(payload).catch(() => {});
       }
-      onSubmitted();
+      onSubmitted(created);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create trip");
     } finally {
@@ -304,8 +308,8 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
 
     setSubmitting(true);
     try {
-      await createTrip(parsed.data);
-      onSubmitted();
+      const created = await createTrip(parsed.data);
+      onSubmitted(created);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create trip");
     } finally {
