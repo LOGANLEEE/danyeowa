@@ -236,4 +236,42 @@ describe("POST /api/schedule/confirm", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  async function postConfirm(body: unknown) {
+    return SELF.fetch("https://example.com/api/schedule/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("400s on a malformed depLocal (not HH:MM)", async () => {
+    const res = await postConfirm({ ...confirmBody, depLocal: "9am" });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s on a malformed arrLocal (out-of-range hour)", async () => {
+    const res = await postConfirm({ ...confirmBody, arrLocal: "24:00" });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s when origin equals dest", async () => {
+    const res = await postConfirm({ ...confirmBody, origin: "DXB", dest: "DXB" });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s on a dayOffset outside [0,3]", async () => {
+    const res = await postConfirm({ ...confirmBody, dayOffset: 4 });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s on a legSeq outside [0,5]", async () => {
+    const res = await postConfirm({ ...confirmBody, legSeq: 6 });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s on a malformed flightNo", async () => {
+    const res = await postConfirm({ ...confirmBody, flightNo: "412" });
+    expect(res.status).toBe(400);
+  });
 });

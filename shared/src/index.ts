@@ -88,14 +88,21 @@ export type ScheduleLookupResponse = {
   legs: ScheduleLeg[];
 };
 
-export const ScheduleConfirmSchema = z.object({
-  flightNo: flightNoSchema,
-  legSeq: z.number().int().min(0),
-  origin: iataSchema,
-  dest: iataSchema,
-  depLocal: z.string(),
-  arrLocal: z.string(),
-  dayOffset: z.number().int(),
-});
+const hhmmSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+export const ScheduleConfirmSchema = z
+  .object({
+    flightNo: flightNoSchema,
+    legSeq: z.number().int().min(0).max(5),
+    origin: iataSchema,
+    dest: iataSchema,
+    depLocal: hhmmSchema,
+    arrLocal: hhmmSchema,
+    dayOffset: z.number().int().min(0).max(3),
+  })
+  .refine((data) => data.origin.toUpperCase() !== data.dest.toUpperCase(), {
+    message: "origin and dest must differ",
+    path: ["dest"],
+  });
 
 export type ScheduleConfirmInput = z.infer<typeof ScheduleConfirmSchema>;
