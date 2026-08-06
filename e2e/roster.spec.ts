@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, FIXTURE, signInThroughUi } from "./helpers";
+import { E2E_EMAIL, FIXTURE, UNKNOWN_FLIGHT_NO, pickCalendarDay, signInThroughUi } from "./helpers";
 
 /**
  * Full auth + roster lifecycle against a real `wrangler dev` (local D1). Idempotent by
@@ -36,15 +36,17 @@ test("landing -> sign in -> create, edit, delete trip -> sign out", async ({ pag
   // Empty state.
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
-  // Create a 1-leg trip: DXB -> LHR, dep 2026-09-10T09:15 local Dubai.
+  // Create a 1-leg trip via the calendar-first stepper: pick a day, type the known
+  // flight number (EK001, a real seeded DXB->LHR schedule row), then edit the
+  // autofilled times inline to the fixture's exact values before saving.
   await page.getByRole("button", { name: /add (your first )?trip/i }).click();
-  await page.getByLabel(/flight no/i).fill(FIXTURE.flightNo);
-  await page.getByLabel(/^origin$/i).fill(FIXTURE.origin);
-  await page.getByLabel(/^origin$/i).blur();
-  await page.getByLabel(/^dest$/i).fill(FIXTURE.dest);
-  await page.getByLabel(/^dest$/i).blur();
-  await page.getByLabel(/departure \(local\)/i).fill(FIXTURE.dep);
-  await page.getByLabel(/arrival \(local\)/i).fill(FIXTURE.arr);
+  await pickCalendarDay(page, FIXTURE.dep.slice(0, 10));
+  await page.getByTestId("flightno-input").fill(FIXTURE.flightNo);
+
+  const autofillCard = page.getByTestId("autofill-card");
+  await expect(autofillCard).toBeVisible();
+  await page.getByTestId("autofill-dep").fill(FIXTURE.depTime);
+  await page.getByTestId("autofill-arr").fill(FIXTURE.arrTime);
   await page.getByRole("button", { name: /^add trip$/i }).click();
 
   // Crew home shows the computed report time: dep 09:15 - 90min = 07:45.
@@ -88,16 +90,15 @@ test("calendar view: tap a future day, create a trip, see the away marker, switc
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
   // The view toggle + calendar only appear once a trip exists (next-duty card requires
-  // upcoming duty data), so seed the first trip via the empty-state CTA (list flow, already
-  // covered by the main lifecycle spec) before exercising the calendar's tap-to-add path.
+  // upcoming duty data), so seed the first trip via the empty-state CTA (stepper flow,
+  // already covered by the main lifecycle spec) before exercising the calendar's
+  // tap-to-add path.
   await page.getByRole("button", { name: /add (your first )?trip/i }).click();
-  await page.getByLabel(/flight no/i).fill(FIXTURE.flightNo);
-  await page.getByLabel(/^origin$/i).fill(FIXTURE.origin);
-  await page.getByLabel(/^origin$/i).blur();
-  await page.getByLabel(/^dest$/i).fill(FIXTURE.dest);
-  await page.getByLabel(/^dest$/i).blur();
-  await page.getByLabel(/departure \(local\)/i).fill(FIXTURE.dep);
-  await page.getByLabel(/arrival \(local\)/i).fill(FIXTURE.arr);
+  await pickCalendarDay(page, FIXTURE.dep.slice(0, 10));
+  await page.getByTestId("flightno-input").fill(FIXTURE.flightNo);
+  await expect(page.getByTestId("autofill-card")).toBeVisible();
+  await page.getByTestId("autofill-dep").fill(FIXTURE.depTime);
+  await page.getByTestId("autofill-arr").fill(FIXTURE.arrTime);
   await page.getByRole("button", { name: /^add trip$/i }).click();
   await expect(page.getByTestId("next-duty-card")).toBeVisible();
 
@@ -119,12 +120,17 @@ test("calendar view: tap a future day, create a trip, see the away marker, switc
 
   await page.getByTestId(`calendar-day-${iso}`).click();
 
-  // TripForm opens with leg-0 departure date prefilled to the picked day, time empty.
+  // TripForm's flight-no step opens (calendar step was skipped - date already known).
+  // An unrecognized flight number falls back to manual entry, prefilled with the
+  // picked day, time empty.
+  await page.getByTestId("flightno-input").fill(UNKNOWN_FLIGHT_NO);
+  await expect(page.getByText(/unknown flight/i)).toBeVisible();
+  await page.getByTestId("manual-expand").click();
+
   const depInput = page.getByLabel(/departure \(local\)/i);
   await expect(depInput).toHaveValue(`${iso}T00:00`);
 
   // Complete the second trip's creation.
-  await page.getByLabel(/flight no/i).fill("EK002");
   await page.getByLabel(/^origin$/i).fill(FIXTURE.origin);
   await page.getByLabel(/^origin$/i).blur();
   await page.getByLabel(/^dest$/i).fill(FIXTURE.dest);

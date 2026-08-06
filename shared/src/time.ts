@@ -185,6 +185,44 @@ export function wallToUtc(wallIso: string, tz: string): string {
   return new Date(naiveMs - chosenOffset * 60_000).toISOString();
 }
 
+/** Adds `days` (may be 0 or negative) to an ISO calendar date ("YYYY-MM-DD"), timezone-agnostic. */
+export function addDaysIso(dateIso: string, days: number): string {
+  const [year, month, day] = dateIso.split("-").map(Number) as [number, number, number];
+  const d = new Date(Date.UTC(year, month - 1, day + days));
+  return isoDate(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/** A schedule leg's own dep-to-arr day delta, as returned by `GET /api/schedule/lookup`. */
+export type ScheduleLegOffset = {
+  dayOffset: number;
+};
+
+/**
+ * Derives each leg's LOCAL departure calendar date from the picked calendar date (leg 0's
+ * departure day) and each leg's own `dayOffset` (that leg's arrival date minus its own
+ * departure date - see `dayOffset()` above, same field/meaning as `flight_schedules.day_offset`).
+ *
+ * Legs are back-to-back: leg N's departure is assumed to fall on the same local calendar
+ * date as leg (N-1)'s arrival (no overnight-layover tracking - the API has no layover
+ * duration, only each leg's own times). So the running "days since picked date" carries
+ * leg (N-1)'s arrival-date offset forward as leg N's departure-date offset.
+ *
+ * Example (EK384 DXB->BKK->HKG, both legs dayOffset 0): both legs depart on `pickedIso`.
+ * Example (EK412 DXB->SYD dayOffset 1, then SYD->CHC dayOffset 0): leg 1 (SYD->CHC)
+ * departs on `pickedIso + 1` (leg 0's arrival day), landing the same day.
+ *
+ * Returns one departure-date ISO string per leg, same order/length as `legs`.
+ */
+export function legDatesFromPicked(pickedIso: string, legs: ScheduleLegOffset[]): string[] {
+  const depDates: string[] = [];
+  let cumulativeOffsetDays = 0;
+  for (const leg of legs) {
+    depDates.push(addDaysIso(pickedIso, cumulativeOffsetDays));
+    cumulativeOffsetDays += leg.dayOffset;
+  }
+  return depDates;
+}
+
 export type MonthGridCell = {
   /** ISO calendar date, e.g. "2026-08-01". Timezone-agnostic (calendar date, not an instant). */
   iso: string;

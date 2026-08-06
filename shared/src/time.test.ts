@@ -3,6 +3,7 @@ import {
   dayOffset,
   formatLocal,
   layoverHours,
+  legDatesFromPicked,
   localDateKey,
   monthGrid,
   relativeUntil,
@@ -269,6 +270,38 @@ describe("wallToUtc", () => {
   it("round-trips with formatLocal for an unambiguous stable-offset tz", () => {
     const utc = wallToUtc("2026-08-10T09:00:00", "America/Sao_Paulo");
     expect(formatLocal(utc, "America/Sao_Paulo")).toBe("09:00");
+  });
+});
+
+describe("legDatesFromPicked", () => {
+  it("keeps every leg on the picked date when all dayOffsets are 0 (EK384 DXB->BKK->HKG)", () => {
+    const dates = legDatesFromPicked("2026-08-20", [{ dayOffset: 0 }, { dayOffset: 0 }]);
+    expect(dates).toEqual(["2026-08-20", "2026-08-20"]);
+  });
+
+  it("carries a +1 arrival offset into the next leg's departure date (EK412 DXB->SYD->CHC)", () => {
+    // Leg 0 DXB->SYD dayOffset 1 (arrives the day after departure); leg 1 SYD->CHC
+    // dayOffset 0 departs on leg 0's arrival day, i.e. picked date + 1.
+    const dates = legDatesFromPicked("2026-08-20", [{ dayOffset: 1 }, { dayOffset: 0 }]);
+    expect(dates).toEqual(["2026-08-20", "2026-08-21"]);
+  });
+
+  it("accumulates offsets across 3+ legs", () => {
+    const dates = legDatesFromPicked("2026-08-20", [
+      { dayOffset: 1 },
+      { dayOffset: 1 },
+      { dayOffset: 0 },
+    ]);
+    expect(dates).toEqual(["2026-08-20", "2026-08-21", "2026-08-22"]);
+  });
+
+  it("returns just the picked date for a single-leg flight", () => {
+    expect(legDatesFromPicked("2026-08-20", [{ dayOffset: 0 }])).toEqual(["2026-08-20"]);
+  });
+
+  it("handles a month/year boundary crossing", () => {
+    const dates = legDatesFromPicked("2026-12-31", [{ dayOffset: 1 }, { dayOffset: 0 }]);
+    expect(dates).toEqual(["2026-12-31", "2027-01-01"]);
   });
 });
 

@@ -8,6 +8,9 @@ type Props = {
   homeTz: string;
   onPickDay: (isoDate: string) => void;
   onOpenTrip: (trip: TripWithFlights) => void;
+  /** "picker": pure date-picker mode for the add-trip stepper - no trip markers, no open-trip
+   * behavior, but today-gating (future days only) stays the same as the default trip view. */
+  mode?: "picker";
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -26,7 +29,15 @@ const MONTH_LABELS = [
   "December",
 ];
 
-export default function TripsCalendar({ now, trips, homeTz, onPickDay, onOpenTrip }: Props) {
+export default function TripsCalendar({
+  now,
+  trips,
+  homeTz,
+  onPickDay,
+  onOpenTrip,
+  mode,
+}: Props) {
+  const isPicker = mode === "picker";
   // "Today" and the initial view month must use the home-base LOCAL date, not the UTC date -
   // they can differ by a day near midnight in tzs far from UTC (see localDateKey).
   const today = localDateKey(now.toISOString(), homeTz);
@@ -35,17 +46,20 @@ export default function TripsCalendar({ now, trips, homeTz, onPickDay, onOpenTri
   const [viewMonth, setViewMonth] = useState(Number(todayMonthStr)); // 1-12
   const grid = monthGrid(viewYear, viewMonth, homeTz);
 
-  const tripSpans = trips
-    .map((trip) => {
-      const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
-      const first = legs[0];
-      const last = legs[legs.length - 1];
-      if (!first || !last) return null;
-      return { trip, firstDepUtc: first.depUtc, lastArrUtc: last.arrUtc };
-    })
-    .filter((entry): entry is { trip: TripWithFlights; firstDepUtc: string; lastArrUtc: string } =>
-      entry !== null,
-    );
+  const tripSpans = isPicker
+    ? []
+    : trips
+        .map((trip) => {
+          const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
+          const first = legs[0];
+          const last = legs[legs.length - 1];
+          if (!first || !last) return null;
+          return { trip, firstDepUtc: first.depUtc, lastArrUtc: last.arrUtc };
+        })
+        .filter(
+          (entry): entry is { trip: TripWithFlights; firstDepUtc: string; lastArrUtc: string } =>
+            entry !== null,
+        );
 
   const dayMarks = tripDaysInMonth(
     tripSpans.map(({ firstDepUtc, lastArrUtc }) => ({ firstDepUtc, lastArrUtc })),

@@ -26,14 +26,15 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // Migrations + airport seed run every time (both are idempotent — migrations apply
-    // is a no-op once applied, and the seed SQL is INSERT ... ON CONFLICT DO UPDATE) so
-    // a fresh checkout's local D1 (no .wrangler/state yet) works identically to a
-    // developer's already-seeded one, which the fixture (DXB/LHR) depends on.
+    // Migrations + airport/schedule seeds run every time (all idempotent — migrations
+    // apply is a no-op once applied, and the seed SQL is INSERT ... ON CONFLICT DO
+    // UPDATE) so a fresh checkout's local D1 (no .wrangler/state yet) works identically
+    // to a developer's already-seeded one, which the fixture (DXB/LHR, EK001) depends on.
     command:
       "cd .. && pnpm --filter @roaster/web build" +
       " && wrangler d1 migrations apply roaster-me-db --local" +
       " && wrangler d1 execute roaster-me-db --local --file ./scripts/seed-airports.sql" +
+      " && wrangler d1 execute roaster-me-db --local --file ./scripts/seed-schedules.sql" +
       " && wrangler dev --port 8787",
     url: "http://localhost:8787/api/health",
     reuseExistingServer: true,
