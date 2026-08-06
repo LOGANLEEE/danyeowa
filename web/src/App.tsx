@@ -88,6 +88,8 @@ export default function App() {
         ) : showTripForm ? (
           <TripForm
             initialDate={tripFormInitialDate}
+            now={now}
+            homeTz={Intl.DateTimeFormat().resolvedOptions().timeZone}
             onSubmitted={() => {
               setShowTripForm(false);
               setTripFormInitialDate(undefined);

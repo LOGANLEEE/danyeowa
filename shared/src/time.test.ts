@@ -3,6 +3,7 @@ import {
   dayOffset,
   formatLocal,
   layoverHours,
+  legDatesFromPicked,
   localDateKey,
   monthGrid,
   relativeUntil,
@@ -269,6 +270,89 @@ describe("wallToUtc", () => {
   it("round-trips with formatLocal for an unambiguous stable-offset tz", () => {
     const utc = wallToUtc("2026-08-10T09:00:00", "America/Sao_Paulo");
     expect(formatLocal(utc, "America/Sao_Paulo")).toBe("09:00");
+  });
+});
+
+describe("legDatesFromPicked", () => {
+  it("keeps every leg on the picked date for a legit same-day connection (arr 12:00, dep 14:00)", () => {
+    const dates = legDatesFromPicked("2026-08-20", [
+      { dayOffset: 0, depLocal: "09:00", arrLocal: "12:00" },
+      { dayOffset: 0, depLocal: "14:00", arrLocal: "16:00" },
+    ]);
+    expect(dates).toEqual(["2026-08-20", "2026-08-20"]);
+  });
+
+  it("carries a +1 arrival offset into the next leg's departure date (EK412 DXB->SYD->CHC, no over-roll)", () => {
+    // Leg 0 DXB->SYD dayOffset 1 (arrives the day after departure at 06:00); leg 1
+    // SYD->CHC departs 07:45, after leg 0's 06:00 arrival, so no extra safety-net roll -
+    // dayOffset alone already correctly puts leg 1 on picked date + 1.
+    const dates = legDatesFromPicked("2026-08-20", [
+      { dayOffset: 1, depLocal: "10:15", arrLocal: "06:00" },
+      { dayOffset: 0, depLocal: "07:45", arrLocal: "12:55" },
+    ]);
+    expect(dates).toEqual(["2026-08-20", "2026-08-21"]);
+  });
+
+  it("rolls a leg's date forward a day when its stated dayOffset would depart it before the previous leg lands (regression: the pre-fix EK384 seed shape)", () => {
+    // Synthetic fixture matching the original (incorrect) EK384/EK385 seed row shape that
+    // shipped before this safety net existed: leg 0 dep 09:20 arr 18:35, dayOffset 0;
+    // leg 1 stated dep 14:30, dayOffset 0 - naively that's the same day as leg 0's arrival,
+    // but 14:30 is BEFORE 18:35, an impossible connection. The current seed has been
+    // corrected to real EK384 times (which don't trigger this path - see the
+    // "keeps every leg on the picked date" case above), but this regression test keeps
+    // the safety net covered against any future bad seed/crowd data of this shape.
+    const dates = legDatesFromPicked("2026-08-20", [
+      { dayOffset: 0, depLocal: "09:20", arrLocal: "18:35" },
+      { dayOffset: 0, depLocal: "14:30", arrLocal: "18:20" },
+    ]);
+    expect(dates).toEqual(["2026-08-20", "2026-08-21"]);
+  });
+
+  it("matches the current (corrected) real EK384 seed: same-day BKK connection, no roll needed", () => {
+    // Real EK384 DXB->BKK->HKG: leg 0 dep 02:50 arr BKK 12:30 (dayOffset 0); leg 1 dep
+    // BKK 14:15 (after the 12:30 arrival - a legitimate ~1h45m ground time) arr HKG 18:15
+    // (dayOffset 0). Both legs land on the picked date - the roll-forward net correctly
+    // does NOT fire here since it's a real, physically possible connection.
+    const dates = legDatesFromPicked("2026-08-20", [
+      { dayOffset: 0, depLocal: "02:50", arrLocal: "12:30" },
+      { dayOffset: 0, depLocal: "14:15", arrLocal: "18:15" },
+    ]);
+    expect(dates).toEqual(["2026-08-20", "2026-08-20"]);
+  });
+
+  it("matches the current (corrected) real EK385 seed: genuine cross-midnight BKK layover rolls leg 1 forward", () => {
+    // Real EK385 HKG->BKK->DXB: leg 0 dep 21:30 arr BKK 23:45 (dayOffset 0); leg 1 dep
+    // BKK 01:35 (a real overnight ground stop crossing local midnight) arr DXB 04:40
+    // (dayOffset 0 for the leg itself). 01:35 < 23:45 as a same-day wall-clock comparison,
+    // so the safety net correctly rolls leg 1 to the day after the picked date.
+    const dates = legDatesFromPicked("2026-08-20", [
+      { dayOffset: 0, depLocal: "21:30", arrLocal: "23:45" },
+      { dayOffset: 0, depLocal: "01:35", arrLocal: "04:40" },
+    ]);
+    expect(dates).toEqual(["2026-08-20", "2026-08-21"]);
+  });
+
+  it("accumulates offsets and rolls across 3+ legs", () => {
+    const dates = legDatesFromPicked("2026-08-20", [
+      { dayOffset: 1, depLocal: "22:00", arrLocal: "05:00" },
+      { dayOffset: 1, depLocal: "10:00", arrLocal: "18:00" },
+      { dayOffset: 0, depLocal: "20:00", arrLocal: "23:00" },
+    ]);
+    expect(dates).toEqual(["2026-08-20", "2026-08-21", "2026-08-22"]);
+  });
+
+  it("returns just the picked date for a single-leg flight", () => {
+    expect(
+      legDatesFromPicked("2026-08-20", [{ dayOffset: 0, depLocal: "09:00", arrLocal: "12:00" }]),
+    ).toEqual(["2026-08-20"]);
+  });
+
+  it("handles a month/year boundary crossing", () => {
+    const dates = legDatesFromPicked("2026-12-31", [
+      { dayOffset: 1, depLocal: "10:15", arrLocal: "06:00" },
+      { dayOffset: 0, depLocal: "07:45", arrLocal: "12:55" },
+    ]);
+    expect(dates).toEqual(["2026-12-31", "2027-01-01"]);
   });
 });
 

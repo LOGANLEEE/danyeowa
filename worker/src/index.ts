@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { HealthResponse, Me } from "@roaster/shared";
 import { createAuth } from "./auth";
 import { getLastDevOtp } from "./email";
+import { scheduleRouter } from "./schedule";
 import { tripsRouter } from "./trips";
 
 export type Env = {
@@ -76,5 +77,6 @@ app.get("/api/__e2e/last-otp", (c) => {
 });
 
 app.route("/api", tripsRouter);
+app.route("/api", scheduleRouter);
 
 export default app;

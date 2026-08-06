@@ -67,6 +67,23 @@ export function localDateKey(utcIso: string, tz: string): string {
   return fmt.format(new Date(utcIso));
 }
 
+/**
+ * ISO weekday (Monday=1 .. Sunday=7) of `dateIso` ("YYYY-MM-DD", timezone-agnostic —
+ * pass a value already resolved to the local calendar date, e.g. via `localDateKey`).
+ *
+ * Assumption: flight_schedules.days_of_week encodes days 1-7 as Monday-first (ISO
+ * weekday), matching this function. All current seed rows use "1234567" (operates
+ * daily), so this convention is currently unverified against a real partial-week
+ * schedule — if a future seed row with a non-daily pattern turns out to disagree,
+ * this is the function to flip.
+ */
+export function isoWeekday(dateIso: string): number {
+  const [year, month, day] = dateIso.split("-").map(Number) as [number, number, number];
+  // Date.UTC's month is 0-indexed; getUTCDay() returns 0=Sun..6=Sat — remap to 1=Mon..7=Sun.
+  const jsDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  return jsDay === 0 ? 7 : jsDay;
+}
+
 /** Local calendar day for `utcIso` in `tz`, as an epoch-ms midnight-UTC marker (day-granularity only, not a real instant). */
 export function localDayEpoch(utcIso: string, tz: string): number {
   const [year, month, day] = localDateKey(utcIso, tz).split("-").map(Number) as [
@@ -166,6 +183,69 @@ export function wallToUtc(wallIso: string, tz: string): string {
   const offsetAfter = offsetMinutesAt(naiveMs + probeSpanMs, tz);
   const chosenOffset = Math.max(offsetBefore, offsetAfter);
   return new Date(naiveMs - chosenOffset * 60_000).toISOString();
+}
+
+/** Adds `days` (may be 0 or negative) to an ISO calendar date ("YYYY-MM-DD"), timezone-agnostic. */
+export function addDaysIso(dateIso: string, days: number): string {
+  const [year, month, day] = dateIso.split("-").map(Number) as [number, number, number];
+  const d = new Date(Date.UTC(year, month - 1, day + days));
+  return isoDate(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/** A schedule leg's own dep-to-arr day delta and clock times, as returned by `GET /api/schedule/lookup`. */
+export type ScheduleLegOffset = {
+  dayOffset: number;
+  /** Local departure clock time, "HH:MM". Used to detect an impossible same-day connection. */
+  depLocal: string;
+  /** Local arrival clock time, "HH:MM". Used to detect an impossible same-day connection. */
+  arrLocal: string;
+};
+
+/**
+ * Derives each leg's LOCAL departure calendar date from the picked calendar date (leg 0's
+ * departure day) and each leg's own `dayOffset` (that leg's arrival date minus its own
+ * departure date - see `dayOffset()` above, same field/meaning as `flight_schedules.day_offset`).
+ *
+ * Legs are back-to-back: leg N's departure is assumed to fall on the same local calendar
+ * date as leg (N-1)'s arrival (no overnight-layover tracking - the API has no layover
+ * duration, only each leg's own times). So the running "days since picked date" carries
+ * leg (N-1)'s arrival-date offset forward as leg N's departure-date offset.
+ *
+ * Safety net: schedule reference data (seed or crowd-confirmed) can be wrong or represent
+ * a connection that only makes sense a day later than its stated day_offset implies. After
+ * assigning leg N's candidate date, if leg N's departure clock time is EARLIER than leg
+ * (N-1)'s arrival clock time (both compared as local wall-clock HH:MM, ignoring which
+ * airport/tz they're in - this is a same-day-connection sanity check, not a real elapsed-time
+ * calculation), that would mean leg N departs before leg (N-1) lands, which is impossible for
+ * a connecting itinerary. In that case leg N's date is rolled forward by one day.
+ *
+ * Example (EK385 HKG->BKK->DXB, both legs dayOffset 0): leg 0 arrives BKK 23:45; leg 1's
+ * stated dep 01:35 is a genuine cross-midnight ground connection (not a data error), so
+ * leg 1 rolls forward to `pickedIso + 1` despite dayOffset 0 - the roll-forward net handles
+ * legitimate overnight layovers exactly the same way it would guard against bad seed data
+ * (see task-3-report.md for the EK384 case this was written to catch).
+ * Example (EK412 DXB->SYD dayOffset 1, then SYD->CHC dayOffset 0): leg 1 (SYD->CHC) departs
+ * 07:45, after leg 0's 06:00 arrival, so no extra roll - it departs on `pickedIso + 1` as
+ * `dayOffset` alone already implies.
+ *
+ * Returns one departure-date ISO string per leg, same order/length as `legs`.
+ */
+export function legDatesFromPicked(pickedIso: string, legs: ScheduleLegOffset[]): string[] {
+  const depDates: string[] = [];
+  let cumulativeOffsetDays = 0;
+  let prevArrLocal: string | null = null;
+  for (const leg of legs) {
+    if (prevArrLocal !== null && leg.depLocal < prevArrLocal) {
+      // Stated day_offset would have this leg depart before the previous leg lands
+      // (same-day wall-clock comparison) - roll forward a day to make the connection
+      // physically possible.
+      cumulativeOffsetDays += 1;
+    }
+    depDates.push(addDaysIso(pickedIso, cumulativeOffsetDays));
+    cumulativeOffsetDays += leg.dayOffset;
+    prevArrLocal = leg.arrLocal;
+  }
+  return depDates;
 }
 
 export type MonthGridCell = {
