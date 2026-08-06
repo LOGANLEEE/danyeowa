@@ -76,10 +76,11 @@ export function humanDateLabel(iso: string): string {
 }
 
 /**
- * Clicks a calendar day cell identified by `iso` ("YYYY-MM-DD"), advancing the visible
+ * Clicks a calendar day cell identified by `iso` ("YYYY-MM-DD") ONCE, advancing the visible
  * month via the "next month" chevron first if the cell isn't rendered yet (the day-picker
  * and trip calendars both default to the current month view and only render 6 weeks of
- * the active month/adjacent-month spillover).
+ * the active month/adjacent-month spillover). A single tap only SELECTS the day (shows its
+ * detail card) on the calendar-home grid — use `openDaySheet` to land on the day sheet.
  */
 export async function pickCalendarDay(page: Page, iso: string): Promise<void> {
   for (let i = 0; i < 24; i++) {
@@ -91,6 +92,17 @@ export async function pickCalendarDay(page: Page, iso: string): Promise<void> {
     await page.getByTestId("calendar-next").click();
   }
   throw new Error(`calendar-day-${iso} never became visible after 24 months of navigation`);
+}
+
+/**
+ * Opens the day sheet for `iso` on the calendar-home grid: taps the day (selecting it, per
+ * `pickCalendarDay`), then taps it again (the day-detail-tap contract's second-tap-opens-sheet
+ * rule) and waits for the sheet to appear.
+ */
+export async function openDaySheet(page: Page, iso: string): Promise<void> {
+  await pickCalendarDay(page, iso);
+  await page.getByTestId(`calendar-day-${iso}`).click();
+  await page.getByTestId("day-sheet").waitFor();
 }
 
 /** Fetches the most recently captured dev-fallback OTP via the E2E_TEST_MODE-gated route. */
