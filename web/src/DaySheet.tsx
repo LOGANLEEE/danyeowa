@@ -329,6 +329,11 @@ function AddTripContent({
   const [showDateStrip, setShowDateStrip] = useState(false);
   const recentFlights = useRecentFlights(trips);
 
+  // Single shared post-save transition for BOTH entry paths (autofill and manual): stamps
+  // the rapid-entry "added" state, advances to the next suggested date, marks the day
+  // optimistically, and returns to the flight-no screen with the field cleared + refocused -
+  // so a manual save (the fallback used exactly when autofill misses) chains exactly like an
+  // autofill save instead of dead-ending on a stale form.
   const entry = useTripEntry({
     pickedDate,
     homeTz,
@@ -342,6 +347,7 @@ function AddTripContent({
       setPickedDate(suggestion);
       setShowDateStrip(false);
       onAdded(addedDate);
+      entry.switchToFlightNo();
       entry.setFlightNo("");
     },
   });

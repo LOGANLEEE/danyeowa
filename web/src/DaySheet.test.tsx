@@ -451,4 +451,67 @@ describe("DaySheet", () => {
     const depInput = screen.getByLabelText(/departure/i) as HTMLInputElement;
     expect(depInput.value).toBe("2026-08-20T00:00");
   });
+
+  it("manual entry: after a successful save, joins the same rapid-entry chain as the autofill path (banner, cleared+refocused input, chips, Done)", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(lookupSchedule).mockResolvedValue(null);
+    vi.mocked(getAirport).mockImplementation(async (iata: string) => {
+      if (iata === "DXB") return { iata: "DXB", city: "Dubai", name: "Dubai Intl", tz: "Asia/Dubai" };
+      if (iata === "LHR") return { iata: "LHR", city: "London", name: "Heathrow", tz: "Europe/London" };
+      return null;
+    });
+    vi.mocked(createTrip).mockResolvedValue({
+      id: "trip-manual",
+      userId: "u1",
+      label: null,
+      createdAt: Date.now(),
+      flights: [],
+    });
+
+    render(
+      <DaySheet
+        isoDate="2026-08-20"
+        trip={null}
+        trips={[trip]}
+        homeTz="Asia/Dubai"
+        onClose={vi.fn()}
+        onChanged={vi.fn()}
+        onAdded={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("flightno-input"), "xx999");
+    await vi.advanceTimersByTimeAsync(400);
+    await screen.findByText(/unknown flight/i);
+    await user.click(screen.getByTestId("manual-expand"));
+
+    // Flight-no field is already prefilled ("XX999") by switchToManual - no need to type it.
+    await user.type(screen.getByLabelText(/^origin$/i), "DXB");
+    await user.tab();
+    await user.type(screen.getByLabelText(/^dest$/i), "LHR");
+    await user.tab();
+    const depInput = screen.getByLabelText(/departure/i);
+    await user.clear(depInput);
+    await user.type(depInput, "2026-08-20T09:15");
+    const arrInput = screen.getByLabelText(/arrival/i);
+    await user.clear(arrInput);
+    await user.type(arrInput, "2026-08-20T13:35");
+    await user.click(screen.getByRole("button", { name: /add to roster/i }));
+
+    await waitFor(() => expect(createTrip).toHaveBeenCalled());
+
+    // Same rapid-entry "added" state as the autofill path: banner, cleared+refocused
+    // flight-no input (back on the flightno-mode screen, not stuck on the manual form),
+    // recent-flight chips, and the Done button.
+    const banner = await screen.findByTestId("rapid-banner");
+    expect(banner).toHaveTextContent(/added/i);
+    expect(banner).toHaveTextContent(/next/i);
+
+    const input = screen.getByTestId("flightno-input") as HTMLInputElement;
+    expect(input.value).toBe("");
+    expect(document.activeElement).toBe(input);
+
+    expect(screen.getByTestId("recent-chip-EK002")).toBeInTheDocument();
+    expect(screen.getByTestId("done-button")).toBeInTheDocument();
+  });
 });

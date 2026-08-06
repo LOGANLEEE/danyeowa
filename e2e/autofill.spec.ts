@@ -128,10 +128,10 @@ test("autofill + manual fallback: EK412 known flight, XX999 unknown flight, EK38
   await page.getByLabel(/arrival \(local\)/i).fill(`${PICKED_DATE}T13:35`);
   await page.getByRole("button", { name: /add to roster/i }).click();
 
-  // The manual-entry path isn't part of Plan 6 Task 5's rapid-entry chaining (that's the
-  // flight-no/autofill flow) - the sheet just stays open on the manual form after a
-  // successful save. Dismiss with Close to trigger the single refetch and see the trip.
-  await page.getByTestId("sheet-close").click();
+  // The manual-entry path joins the same rapid-entry chain as the autofill path (fix
+  // round after code review): banner + Done, same as scenario 1 above.
+  await expect(page.getByTestId("rapid-banner")).toBeVisible();
+  await page.getByTestId("done-button").click();
 
   dutyCard = page.getByTestId("next-duty-card");
   await expect(dutyCard).toBeVisible();

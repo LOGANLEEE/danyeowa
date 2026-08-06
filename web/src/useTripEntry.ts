@@ -148,6 +148,13 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     setMode("manual");
   }
 
+  /** Returns to the flight-no entry screen — used after a successful manual save so the
+   * caller's shared post-save transition (rapid-entry banner, chips, cleared+refocused
+   * input) renders the same way it does after an autofill save. */
+  function switchToFlightNo() {
+    setMode("flightno");
+  }
+
   function updateLeg(index: number, patch: Partial<LegDraft>) {
     setLegs((prev) => {
       const current = prev[index];
@@ -320,6 +327,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     updateAutofillLeg,
     reportLocalFor,
     switchToManual,
+    switchToFlightNo,
     legs,
     updateLeg,
     lookupAirport,
