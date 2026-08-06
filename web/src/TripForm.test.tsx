@@ -103,6 +103,12 @@ describe("TripForm", () => {
     expect(screen.getAllByTestId("autofill-arr")[0]).toHaveValue("13:35");
     expect(screen.getByTestId("report-chip")).toHaveTextContent("07:45");
 
+    // Edit the autofilled dep time before saving - the saved/confirmed values must
+    // reflect this edit, not just echo the schedule lookup's original prefill.
+    const depInput = screen.getAllByTestId("autofill-dep")[0]!;
+    fireEvent.change(depInput, { target: { value: "09:45" } });
+    expect(depInput).toHaveValue("09:45");
+
     await user.click(screen.getByRole("button", { name: /^add trip$/i }));
 
     await waitFor(() => expect(createTrip).toHaveBeenCalled());
@@ -111,9 +117,11 @@ describe("TripForm", () => {
       flightNo: "EK001",
       origin: "DXB",
       dest: "LHR",
-      depUtc: "2026-08-20T05:15:00.000Z",
+      depUtc: "2026-08-20T05:45:00.000Z",
       arrUtc: "2026-08-20T12:35:00.000Z",
-      reportUtc: "2026-08-20T03:45:00.000Z",
+      // Report is still the unedited default (dep - 90min), recomputed from the EDITED
+      // dep time (09:45 -> 08:15 local -> 04:15Z), not the original 09:15 prefill.
+      reportUtc: "2026-08-20T04:15:00.000Z",
     });
 
     await waitFor(() => expect(confirmSchedule).toHaveBeenCalled());
@@ -122,7 +130,7 @@ describe("TripForm", () => {
       legSeq: 0,
       origin: "DXB",
       dest: "LHR",
-      depLocal: "09:15",
+      depLocal: "09:45",
       arrLocal: "13:35",
       dayOffset: 0,
     });
