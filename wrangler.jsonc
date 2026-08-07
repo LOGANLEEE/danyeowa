@@ -27,5 +27,8 @@
     // (generated + uploaded via scripts/generate-vapid.mjs --put; never written to a file)
     "VAPID_PUBLIC_KEY": "BPhqxNVUguEX0drbNRPsp1MfmLF2G3Y0xl0ykCtNgpqkMZVeuaFDPlNmBQdnvRZsNfGfNOjwsxnWSvEsx81WcJQ"
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  }
 }

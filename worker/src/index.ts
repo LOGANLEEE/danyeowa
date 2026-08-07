@@ -3,6 +3,7 @@ import type { HealthResponse, Me } from "@roaster/shared";
 import { createAuth } from "./auth";
 import { getLastDevOtp } from "./email";
 import { pushRouter } from "./push";
+import { runReportScan } from "./report-scan";
 import { scheduleRouter } from "./schedule";
 import { shareRouter } from "./share";
 import { tripsRouter } from "./trips";
@@ -23,6 +24,13 @@ export type Env = {
    */
   VAPID_PUBLIC_KEY?: string;
   /**
+   * Private half of the VAPID keypair, base64url-encoded PKCS8. MUST only ever be set
+   * as a Worker secret (`wrangler secret put VAPID_PRIVATE_KEY`, uploaded via
+   * scripts/generate-vapid.mjs --put) or in the gitignored .dev.vars for local dev —
+   * never committed to wrangler.jsonc `vars`.
+   */
+  VAPID_PRIVATE_KEY?: string;
+  /**
    * Test-only escape hatch: enables GET /api/__e2e/last-otp so the Playwright suite can
    * retrieve a dev-fallback OTP without a real inbox. Must NEVER be set in wrangler.jsonc
    * `vars` — it lives only in .dev.vars (gitignored), the e2e runner env, and vitest
@@ -38,7 +46,7 @@ type Variables = {
   user: NonNullable<Session>["user"] | null;
 };
 
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+export const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 app.use("/api/*", async (c, next) => {
   const auth = createAuth(c.env);
@@ -89,4 +97,11 @@ app.route("/api", scheduleRouter);
 app.route("/api", shareRouter);
 app.route("/api", pushRouter);
 
-export default app;
+async function scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+  ctx.waitUntil(runReportScan(env, Date.now()));
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled,
+};

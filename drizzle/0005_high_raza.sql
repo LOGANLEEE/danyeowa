@@ -1,0 +1,1 @@
+ALTER TABLE `flights` ADD `report_notified_at` integer;

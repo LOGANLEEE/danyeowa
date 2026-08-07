@@ -1,6 +1,6 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import app from "../src/index";
+import { app } from "../src/index";
 
 describe("GET /api/__e2e/last-otp", () => {
   it("404s when E2E_TEST_MODE is unset", async () => {

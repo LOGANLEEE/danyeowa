@@ -109,6 +109,15 @@ describe("push API", () => {
       expect(res.status).toBe(400);
     });
 
+    it("POST /api/push/subscribe rejects a non-https endpoint (400)", async () => {
+      const res = await SELF.fetch("https://example.com/api/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+        body: JSON.stringify(subscribeBody("http://push.example.com/insecure")),
+      });
+      expect(res.status).toBe(400);
+    });
+
     it("DELETE /api/push/subscribe removes the subscription (204) and config reflects subscribed:false", async () => {
       const endpoint = "https://push.example.com/endpoint-delete";
       await subscribe(cookie, endpoint);
@@ -193,6 +202,27 @@ describe("push API", () => {
       const body = (await res.json()) as PushConfig;
       expect(body.enabled).toBe(true);
       expect(body.leadMinutes).toBe(120);
+    });
+
+    it("does not let an intruder DELETE another user's subscription", async () => {
+      const endpoint = "https://push.example.com/owner-delete-target";
+      await subscribe(ownerCookie, endpoint);
+
+      const res = await SELF.fetch("https://example.com/api/push/subscribe", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", Cookie: intruderCookie },
+        body: JSON.stringify({ endpoint }),
+      });
+      // The route scopes the delete to the caller's user_id, so it 204s (no-op)
+      // without matching any row rather than error - assert the owner's row survives.
+      expect(res.status).toBe(204);
+
+      const database = drizzle(env.DB, { schema });
+      const rows = await database
+        .select()
+        .from(schema.pushSubscriptions)
+        .where(eq(schema.pushSubscriptions.endpoint, endpoint));
+      expect(rows).toHaveLength(1);
     });
   });
 });

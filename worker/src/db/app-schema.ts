@@ -36,6 +36,7 @@ export const flights = sqliteTable("flights", {
   source: text("source").notNull().default("manual"),
   notes: text("notes"),
   legSeq: integer("leg_seq").notNull().default(0),
+  reportNotifiedAt: integer("report_notified_at", { mode: "number" }),
 });
 
 export const airports = sqliteTable("airports", {

@@ -169,7 +169,9 @@ export type SharedView = {
 };
 
 export const PushSubscribeSchema = z.object({
-  endpoint: z.string().url(),
+  endpoint: z.string().url().refine((url) => url.startsWith("https://"), {
+    message: "endpoint must be an https:// URL",
+  }),
   keys: z.object({
     p256dh: z.string().min(1),
     auth: z.string().min(1),
