@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { HealthResponse, Me } from "@roaster/shared";
 import { createAuth } from "./auth";
 import { getLastDevOtp } from "./email";
+import { pushRouter } from "./push";
 import { scheduleRouter } from "./schedule";
 import { shareRouter } from "./share";
 import { tripsRouter } from "./trips";
@@ -15,6 +16,12 @@ export type Env = {
   BETTER_AUTH_URL?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /**
+   * Public half of the VAPID keypair used to sign Web Push subscriptions. Safe to expose
+   * to clients (returned by GET /api/push/config) and committed as a wrangler.jsonc var —
+   * unlike VAPID_PRIVATE_KEY, which must only ever exist as a Worker secret.
+   */
+  VAPID_PUBLIC_KEY?: string;
   /**
    * Test-only escape hatch: enables GET /api/__e2e/last-otp so the Playwright suite can
    * retrieve a dev-fallback OTP without a real inbox. Must NEVER be set in wrangler.jsonc
@@ -80,5 +87,6 @@ app.get("/api/__e2e/last-otp", (c) => {
 app.route("/api", tripsRouter);
 app.route("/api", scheduleRouter);
 app.route("/api", shareRouter);
+app.route("/api", pushRouter);
 
 export default app;

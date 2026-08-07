@@ -167,3 +167,33 @@ export type SharedView = {
   generatedAt: string;
   trips: SharedViewTrip[];
 };
+
+export const PushSubscribeSchema = z.object({
+  endpoint: z.string().url(),
+  keys: z.object({
+    p256dh: z.string().min(1),
+    auth: z.string().min(1),
+  }),
+});
+
+export type PushSubscribeInput = z.infer<typeof PushSubscribeSchema>;
+
+export const PushUnsubscribeSchema = z.object({
+  endpoint: z.string().url(),
+});
+
+export type PushUnsubscribeInput = z.infer<typeof PushUnsubscribeSchema>;
+
+export const NotificationPrefsSchema = z.object({
+  enabled: z.boolean(),
+  leadMinutes: z.number().int().min(30).max(360),
+});
+
+export type NotificationPrefsInput = z.infer<typeof NotificationPrefsSchema>;
+
+export type PushConfig = {
+  publicKey: string;
+  enabled: boolean;
+  leadMinutes: number;
+  subscribed: boolean;
+};

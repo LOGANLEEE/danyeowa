@@ -15,6 +15,7 @@ export default defineConfig(async () => {
             DEV_OTP_FALLBACK: "true",
             GOOGLE_CLIENT_ID: "test-google-client-id",
             GOOGLE_CLIENT_SECRET: "test-google-client-secret",
+            VAPID_PUBLIC_KEY: "test-vapid-public-key",
           },
         },
       }),

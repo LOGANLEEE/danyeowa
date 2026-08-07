@@ -22,7 +22,10 @@
     // remove when RESEND_API_KEY is set
     "BETTER_AUTH_URL": "https://roaster-me.logan-lee.workers.dev",
     // public OAuth client identifier — safe to commit; GOOGLE_CLIENT_SECRET is a Worker secret
-    "GOOGLE_CLIENT_ID": "247984044046-odt3hsmtj0dkbd7ie6ndavtii6i3ct8r.apps.googleusercontent.com"
+    "GOOGLE_CLIENT_ID": "247984044046-odt3hsmtj0dkbd7ie6ndavtii6i3ct8r.apps.googleusercontent.com",
+    // public half of the VAPID keypair — safe to commit; VAPID_PRIVATE_KEY is a Worker secret
+    // (generated + uploaded via scripts/generate-vapid.mjs --put; never written to a file)
+    "VAPID_PUBLIC_KEY": "BPhqxNVUguEX0drbNRPsp1MfmLF2G3Y0xl0ykCtNgpqkMZVeuaFDPlNmBQdnvRZsNfGfNOjwsxnWSvEsx81WcJQ"
   },
   "observability": { "enabled": true }
 }
