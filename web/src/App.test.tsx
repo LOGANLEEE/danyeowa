@@ -76,6 +76,24 @@ describe("App", () => {
     expect(calledUrls.some((u) => u.includes("/api/auth"))).toBe(false);
   });
 
+  it("renders the inactive card (not a crash) for a hand-mangled /share/ path with a lone %", async () => {
+    const fetchSpy = vi.fn((_input: RequestInfo | URL) =>
+      Promise.reject(new Error("fetch should not be called on /share/ route")),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    // A raw, unencoded "%" isn't a valid percent-escape - decodeURIComponent would throw a
+    // URIError on it. getSharedView resolves null (as the real 404 does for any unrecognized
+    // token) so the malformed value flows through to the same friendly inactive state as any
+    // other bad link, rather than needing special-casing.
+    vi.mocked(getSharedView).mockResolvedValue(null);
+
+    window.history.pushState({}, "", "/share/100%");
+    expect(() => render(<App />)).not.toThrow();
+
+    expect(await screen.findByTestId("shared-inactive")).toBeInTheDocument();
+    expect(getSharedView).toHaveBeenCalledWith("100%");
+  });
+
   it("shows title, API status, and the landing page (not the login form) when signed out", async () => {
     stubSignedOutFetch();
     render(<App />);

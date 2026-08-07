@@ -20,11 +20,18 @@ const SHARE_PATH_PREFIX = "/share/";
 
 /** Extracts the token from a `/share/:token` path, or `null` when the current path isn't a
  * share link. Public family links must be reachable with zero app/auth chrome, so this check
- * happens before any of App's signed-in/signed-out state or effects come into play. */
+ * happens before any of App's signed-in/signed-out state or effects come into play.
+ *
+ * Deliberately does NOT decodeURIComponent: tokens are base64url (RFC 4648 §5, alphabet
+ * `[A-Za-z0-9_-]`), which never contains a byte that needs percent-encoding, so decoding
+ * would only add risk — a hand-mangled URL like `/share/100%` has a lone `%` that isn't a
+ * valid percent-escape and throws a URIError. The raw path slice is passed straight through;
+ * an unrecognized/malformed token simply 404s from the API like any other unknown token,
+ * which SharedViewer already renders as the friendly inactive card. */
 function sharedTokenFromPath(pathname: string): string | null {
   if (!pathname.startsWith(SHARE_PATH_PREFIX)) return null;
   const token = pathname.slice(SHARE_PATH_PREFIX.length);
-  return token.length > 0 ? decodeURIComponent(token) : null;
+  return token.length > 0 ? token : null;
 }
 
 export default function App() {
