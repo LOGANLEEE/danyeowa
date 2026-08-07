@@ -81,6 +81,18 @@ describe("SharedViewer", () => {
     expect(hero).toHaveTextContent(/home in/i);
   });
 
+  it("shows 'Home today' instead of 'Home in 0 days' when toIso is today", async () => {
+    vi.mocked(getSharedView).mockResolvedValue(awayView);
+
+    // aklTrip.toIso is 2026-09-06 - "now" on that same calendar day (viewer tz UTC here).
+    render(<SharedViewer token="tok123" now={new Date("2026-09-06T12:00:00.000Z")} />);
+
+    const hero = await screen.findByTestId("shared-hero");
+    expect(hero).toHaveTextContent(/home today/i);
+    expect(hero).not.toHaveTextContent(/home in/i);
+    expect(hero).not.toHaveTextContent("0");
+  });
+
   it("renders the home-now hero with the next trip date when not currently away", async () => {
     vi.mocked(getSharedView).mockResolvedValue(homeUpcomingView);
 

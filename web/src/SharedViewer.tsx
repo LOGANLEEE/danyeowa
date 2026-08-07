@@ -67,16 +67,25 @@ export default function SharedViewer({ token, now }: Props) {
         className="flex flex-col gap-1 rounded-lg border border-edge bg-card p-5 text-center"
       >
         {status.kind === "away" ? (
-          <>
-            <p className="text-ink">
-              In {status.awayCity} &mdash; home {status.homeWeekday}
-            </p>
-            <p className="text-sm text-ink-muted">Home in</p>
-            <p className="num text-4xl font-semibold text-accent">{status.daysUntilHome}</p>
-            <p className="text-sm text-ink-muted">
-              {status.daysUntilHome === 1 ? "day" : "days"}
-            </p>
-          </>
+          status.daysUntilHome === 0 ? (
+            <>
+              <p className="text-ink">
+                In {status.awayCity} &mdash; home {status.homeWeekday}
+              </p>
+              <p className="num text-4xl font-semibold text-accent">Home today</p>
+            </>
+          ) : (
+            <>
+              <p className="text-ink">
+                In {status.awayCity} &mdash; home {status.homeWeekday}
+              </p>
+              <p className="text-sm text-ink-muted">Home in</p>
+              <p className="num text-4xl font-semibold text-accent">{status.daysUntilHome}</p>
+              <p className="text-sm text-ink-muted">
+                {status.daysUntilHome === 1 ? "day" : "days"}
+              </p>
+            </>
+          )
         ) : status.kind === "home-upcoming" ? (
           <p className="text-ink">Home &mdash; next trip {formatDate(status.nextTripDate)}</p>
         ) : (
