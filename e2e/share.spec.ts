@@ -1,0 +1,129 @@
+import { expect, test } from "@playwright/test";
+import { EK412, openDaySheet, signInThroughUi } from "./helpers";
+
+/**
+ * Family share lifecycle, end to end against a real `wrangler dev` (local D1):
+ *   crew signs in -> creates a trip (EK412 autofill fast path, same fixture roster.spec.ts
+ *   uses) -> Share tab -> creates a link labeled "For Mom" -> a cookie-less browser context
+ *   (no auth at all - the family member's own browser) opens /share/<token> and sees the
+ *   crew name, an away trip row, and the "Home in N days" figure computed from the fixture
+ *   dates -> back in the crew context, the link is revoked -> a fresh cookie-less load of
+ *   the same URL shows the inactive message.
+ *
+ * One sign-in (`signInThroughUi`), same OTP budget accounting as roster.spec.ts /
+ * autofill.spec.ts (`worker/src/auth.ts`, IP-keyed rate limit, window 60s max 3): this file
+ * is the third and last sign-in in the suite, so the full run's total stays at exactly 3.
+ *
+ * The created trip's token is captured via a `page.waitForResponse` on the
+ * `POST /api/share-links` call itself, not by parsing the UI (navigator.share is absent in
+ * headless Chromium and the UI never displays the raw URL outside the clipboard, which
+ * Playwright can't reliably read across browser contexts here) - reading the network
+ * response is both simpler and more robust than a clipboard-permission dance.
+ */
+const SHARE_EMAIL = "e2e-share@local.test";
+const LABEL = "For Mom";
+
+async function cleanUpAllTrips(page: import("@playwright/test").Page) {
+  await page.getByTestId("tab-trips").click();
+  const existingRow = page.getByTestId("upcoming-row").first();
+  const emptyState = page.getByText(/no trips yet/i);
+  await Promise.race([existingRow.waitFor(), emptyState.waitFor()]).catch(() => {});
+  for (let i = 0; i < 5; i++) {
+    if (!(await existingRow.isVisible().catch(() => false))) break;
+    await existingRow.click();
+    await page.getByTestId("delete-trip").click();
+    await page.getByTestId("confirm-delete").click();
+    await Promise.race([emptyState.waitFor(), existingRow.waitFor()]).catch(() => {});
+  }
+  await page.getByTestId("tab-calendar").click();
+}
+
+test("crew shares a link, family views it cookie-less, crew revokes, family sees inactive", async ({
+  page,
+  browser,
+}) => {
+  await signInThroughUi(page, SHARE_EMAIL);
+  await cleanUpAllTrips(page);
+
+  // --- Create a trip via the EK412 autofill fast path (same fixture as roster.spec.ts). ---
+  await page.getByTestId("tab-calendar").click();
+  await openDaySheet(page, EK412.pickedDate);
+  const sheet = page.getByTestId("day-sheet");
+  await expect(sheet).toBeVisible();
+  await page.getByTestId("flightno-input").fill(EK412.flightNo);
+  await expect(page.getByTestId("autofill-card")).toBeVisible();
+  await page.getByRole("button", { name: /add to roster/i }).click();
+  await expect(page.getByTestId("rapid-banner")).toBeVisible();
+  await page.getByTestId("done-button").click();
+  await expect(sheet).not.toBeVisible();
+
+  // The fixture trip is in September while this suite runs in real time well before that
+  // (today's actual date), so the "away" hero (the plan's "Home in N days" figure) never
+  // occurs naturally - the family page's clock is fixed to a moment inside the trip's own
+  // away span below. "Now" is pinned to pickedDate itself (the departure day), so the
+  // expected days-until-home is computed here (not echoed from the app) exactly as
+  // sharedHero.ts's deriveHeroStatus does: whole calendar days from "now" to toIso.
+  const FAMILY_NOW_ISO = `${EK412.pickedDate}T12:00:00.000Z`;
+  const toMs = Date.parse(`${EK412.spanEndDate}T00:00:00.000Z`);
+  const todayMs = Date.parse(`${EK412.pickedDate}T00:00:00.000Z`);
+  const expectedDaysUntilHome = Math.round((toMs - todayMs) / (24 * 60 * 60 * 1000));
+
+  // --- Share tab: create a labeled link, capture its token from the create response. ---
+  await page.getByTestId("tab-share").click();
+  await page.getByTestId("create-link").click();
+  await page.getByLabel(/label/i).fill(LABEL);
+  const [createResponse] = await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/api/share-links") && r.request().method() === "POST"),
+    page.getByTestId("confirm-create-link").click(),
+  ]);
+  const created = (await createResponse.json()) as { id: string; token: string };
+  expect(created.token).toBeTruthy();
+
+  // New links are prepended (ShareView.tsx: `setLinks(prev => [link, ...prev])`), so the
+  // just-created link is always the first row - selecting by label alone would collide with
+  // a same-labeled row left over (revoked, but still shown) from a prior run of this spec.
+  const linkRow = page.getByTestId("link-row").first();
+  await expect(linkRow).toContainText(LABEL);
+
+  const shareUrl = `/share/${created.token}`;
+
+  // --- Family: a fresh, cookie-less browser context opens the link. No app chrome, no auth.
+  // Its clock is fixed to FAMILY_NOW_ISO (inside the fixture trip's away span) so the "away"
+  // hero renders deterministically regardless of the real date the suite runs on. ---
+  const familyContext = await browser.newContext();
+  const familyPage = await familyContext.newPage();
+  await familyPage.clock.install({ time: new Date(FAMILY_NOW_ISO) });
+  await familyPage.goto(shareUrl);
+
+  // A fresh OTP-only e2e sign-in never sets a display name, so better-auth's email-OTP
+  // route defaults `user.name` to "" - deriveCrewName (worker/src/share.ts) falls back to
+  // "Your crew member" for a falsy name, which is what the header renders here.
+  await expect(familyPage.getByText(/your crew member's schedule/i)).toBeVisible();
+  const hero = familyPage.getByTestId("shared-hero");
+  await expect(hero).toBeVisible();
+  await expect(hero).toHaveText(new RegExp(String(expectedDaysUntilHome)));
+
+  const tripRow = familyPage.getByTestId("shared-trip-row").first();
+  await expect(tripRow).toBeVisible();
+
+  await familyContext.close();
+
+  // --- Crew revokes the link. ---
+  await page.getByTestId("tab-share").click();
+  await linkRow.getByTestId("revoke-link").click();
+  await linkRow.getByTestId("confirm-revoke").click();
+  await expect(linkRow).toContainText(/revoked/i);
+
+  // --- Family: a fresh cookie-less load of the same URL now shows the inactive message. ---
+  const familyContext2 = await browser.newContext();
+  const familyPage2 = await familyContext2.newPage();
+  await familyPage2.goto(shareUrl);
+  await expect(familyPage2.getByTestId("shared-inactive")).toBeVisible();
+  await expect(familyPage2.getByTestId("shared-hero")).not.toBeVisible();
+  await familyContext2.close();
+
+  // --- Cleanup: delete the trip. ---
+  await cleanUpAllTrips(page);
+  await page.getByTestId("tab-trips").click();
+  await expect(page.getByText(/no trips yet/i)).toBeVisible();
+});
