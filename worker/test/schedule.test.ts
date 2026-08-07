@@ -356,6 +356,32 @@ describe("GET /api/schedule/suggest", () => {
     expect(ek413.layoverHours).toBeCloseTo(1.0833333333333333, 6);
   });
 
+  it("retries later operating days when the same-day connection is impossible (negative layover)", async () => {
+    // Crew arrives CHC at 2026-08-21T03:00:00.000Z - AFTER EK413's same-day departure
+    // (2026-08-21T02:00:00.000Z, i.e. 14:00 Pacific/Auckland, per the hand-verified
+    // math in the sibling test above). That same-day candidate is a negative layover
+    // (dep before arrival), so the endpoint must roll forward to EK413's NEXT
+    // operating day (2026-08-22, daily schedule) rather than dropping EK413 entirely.
+    //
+    // EK413 leg0 dep 2026-08-22T14:00 Pacific/Auckland (still UTC+12, no DST in
+    // August/winter) = 2026-08-22T02:00:00.000Z.
+    // layoverHours = (2026-08-22T02:00:00.000Z - 2026-08-21T03:00:00.000Z) = 23h exactly.
+    const arrivedIso = "2026-08-21T03:00:00.000Z";
+    const res = await SELF.fetch(
+      `https://example.com/api/schedule/suggest?origin=CHC&date=2026-08-21&outbound=EK412&arrivedIso=${arrivedIso}`,
+      { headers: { Cookie: cookie } },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json<{
+      suggestions: Array<{ flightNo: string; layoverHours: number; sibling: boolean }>;
+    }>();
+
+    const ek413 = body.suggestions.find((s) => s.flightNo === "EK413");
+    expect(ek413).toBeDefined();
+    expect(ek413!.sibling).toBe(true);
+    expect(ek413!.layoverHours).toBeCloseTo(23, 6);
+  });
+
   it("ranks non-sibling candidates by layover ascending when no sibling is present", async () => {
     // Seed two DXB-home-bound candidates departing FCO (no EK107/EK108 ±1 sibling
     // involved here since outbound is omitted): EK108 (short layover) should rank

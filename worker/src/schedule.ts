@@ -149,15 +149,15 @@ scheduleRouter.post("/schedule/confirm", async (c) => {
 });
 
 /**
- * Splits a flight number into its alpha prefix and numeric part, preserving the
- * numeric part's original zero-padded width (e.g. "EK097" -> { prefix: "EK", num: 97,
- * width: 3 }) so a sibling comparison can reconstruct the same padding EK convention
- * uses (EK412 <-> EK413, not EK412 <-> EK413 vs "EK413" as separate widths).
+ * Splits a flight number into its alpha prefix and numeric part (e.g. "EK097" ->
+ * { prefix: "EK", num: 97 }). The numeric comparison in `isSibling` is zero-pad
+ * agnostic by construction - "EK097" and "EK98" compare as 97 vs 98 regardless of
+ * how each was zero-padded in its source string.
  */
-function splitFlightNo(flightNo: string): { prefix: string; num: number; width: number } | null {
+function splitFlightNo(flightNo: string): { prefix: string; num: number } | null {
   const match = /^([A-Z]{2})(\d{1,4})$/i.exec(flightNo);
   if (!match) return null;
-  return { prefix: match[1]!.toUpperCase(), num: Number(match[2]), width: match[2]!.length };
+  return { prefix: match[1]!.toUpperCase(), num: Number(match[2]) };
 }
 
 /** True when `candidate`'s flight number is `outbound`'s numeric part +/-1, same alpha prefix. */
@@ -247,9 +247,16 @@ scheduleRouter.get("/schedule/suggest", async (c) => {
     const sorted = [...rawLegs].sort((a, b) => a.legSeq - b.legSeq);
     const leg0 = sorted[0]!;
 
+    const originTz = airportByIata.get(leg0.origin)?.tz;
+    if (!originTz) continue; // reference data gap - skip rather than 500 a suggestion list.
+
     // Find the first operating date >= `date` (search up to 7 days forward) whose
-    // weekday matches leg0's days_of_week and falls within its validity window.
+    // weekday matches leg0's days_of_week, falls within its validity window, AND whose
+    // departure is not before `arrivedIso` (a same-day match with a dep time earlier
+    // than the crew's arrival is not a viable connection - keep searching later
+    // operating days within the window rather than dropping the candidate outright).
     let operatingDate: string | null = null;
+    let hours = 0;
     for (let offset = 0; offset <= OPERATING_DAY_SEARCH_WINDOW; offset++) {
       const candidateDate = addDaysIso(date, offset);
       const weekday = isoWeekday(candidateDate);
@@ -257,19 +264,17 @@ scheduleRouter.get("/schedule/suggest", async (c) => {
       const matchesValidity =
         (leg0.validFrom === null || candidateDate >= leg0.validFrom) &&
         (leg0.validTo === null || candidateDate <= leg0.validTo);
-      if (matchesDay && matchesValidity) {
-        operatingDate = candidateDate;
-        break;
-      }
+      if (!matchesDay || !matchesValidity) continue;
+
+      const depUtc = wallToUtc(`${candidateDate}T${leg0.depLocal}:00`, originTz);
+      const candidateHours = (Date.parse(depUtc) - arrivedMs) / (60 * 60 * 1000);
+      if (candidateHours < 0) continue; // dep before arrival - try the next operating day.
+
+      operatingDate = candidateDate;
+      hours = candidateHours;
+      break;
     }
     if (operatingDate === null) continue;
-
-    const originTz = airportByIata.get(leg0.origin)?.tz;
-    if (!originTz) continue; // reference data gap - skip rather than 500 a suggestion list.
-
-    const depUtc = wallToUtc(`${operatingDate}T${leg0.depLocal}:00`, originTz);
-    const hours = (Date.parse(depUtc) - arrivedMs) / (60 * 60 * 1000);
-    if (hours < 0) continue; // dep before arrival - not a viable connection for this date.
 
     const legs: ScheduleLeg[] = sorted.map((leg) => ({
       legSeq: leg.legSeq,
