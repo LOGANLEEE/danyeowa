@@ -106,3 +106,36 @@ export const ScheduleConfirmSchema = z
   });
 
 export type ScheduleConfirmInput = z.infer<typeof ScheduleConfirmSchema>;
+
+export const ShareLinkCreateSchema = z.object({
+  label: z.string().max(100).optional(),
+});
+
+export type ShareLinkCreateInput = z.infer<typeof ShareLinkCreateSchema>;
+
+export type ShareLink = {
+  id: string;
+  token: string;
+  label: string | null;
+  createdAt: number;
+  revoked: boolean;
+};
+
+export type SharedViewLeg = {
+  dateIso: string;
+  fromCity: string;
+  toCity: string;
+};
+
+export type SharedViewTrip = {
+  fromIso: string;
+  toIso: string;
+  awayCity: string;
+  legs: SharedViewLeg[];
+};
+
+export type SharedView = {
+  crewName: string;
+  generatedAt: string;
+  trips: SharedViewTrip[];
+};
