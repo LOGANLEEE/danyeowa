@@ -697,4 +697,124 @@ describe("DaySheet", () => {
     expect(screen.getByTestId("recent-chip-EK002")).toBeInTheDocument();
     expect(screen.getByTestId("done-button")).toBeInTheDocument();
   });
+
+  describe("turnaround chaining (+ add flight)", () => {
+    // Same real seed rows as useTripEntry.test.ts's appendFlight suite (scripts/ek-schedules.json):
+    // EK097 DXB->BCN dep 08:20 arr 12:35 (dayOffset 0); EK098 BCN->DXB dep 14:15 arr 00:05 (dayOffset 1).
+    const EK097_LEGS = [
+      {
+        legSeq: 0,
+        origin: "DXB",
+        dest: "BCN",
+        depLocal: "08:20",
+        arrLocal: "12:35",
+        dayOffset: 0,
+        originTz: "Asia/Dubai",
+        destTz: "Europe/Madrid",
+        confirmCount: 2,
+      },
+    ];
+    const EK098_LEGS = [
+      {
+        legSeq: 0,
+        origin: "BCN",
+        dest: "DXB",
+        depLocal: "14:15",
+        arrLocal: "00:05",
+        dayOffset: 1,
+        originTz: "Europe/Madrid",
+        destTz: "Asia/Dubai",
+        confirmCount: 2,
+      },
+    ];
+
+    async function previewEk097(user: ReturnType<typeof userEvent.setup>) {
+      vi.mocked(lookupSchedule).mockResolvedValueOnce({ legs: EK097_LEGS });
+      render(
+        <DaySheet
+          isoDate="2026-08-20"
+          trip={null}
+          trips={[]}
+          homeTz="Asia/Dubai"
+          onClose={vi.fn()}
+          onChanged={vi.fn()}
+          onAdded={vi.fn()}
+        />,
+      );
+      await user.type(screen.getByTestId("flightno-input"), "ek097");
+      await vi.advanceTimersByTimeAsync(400);
+      await screen.findByTestId("autofill-card");
+    }
+
+    it("shows '+ add flight' only in preview state, chains EK098 into one combined save, and lets ✕ revert it", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await previewEk097(user);
+
+      expect(screen.getByTestId("append-flight")).toBeInTheDocument();
+
+      await user.click(screen.getByTestId("append-flight"));
+      const appendInput = screen.getByTestId("append-flightno-input");
+
+      vi.mocked(lookupSchedule).mockResolvedValueOnce({ legs: EK098_LEGS });
+      await user.type(appendInput, "ek098");
+      await user.keyboard("{Enter}");
+
+      const appendedCard = await screen.findByTestId("appended-card");
+      expect(appendedCard).toHaveTextContent("BCN → DXB");
+      // The "+ add flight" control is hidden once a flight is appended - the ✕ is the only
+      // way back to single-flight state.
+      expect(screen.queryByTestId("append-flight")).not.toBeInTheDocument();
+
+      vi.mocked(createTrip).mockResolvedValue({
+        id: "trip-1",
+        userId: "u1",
+        label: null,
+        createdAt: Date.now(),
+        flights: [],
+      });
+
+      await user.click(screen.getByRole("button", { name: /add to roster/i }));
+
+      await waitFor(() => expect(createTrip).toHaveBeenCalledTimes(1));
+      const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
+      // ONE trip, two legs, combined save (not two POSTs).
+      expect(payload!.legs).toHaveLength(2);
+      expect(payload!.legs[0]).toMatchObject({ flightNo: "EK097", origin: "DXB", dest: "BCN" });
+      expect(payload!.legs[1]).toMatchObject({ flightNo: "EK098", origin: "BCN", dest: "DXB" });
+    });
+
+    it("reverts to single-flight preview when the appended card's ✕ is clicked", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await previewEk097(user);
+
+      await user.click(screen.getByTestId("append-flight"));
+      vi.mocked(lookupSchedule).mockResolvedValueOnce({ legs: EK098_LEGS });
+      await user.type(screen.getByTestId("append-flightno-input"), "ek098");
+      await user.keyboard("{Enter}");
+      await screen.findByTestId("appended-card");
+
+      await user.click(screen.getByTestId("remove-appended"));
+
+      expect(screen.queryByTestId("appended-card")).not.toBeInTheDocument();
+      expect(screen.getByTestId("autofill-card")).toHaveTextContent("DXB → BCN");
+      expect(screen.getByTestId("autofill-card")).not.toHaveTextContent("BCN → DXB");
+      // Back to single-flight preview: the "+ add flight" control is available again.
+      expect(screen.getByTestId("append-flight")).toBeInTheDocument();
+    });
+
+    it("shows an inline muted error for an appended flight number with no schedule row, without falling back to manual mode", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await previewEk097(user);
+
+      await user.click(screen.getByTestId("append-flight"));
+      vi.mocked(lookupSchedule).mockResolvedValueOnce(null);
+      await user.type(screen.getByTestId("append-flightno-input"), "xx999");
+      await user.keyboard("{Enter}");
+
+      expect(await screen.findByText(/unknown flight/i)).toBeInTheDocument();
+      // No manual-entry form appeared - the outbound preview is untouched.
+      expect(screen.getByTestId("autofill-card")).toBeInTheDocument();
+      expect(screen.queryByTestId("manual-expand")).not.toBeInTheDocument();
+    });
+  });
 });

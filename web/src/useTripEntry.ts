@@ -42,8 +42,11 @@ function utcToDatetimeLocal(utcIso: string, tz: string): string {
 const FLIGHT_NO_PATTERN = /^[A-Z]{2}\d{1,4}$/;
 const LOOKUP_DEBOUNCE_MS = 400;
 
-/** One autofilled leg, editable inline before save. Times are local HH:MM strings. */
+/** One autofilled leg, editable inline before save. Times are local HH:MM strings.
+ * `flightNo` is per-leg (not hoisted to a single trip-wide value) so an appended flight's
+ * legs can carry their own flight number alongside the outbound's legs in the same list. */
 export type AutofillLegDraft = {
+  flightNo: string;
   legSeq: number;
   origin: string;
   dest: string;
@@ -55,10 +58,21 @@ export type AutofillLegDraft = {
   dayOffset: number;
 };
 
-function autofillLegsFrom(pickedDate: string, legs: ScheduleLeg[]): AutofillLegDraft[] {
+/** Builds autofill drafts for `legs`, dating them via `legDatesFromPicked` from `pickedDate`
+ * (the FIRST of these legs' departure day - the caller passes the appropriate anchor: the
+ * originally picked date for the outbound, or the last existing leg's arrival date when
+ * appending a second flight). `legSeq` is renumbered continuing from `legSeqOffset` so an
+ * appended flight's legs sort after the outbound's in the combined list. */
+function autofillLegsFrom(
+  pickedDate: string,
+  flightNo: string,
+  legs: ScheduleLeg[],
+  legSeqOffset = 0,
+): AutofillLegDraft[] {
   const depDates = legDatesFromPicked(pickedDate, legs);
   return legs.map((leg, i) => ({
-    legSeq: leg.legSeq,
+    flightNo,
+    legSeq: legSeqOffset + i,
     origin: leg.origin,
     dest: leg.dest,
     originTz: leg.originTz,
@@ -99,6 +113,12 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   const [editingReportLeg, setEditingReportLeg] = useState<number | null>(null);
   const [reportOverrides, setReportOverrides] = useState<Map<number, string>>(new Map());
 
+  // Turnaround chaining (Task 2): an appended second flight's own flight number and legs,
+  // tracked separately from the outbound so the "✕ remove appended" revert can drop exactly
+  // these legs back out of `autofillLegs` without touching the outbound's own draft state.
+  const [appendedFlightNo, setAppendedFlightNo] = useState<string | null>(null);
+  const [appendLookupMiss, setAppendLookupMiss] = useState(false);
+
   const [legs, setLegs] = useState<LegDraft[]>([{ ...emptyLeg(), dep: `${pickedDate}T00:00` }]);
   const [airports, setAirports] = useState<Map<string, Airport | null>>(new Map());
   const [unknown, setUnknown] = useState<Set<string>>(new Set());
@@ -118,10 +138,14 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     const timer = setTimeout(async () => {
       const result = await lookupSchedule(candidate, pickedDate);
       if (result) {
-        setAutofillLegs(autofillLegsFrom(pickedDate, result.legs));
+        setAutofillLegs(autofillLegsFrom(pickedDate, candidate, result.legs));
         setAutofillFlightNo(candidate);
         setLookupMiss(false);
         setReportOverrides(new Map());
+        // A new outbound lookup replaces whatever was previewed before, including any
+        // appended flight from a prior preview.
+        setAppendedFlightNo(null);
+        setAppendLookupMiss(false);
       } else {
         setAutofillLegs(null);
         setAutofillFlightNo(null);
@@ -130,6 +154,54 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     }, LOOKUP_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [flightNo, mode, pickedDate]);
+
+  /**
+   * Chains a second, schedule-known flight onto the current autofill preview as one combined
+   * trip (turnaround path). The appended flight's first leg departs on the LAST existing leg's
+   * ARRIVAL local date — that's the earliest calendar day the next flight can operate — and the
+   * rest of its legs (if multi-leg) date via the same `legDatesFromPicked` continuation rules
+   * applied to the combined list, so the existing roll-forward guard for impossible connections
+   * (e.g. a genuine overnight ground stop) covers the appended boundary exactly like any other
+   * leg-to-leg connection; no changes to `legDatesFromPicked` were needed. Scope is intentionally
+   * tight: a lookup miss shows an inline error and does NOT fall back to manual entry — manual
+   * turnarounds remain possible via the pre-existing multi-leg manual path.
+   */
+  async function appendFlight(candidateFlightNo: string) {
+    setAppendLookupMiss(false);
+    if (!autofillLegs || autofillLegs.length === 0) return;
+    const candidate = candidateFlightNo.toUpperCase();
+    if (!FLIGHT_NO_PATTERN.test(candidate)) {
+      setAppendLookupMiss(true);
+      return;
+    }
+    const lastLeg = autofillLegs[autofillLegs.length - 1]!;
+    const anchorDate = addDaysIso(lastLeg.depDate, lastLeg.dayOffset);
+    const result = await lookupSchedule(candidate, anchorDate);
+    if (!result) {
+      setAppendLookupMiss(true);
+      return;
+    }
+    const appended = autofillLegsFrom(anchorDate, candidate, result.legs, lastLeg.legSeq + 1);
+    setAutofillLegs((prev) => (prev ? [...prev, ...appended] : appended));
+    setAppendedFlightNo(candidate);
+    setAppendLookupMiss(false);
+  }
+
+  /** Reverts the "+ add flight" chain back to single-flight state, dropping every leg tagged
+   * with the appended flight number (and any report-time override made on those legs). */
+  function removeAppendedFlight() {
+    if (!appendedFlightNo) return;
+    setAutofillLegs((prev) => (prev ? prev.filter((leg) => leg.flightNo !== appendedFlightNo) : prev));
+    setReportOverrides((prev) => {
+      const next = new Map(prev);
+      for (const leg of autofillLegs ?? []) {
+        if (leg.flightNo === appendedFlightNo) next.delete(leg.legSeq);
+      }
+      return next;
+    });
+    setAppendedFlightNo(null);
+    setAppendLookupMiss(false);
+  }
 
   function updateAutofillLeg(index: number, patch: Partial<AutofillLegDraft>) {
     setAutofillLegs((prev) => {
@@ -234,7 +306,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       const reportUtc = wallToUtc(`${leg.depDate}T${reportLocal}:00`, leg.originTz);
 
       resolvedLegs.push({
-        flightNo: autofillFlightNo,
+        flightNo: leg.flightNo,
         origin: leg.origin,
         dest: leg.dest,
         depUtc,
@@ -242,7 +314,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
         reportUtc,
       });
       confirmPayloads.push({
-        flightNo: autofillFlightNo,
+        flightNo: leg.flightNo,
         legSeq: leg.legSeq,
         origin: leg.origin,
         dest: leg.dest,
@@ -341,6 +413,10 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     submitting,
     handleAutofillSubmit,
     handleManualSubmit,
+    appendedFlightNo,
+    appendLookupMiss,
+    appendFlight,
+    removeAppendedFlight,
   };
 }
 
