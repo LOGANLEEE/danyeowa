@@ -326,6 +326,164 @@ describe("useTripEntry", () => {
     expect(result.current.airportLabel("ZZZ")).toBe("unknown airport: ZZZ");
   });
 
+  describe("appendFlight (turnaround chaining)", () => {
+    // EK097 DXB->BCN dep 08:20 arr 12:35 (dayOffset 0, Asia/Dubai +4 / Europe/Madrid +2 in Aug);
+    // EK098 BCN->DXB dep 14:15 arr 00:05 (dayOffset 1). Real seed rows (scripts/ek-schedules.json).
+    const EK097_LEGS = [
+      {
+        legSeq: 0,
+        origin: "DXB",
+        dest: "BCN",
+        depLocal: "08:20",
+        arrLocal: "12:35",
+        dayOffset: 0,
+        originTz: "Asia/Dubai",
+        destTz: "Europe/Madrid",
+        confirmCount: 2,
+      },
+    ];
+    const EK098_LEGS = [
+      {
+        legSeq: 0,
+        origin: "BCN",
+        dest: "DXB",
+        depLocal: "14:15",
+        arrLocal: "00:05",
+        dayOffset: 1,
+        originTz: "Europe/Madrid",
+        destTz: "Asia/Dubai",
+        confirmCount: 2,
+      },
+    ];
+
+    async function setUpOutbound() {
+      vi.mocked(lookupSchedule).mockResolvedValueOnce({ legs: EK097_LEGS });
+      const { result } = renderHook(() =>
+        useTripEntry({ pickedDate: "2026-08-20", homeTz: "Asia/Dubai", onSubmitted: vi.fn() }),
+      );
+      act(() => {
+        result.current.setFlightNo("EK097");
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      await waitFor(() => expect(result.current.autofillLegs).not.toBeNull());
+      return result;
+    }
+
+    it("appends EK098's leg after EK097's, dated from EK097's arrival local date, as ONE combined trip payload", async () => {
+      const result = await setUpOutbound();
+      vi.mocked(lookupSchedule).mockResolvedValueOnce({ legs: EK098_LEGS });
+
+      await act(async () => {
+        // EK097's only leg: depDate 2026-08-20, dayOffset 0 -> arrival local date 2026-08-20.
+        // The second lookup must be anchored on that date, not the original picked date.
+        await result.current.appendFlight("EK098");
+      });
+
+      expect(lookupSchedule).toHaveBeenCalledWith("EK098", "2026-08-20");
+      expect(result.current.appendedFlightNo).toBe("EK098");
+      expect(result.current.autofillLegs).toHaveLength(2);
+      expect(result.current.autofillLegs![1]).toMatchObject({
+        flightNo: "EK098",
+        legSeq: 1,
+        origin: "BCN",
+        dest: "DXB",
+      });
+
+      vi.mocked(createTrip).mockResolvedValue({
+        id: "trip-1",
+        userId: "u1",
+        label: null,
+        createdAt: Date.now(),
+        flights: [],
+      });
+
+      await act(async () => {
+        await result.current.handleAutofillSubmit();
+      });
+
+      await waitFor(() => expect(createTrip).toHaveBeenCalledTimes(1));
+      const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
+      expect(payload!.legs).toHaveLength(2);
+
+      // Leg 0 (EK097): dep 2026-08-20 08:20 Asia/Dubai (+4) -> 04:20Z; arr 2026-08-20 12:35
+      // Europe/Madrid (+2 in Aug) -> 10:35Z; report = dep-90min local (06:50 Asia/Dubai) -> 02:50Z.
+      expect(payload!.legs[0]).toMatchObject({
+        flightNo: "EK097",
+        origin: "DXB",
+        dest: "BCN",
+        depUtc: "2026-08-20T04:20:00.000Z",
+        arrUtc: "2026-08-20T10:35:00.000Z",
+        reportUtc: "2026-08-20T02:50:00.000Z",
+      });
+      // Leg 1 (EK098): depDate = EK097's arrival local date (2026-08-20); dep 14:15
+      // Europe/Madrid (+2) -> 12:15Z; arrDate = depDate + dayOffset(1) = 2026-08-21, arr 00:05
+      // Asia/Dubai (+4) -> 2026-08-20T20:05Z; report = dep-90min local (12:45 Madrid) -> 10:45Z.
+      expect(payload!.legs[1]).toMatchObject({
+        flightNo: "EK098",
+        origin: "BCN",
+        dest: "DXB",
+        depUtc: "2026-08-20T12:15:00.000Z",
+        arrUtc: "2026-08-20T20:05:00.000Z",
+        reportUtc: "2026-08-20T10:45:00.000Z",
+      });
+
+      // Regression: confirmSchedule (POST /schedule/confirm) upserts flight_schedules rows
+      // keyed by (flight_no, leg_seq) PER FLIGHT, not per combined trip. EK098 is a
+      // single-leg flight, so its own schedule leg_seq must be confirmed as 0 - NOT the
+      // combined trip's leg_seq (1, since it's the second flight chained after EK097's leg
+      // 0). Confirming leg_seq 1 for EK098 would upsert a phantom SECOND leg into EK098's
+      // flight_schedules rows (a leg_seq that flight never actually has), which
+      // GET /schedule/lookup would then return on every future EK098 lookup - and each
+      // subsequent turnaround append would confirm an even higher phantom leg_seq, since
+      // the combined-trip leg_seq keeps growing across appends.
+      await waitFor(() => expect(confirmSchedule).toHaveBeenCalledTimes(2));
+      expect(confirmSchedule).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ flightNo: "EK097", legSeq: 0 }),
+      );
+      expect(confirmSchedule).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ flightNo: "EK098", legSeq: 0 }),
+      );
+    });
+
+    it("sets an inline miss flag (not manual fallback) when the appended flight number isn't in the schedule", async () => {
+      const result = await setUpOutbound();
+      vi.mocked(lookupSchedule).mockResolvedValueOnce(null);
+
+      await act(async () => {
+        await result.current.appendFlight("XX999");
+      });
+
+      expect(result.current.appendLookupMiss).toBe(true);
+      expect(result.current.appendedFlightNo).toBeNull();
+      // Scope stays tight: no fallback into manual mode for the appended flight.
+      expect(result.current.mode).toBe("flightno");
+      // The outbound's own single leg is untouched.
+      expect(result.current.autofillLegs).toHaveLength(1);
+    });
+
+    it("removeAppendedFlight reverts to the single-flight state", async () => {
+      const result = await setUpOutbound();
+      vi.mocked(lookupSchedule).mockResolvedValueOnce({ legs: EK098_LEGS });
+
+      await act(async () => {
+        await result.current.appendFlight("EK098");
+      });
+      expect(result.current.autofillLegs).toHaveLength(2);
+
+      act(() => {
+        result.current.removeAppendedFlight();
+      });
+
+      expect(result.current.appendedFlightNo).toBeNull();
+      expect(result.current.autofillLegs).toHaveLength(1);
+      expect(result.current.autofillLegs![0]!.flightNo).toBe("EK097");
+    });
+  });
+
   it("manual path: adds a leg prefilling origin from the previous dest and dep date from previous arrival", async () => {
     const { result } = renderHook(() =>
       useTripEntry({ pickedDate: "2026-08-20", homeTz: "Asia/Dubai", onSubmitted: vi.fn() }),

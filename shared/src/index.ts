@@ -88,6 +88,34 @@ export type ScheduleLookupResponse = {
   legs: ScheduleLeg[];
 };
 
+export type ScheduleSuggestion = {
+  flightNo: string;
+  legs: ScheduleLeg[];
+  /** Hours (fractional) from the query's `arrivedIso` to this suggestion's first-leg departure, as a UTC instant delta. */
+  layoverHours: number;
+  /** True when flightNo's numeric part is the outbound flight's numeric part ± 1 (zero-pad aware, same alpha prefix). */
+  sibling: boolean;
+  /** The resolved operating date ("YYYY-MM-DD") this suggestion's leg 0 departs on — the first
+   * date >= the query's `date` (searched forward up to 7 days) whose weekday/validity matches
+   * and whose departure isn't before `arrivedIso`. Lets a client render/prefill the suggestion's
+   * actual date without re-deriving the operating-day search client-side. */
+  dateIso: string;
+};
+
+export type ScheduleSuggestResponse = {
+  suggestions: ScheduleSuggestion[];
+};
+
+export const ScheduleSuggestQuerySchema = z.object({
+  origin: iataSchema,
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  outbound: flightNoSchema.optional(),
+  arrivedIso: z.string().datetime(),
+  home: iataSchema.optional().default("DXB"),
+});
+
+export type ScheduleSuggestQuery = z.infer<typeof ScheduleSuggestQuerySchema>;
+
 const hhmmSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
 export const ScheduleConfirmSchema = z

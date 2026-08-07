@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Flight, LegPatch } from "@roaster/shared";
-import { addDaysIso, formatLocal, localDateKey, wallToUtc } from "@roaster/shared";
-import { deleteTrip, patchFlight } from "./api";
+import type { Flight, LegPatch, ScheduleSuggestion } from "@roaster/shared";
+import { addDaysIso, formatHours, formatLocal, localDateKey, wallToUtc } from "@roaster/shared";
+import { deleteTrip, patchFlight, suggestReturns } from "./api";
 import type { TripWithFlights } from "./api";
 import { useRecentFlights } from "./useRecentFlights";
 import { useTripEntry } from "./useTripEntry";
+import type { UseTripEntryReturn } from "./useTripEntry";
+
+/** Crew's home base IATA — return suggestions are hidden once a trip already ends here. */
+const HOME_BASE_IATA = "DXB";
+
+/** Max return-suggestion chips rendered (server may return up to 8; client caps display at 3
+ * per the plan's chip-row density budget). */
+const MAX_RETURN_CHIPS = 3;
 
 /** A trip's away-span as local calendar dates (first departure's to last arrival's local
  * date, in `homeTz`) — null if the trip has no flights. */
@@ -322,6 +330,62 @@ function nextFreeDate(
   return candidate;
 }
 
+/** Muted "+ add flight" control shown under the preview card while previewing a single
+ * flight (hidden once a flight is already appended — the ✕ on the appended card is the only
+ * way back to single-flight state). Tapping it reveals a small inline flight-no input; Enter
+ * or the "add" button fires the second lookup via `entry.appendFlight`. A lookup miss shows
+ * an inline muted error under the input — appended flights are schedule-known only, no
+ * manual-mode fallback (manual turnarounds remain possible via the pre-existing multi-leg
+ * manual path). */
+function AppendFlightControl({ entry }: { entry: UseTripEntryReturn }) {
+  const [expanded, setExpanded] = useState(false);
+  const [value, setValue] = useState("");
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        data-testid="append-flight"
+        onClick={() => setExpanded(true)}
+        className="w-fit text-sm text-ink-muted underline transition-colors duration-[120ms] hover:text-ink"
+      >
+        + add flight
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          data-testid="append-flightno-input"
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value.toUpperCase())}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void entry.appendFlight(value);
+            }
+          }}
+          placeholder="e.g. EK098"
+          className="num rounded border border-edge bg-card px-2 py-1 text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
+        />
+        <button
+          type="button"
+          onClick={() => void entry.appendFlight(value)}
+          className="min-h-[44px] rounded border border-edge px-3 py-1 text-sm text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+        >
+          Add
+        </button>
+      </div>
+      {entry.appendLookupMiss && (
+        <p className="text-sm text-ink-muted">unknown flight — try another number</p>
+      )}
+    </div>
+  );
+}
+
 /** Empty-day content: flight-no -> autofill preview -> "Add to roster", with an inline
  * manual fallback on a lookup miss. Driven entirely by useTripEntry. After a successful add,
  * chains into a rapid-entry "added" state (Plan 6 Task 5): the sheet stays open, the flight
@@ -353,6 +417,10 @@ function AddTripContent({
   // to offer the just-added flight as a chip immediately, not just after Done.
   const [sessionFlightNos, setSessionFlightNos] = useState<string[]>([]);
   const recentFlights = useRecentFlights(trips, sessionFlightNos);
+  // Return-flight suggestions for the just-added trip, when it ends away from home base -
+  // fire-and-forget fetched after each save, cleared on the next add so a stale list from a
+  // prior save never lingers over a new one.
+  const [returnSuggestions, setReturnSuggestions] = useState<ScheduleSuggestion[]>([]);
 
   // Single shared post-save transition for BOTH entry paths (autofill and manual): stamps
   // the rapid-entry "added" state, advances to the next suggested date, marks the day
@@ -388,6 +456,24 @@ function AddTripContent({
       }
       entry.switchToFlightNo();
       entry.setFlightNo("");
+
+      // Return-suggestion chips (Task 3): only when the SAVED trip's final leg lands away
+      // from home base — a trip that already returns home has nothing to suggest.
+      setReturnSuggestions([]);
+      const sortedFlights = [...createdTrip.flights].sort((a, b) => a.legSeq - b.legSeq);
+      const finalLeg = sortedFlights[sortedFlights.length - 1];
+      if (finalLeg && savedFlightNo && finalLeg.dest !== HOME_BASE_IATA) {
+        const nextDayIso = addDaysIso(localDateKey(finalLeg.arrUtc, finalLeg.arrTz), 1);
+        suggestReturns({
+          origin: finalLeg.dest,
+          date: nextDayIso,
+          home: HOME_BASE_IATA,
+          outbound: savedFlightNo,
+          arrivedIso: finalLeg.arrUtc,
+        })
+          .then((res) => setReturnSuggestions(res.suggestions))
+          .catch(() => setReturnSuggestions([]));
+      }
     },
   });
 
@@ -397,6 +483,15 @@ function AddTripContent({
 
   function chooseChip(flightNo: string) {
     entry.setFlightNo(flightNo);
+  }
+
+  /** Tapping a return-suggestion chip prefills add-mode on the suggestion's own resolved
+   * operating date (replacing whatever the banner's next-date suggestion currently is) and
+   * sets the flight number, reusing the existing debounced-lookup flow exactly like typing
+   * or a recent-flight chip would. */
+  function chooseReturnChip(suggestion: ScheduleSuggestion) {
+    setPickedDate(suggestion.dateIso);
+    entry.setFlightNo(suggestion.flightNo);
   }
 
   if (entry.mode === "flightno") {
@@ -463,6 +558,23 @@ function AddTripContent({
             className="num rounded border border-edge bg-raised px-3 py-2 text-lg text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
           />
 
+          {returnSuggestions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {returnSuggestions.slice(0, MAX_RETURN_CHIPS).map((suggestion) => (
+                <button
+                  key={suggestion.flightNo}
+                  type="button"
+                  data-testid={`return-chip-${suggestion.flightNo}`}
+                  onClick={() => chooseReturnChip(suggestion)}
+                  className="rounded-full border border-edge px-3 py-1 text-sm text-ink transition-colors duration-[120ms] hover:border-accent"
+                >
+                  ↩ {suggestion.flightNo} · {humanDateLabel(suggestion.dateIso, homeTz)} ·{" "}
+                  {formatHours(suggestion.layoverHours)}
+                </button>
+              ))}
+            </div>
+          )}
+
           {recentFlights.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {recentFlights.map((flightNo) => (
@@ -479,9 +591,12 @@ function AddTripContent({
             </div>
           )}
 
-          {entry.autofillLegs && entry.autofillFlightNo && (
-          <div data-testid="autofill-card" className="flex flex-col gap-3 rounded border border-edge bg-raised p-4">
-            {entry.autofillLegs.map((leg, index) => {
+          {entry.autofillLegs && entry.autofillFlightNo && (() => {
+            const outboundLegs = entry.autofillLegs.filter((leg) => leg.flightNo === entry.autofillFlightNo);
+            const appendedLegs = entry.appendedFlightNo
+              ? entry.autofillLegs.filter((leg) => leg.flightNo === entry.appendedFlightNo)
+              : [];
+            const renderLegFields = (leg: (typeof entry.autofillLegs)[number], index: number) => {
               const reportLocal = entry.reportLocalFor(leg);
               const isEditingReport = entry.editingReportLeg === leg.legSeq;
               return (
@@ -541,17 +656,47 @@ function AddTripContent({
                   )}
                 </div>
               );
-            })}
-            <p className="text-sm text-ink-muted">times from schedule — edit if your roster differs</p>
-            <button
-              type="submit"
-              disabled={entry.submitting}
-              className="min-h-[48px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
-            >
-              Add to roster
-            </button>
-          </div>
-        )}
+            };
+
+            return (
+              <>
+                <div data-testid="autofill-card" className="flex flex-col gap-3 rounded border border-edge bg-raised p-4">
+                  {outboundLegs.map((leg, index) => renderLegFields(leg, index))}
+                  <p className="text-sm text-ink-muted">times from schedule — edit if your roster differs</p>
+                </div>
+
+                {appendedLegs.length > 0 && (
+                  <div data-testid="appended-card" className="flex flex-col gap-3 rounded border border-edge bg-raised p-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-ink-muted">+ {entry.appendedFlightNo}</p>
+                      <button
+                        type="button"
+                        data-testid="remove-appended"
+                        aria-label="Remove appended flight"
+                        onClick={entry.removeAppendedFlight}
+                        className="min-h-[44px] min-w-[44px] rounded border border-edge px-2 text-ink-muted transition-colors duration-[120ms] hover:border-ink-muted"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {appendedLegs.map((leg, index) =>
+                      renderLegFields(leg, outboundLegs.length + index),
+                    )}
+                  </div>
+                )}
+
+                {!entry.appendedFlightNo && <AppendFlightControl entry={entry} />}
+
+                <button
+                  type="submit"
+                  disabled={entry.submitting}
+                  className="min-h-[48px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+                >
+                  Add to roster
+                </button>
+              </>
+            );
+          })()}
 
         {!entry.autofillLegs && (
           <div className="flex flex-col gap-2">
