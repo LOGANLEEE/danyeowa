@@ -88,6 +88,29 @@ export type ScheduleLookupResponse = {
   legs: ScheduleLeg[];
 };
 
+export type ScheduleSuggestion = {
+  flightNo: string;
+  legs: ScheduleLeg[];
+  /** Hours (fractional) from the query's `arrivedIso` to this suggestion's first-leg departure, as a UTC instant delta. */
+  layoverHours: number;
+  /** True when flightNo's numeric part is the outbound flight's numeric part ± 1 (zero-pad aware, same alpha prefix). */
+  sibling: boolean;
+};
+
+export type ScheduleSuggestResponse = {
+  suggestions: ScheduleSuggestion[];
+};
+
+export const ScheduleSuggestQuerySchema = z.object({
+  origin: iataSchema,
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  outbound: flightNoSchema.optional(),
+  arrivedIso: z.string().datetime(),
+  home: iataSchema.optional().default("DXB"),
+});
+
+export type ScheduleSuggestQuery = z.infer<typeof ScheduleSuggestQuerySchema>;
+
 const hhmmSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
 export const ScheduleConfirmSchema = z

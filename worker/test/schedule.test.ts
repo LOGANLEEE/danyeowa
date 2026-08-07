@@ -275,3 +275,150 @@ describe("POST /api/schedule/confirm", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("GET /api/schedule/suggest", () => {
+  let cookie: string;
+  beforeAll(async () => {
+    cookie = await signInAs("schedule-suggest@example.com");
+  });
+
+  it("401s when unauthenticated", async () => {
+    const res = await SELF.fetch(
+      "https://example.com/api/schedule/suggest?origin=CHC&date=2026-08-21&arrivedIso=2026-08-21T00:55:00.000Z",
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("400s on malformed params (bad origin)", async () => {
+    const res = await SELF.fetch(
+      "https://example.com/api/schedule/suggest?origin=CH&date=2026-08-21&arrivedIso=2026-08-21T00:55:00.000Z",
+      { headers: { Cookie: cookie } },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("400s on malformed arrivedIso", async () => {
+    const res = await SELF.fetch(
+      "https://example.com/api/schedule/suggest?origin=CHC&date=2026-08-21&arrivedIso=not-a-date",
+      { headers: { Cookie: cookie } },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("returns empty suggestions for an origin with no home-bound rows", async () => {
+    // SYD only ever appears as EK412's leg-1 continuation (SYD->CHC) - no seeded
+    // flight_no has its leg_seq-0 origin at SYD, so there is no candidate at all.
+    const res = await SELF.fetch(
+      "https://example.com/api/schedule/suggest?origin=SYD&date=2026-08-21&arrivedIso=2026-08-21T00:55:00.000Z",
+      { headers: { Cookie: cookie } },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json<{ suggestions: unknown[] }>();
+    expect(body.suggestions).toEqual([]);
+  });
+
+  it("ranks EK412's sibling EK413 first, with hand-verified layoverHours", async () => {
+    // EK412 DXB->SYD (dep 10:15 dayOffset1, arr 06:00) -> SYD->CHC (dep 07:45 dayOffset0,
+    // arr 12:55) lands the crew at CHC. Query date 2026-08-21 is the CHC-local arrival date;
+    // arrivedIso is that 12:55 Pacific/Auckland arrival as a UTC instant.
+    //
+    // Pacific/Auckland is UTC+12 in August (NZ winter, no DST - NZDT starts late September),
+    // so 2026-08-21T12:55 CHC-local = 2026-08-21T00:55:00.000Z. That's this test's arrivedIso.
+    //
+    // EK413's leg0 (CHC->SYD, dep 14:00 local, dayOffset0) is a same-day operating match
+    // (daily schedule, "1234567") for the query date 2026-08-21, so its candidate departure
+    // is 2026-08-21T14:00 Pacific/Auckland = 2026-08-21T02:00:00.000Z (same UTC+12 offset,
+    // still August/winter, no DST transition between the two instants).
+    //
+    // layoverHours = (02:00:00Z - 00:55:00Z) = 1h05m = 1.0833... hours.
+    const arrivedIso = "2026-08-21T00:55:00.000Z";
+    const res = await SELF.fetch(
+      `https://example.com/api/schedule/suggest?origin=CHC&date=2026-08-21&outbound=EK412&arrivedIso=${arrivedIso}`,
+      { headers: { Cookie: cookie } },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json<{
+      suggestions: Array<{
+        flightNo: string;
+        legs: Array<{ legSeq: number; origin: string; dest: string }>;
+        layoverHours: number;
+        sibling: boolean;
+      }>;
+    }>();
+
+    expect(body.suggestions.length).toBeGreaterThan(0);
+    const ek413 = body.suggestions[0]!;
+    expect(ek413.flightNo).toBe("EK413");
+    expect(ek413.sibling).toBe(true);
+    expect(ek413.legs).toHaveLength(2);
+    expect(ek413.legs[0]).toMatchObject({ legSeq: 0, origin: "CHC", dest: "SYD" });
+    expect(ek413.legs[1]).toMatchObject({ legSeq: 1, origin: "SYD", dest: "DXB" });
+    expect(ek413.layoverHours).toBeCloseTo(1.0833333333333333, 6);
+  });
+
+  it("ranks non-sibling candidates by layover ascending when no sibling is present", async () => {
+    // Seed two DXB-home-bound candidates departing FCO (no EK107/EK108 ±1 sibling
+    // involved here since outbound is omitted): EK108 (short layover) should rank
+    // before a later-departing same-route candidate.
+    const db = drizzle(env.DB, { schema });
+    await db.insert(schema.flightSchedules).values([
+      {
+        flightNo: "ZZ900",
+        legSeq: 0,
+        origin: "FCO",
+        dest: "DXB",
+        depLocal: "23:00",
+        arrLocal: "07:00",
+        dayOffset: 1,
+        daysOfWeek: "1234567",
+      },
+    ]);
+
+    const res = await SELF.fetch(
+      "https://example.com/api/schedule/suggest?origin=FCO&date=2026-08-21&arrivedIso=2026-08-21T00:00:00.000Z",
+      { headers: { Cookie: cookie } },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json<{
+      suggestions: Array<{ flightNo: string; layoverHours: number; sibling: boolean }>;
+    }>();
+
+    const flightNos = body.suggestions.map((s) => s.flightNo);
+    expect(flightNos).toContain("EK108");
+    expect(flightNos).toContain("ZZ900");
+    // EK108 departs FCO 13:55 local same day; ZZ900 departs FCO 23:00 local same day -
+    // EK108 has the shorter layover from a 00:00Z arrival, so it ranks first.
+    const idxEk108 = flightNos.indexOf("EK108");
+    const idxZz900 = flightNos.indexOf("ZZ900");
+    expect(idxEk108).toBeLessThan(idxZz900);
+    // Layover values are non-decreasing across the ranked list.
+    for (let i = 1; i < body.suggestions.length; i++) {
+      expect(body.suggestions[i]!.layoverHours).toBeGreaterThanOrEqual(
+        body.suggestions[i - 1]!.layoverHours,
+      );
+    }
+  });
+
+  it("caps raw suggestions at 8", async () => {
+    const db = drizzle(env.DB, { schema });
+    const extra = Array.from({ length: 10 }, (_, i) => ({
+      flightNo: `ZZ${100 + i}`,
+      legSeq: 0,
+      origin: "SYD",
+      dest: "DXB",
+      depLocal: "10:00",
+      arrLocal: "20:00",
+      dayOffset: 0,
+      daysOfWeek: "1234567",
+    }));
+    await db.insert(schema.flightSchedules).values(extra);
+
+    const res = await SELF.fetch(
+      "https://example.com/api/schedule/suggest?origin=SYD&date=2026-08-21&arrivedIso=2026-08-21T00:00:00.000Z",
+      { headers: { Cookie: cookie } },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json<{ suggestions: unknown[] }>();
+    expect(body.suggestions.length).toBeLessThanOrEqual(8);
+  });
+});
