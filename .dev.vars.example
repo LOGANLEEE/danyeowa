@@ -26,3 +26,11 @@ GOOGLE_CLIENT_ID=<your-google-oauth-client-id>
 # Google OAuth client secret — uploaded as a Worker secret in prod
 # (`wrangler secret put GOOGLE_CLIENT_SECRET`). Never commit the real value.
 GOOGLE_CLIENT_SECRET=<your-google-oauth-client-secret>
+
+# VAPID keypair for Web Push, LOCAL DEV ONLY — generate with
+# `node scripts/generate-vapid.mjs --local` and paste both values below. This MUST be a
+# DIFFERENT keypair from prod: prod's public half is a wrangler.jsonc var and its private
+# half is a Worker secret uploaded via `node scripts/generate-vapid.mjs --put` (never
+# written to any file). Never commit real values here.
+VAPID_PUBLIC_KEY=<your-local-dev-vapid-public-key>
+VAPID_PRIVATE_KEY=<your-local-dev-vapid-private-key>

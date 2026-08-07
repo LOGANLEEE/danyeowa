@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import type { HealthResponse, Me } from "@roaster/shared";
 import { createAuth } from "./auth";
 import { getLastDevOtp } from "./email";
+import { pushRouter } from "./push";
+import { runReportScan } from "./report-scan";
 import { scheduleRouter } from "./schedule";
 import { shareRouter } from "./share";
 import { tripsRouter } from "./trips";
@@ -15,6 +17,25 @@ export type Env = {
   BETTER_AUTH_URL?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /**
+   * Public half of the VAPID keypair used to sign Web Push subscriptions. Safe to expose
+   * to clients (returned by GET /api/push/config) and committed as a wrangler.jsonc var —
+   * unlike VAPID_PRIVATE_KEY, which must only ever exist as a Worker secret.
+   */
+  VAPID_PUBLIC_KEY?: string;
+  /**
+   * Private half of the VAPID keypair, base64url-encoded PKCS8. MUST only ever be set
+   * as a Worker secret (`wrangler secret put VAPID_PRIVATE_KEY`, uploaded via
+   * scripts/generate-vapid.mjs --put) or in the gitignored .dev.vars for local dev —
+   * never committed to wrangler.jsonc `vars`.
+   */
+  VAPID_PRIVATE_KEY?: string;
+  /**
+   * Contact address for the VAPID JWT's `sub` claim (RFC 8292 §2), as `mailto:<address>`
+   * or a `https://` contact URL. Falls back to a literal address in webpush.ts if unset,
+   * so this is optional in wrangler.jsonc `vars` but should be set for prod.
+   */
+  VAPID_CONTACT?: string;
   /**
    * Test-only escape hatch: enables GET /api/__e2e/last-otp so the Playwright suite can
    * retrieve a dev-fallback OTP without a real inbox. Must NEVER be set in wrangler.jsonc
@@ -31,7 +52,7 @@ type Variables = {
   user: NonNullable<Session>["user"] | null;
 };
 
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+export const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 app.use("/api/*", async (c, next) => {
   const auth = createAuth(c.env);
@@ -80,5 +101,13 @@ app.get("/api/__e2e/last-otp", (c) => {
 app.route("/api", tripsRouter);
 app.route("/api", scheduleRouter);
 app.route("/api", shareRouter);
+app.route("/api", pushRouter);
 
-export default app;
+async function scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+  ctx.waitUntil(runReportScan(env, Date.now()));
+}
+
+export default {
+  fetch: app.fetch,
+  scheduled,
+};

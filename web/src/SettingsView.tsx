@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getPushConfig, subscribePush, unsubscribePush, updateNotificationPrefs } from "./api";
+import { urlBase64ToUint8Array } from "./lib/push";
 import { getStoredTheme, setTheme } from "./theme";
 import type { Theme } from "./theme";
 
@@ -13,12 +15,95 @@ const THEME_OPTIONS: { value: Theme; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
+const LEAD_OPTIONS: { value: number; label: string }[] = [
+  { value: 30, label: "30m" },
+  { value: 60, label: "1h" },
+  { value: 120, label: "2h" },
+  { value: 180, label: "3h" },
+];
+
+function pushSupported(): boolean {
+  return "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+}
+
 export default function SettingsView({ email, onSignOut }: Props) {
   const [theme, setThemeState] = useState<Theme>(getStoredTheme);
+
+  const [supported] = useState(pushSupported);
+  const [permission, setPermission] = useState<NotificationPermission | null>(() =>
+    pushSupported() ? Notification.permission : null,
+  );
+  const [subscribed, setSubscribed] = useState(false);
+  const [leadMinutes, setLeadMinutes] = useState(120);
+  const [pushError, setPushError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!supported) return;
+    getPushConfig()
+      .then((config) => {
+        setSubscribed(config.subscribed);
+        setLeadMinutes(config.leadMinutes);
+      })
+      .catch(() => {
+        // Leave defaults in place — the toggle simply starts off.
+      });
+  }, [supported]);
 
   function selectTheme(next: Theme) {
     setThemeState(next);
     setTheme(next);
+  }
+
+  async function handleToggleOn() {
+    setPushError(null);
+    const result = await Notification.requestPermission();
+    setPermission(result);
+    if (result !== "granted") return;
+
+    try {
+      const config = await getPushConfig();
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) {
+        setPushError("Couldn't enable notifications — try again");
+        return;
+      }
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+      });
+      const json = subscription.toJSON();
+      await subscribePush({
+        endpoint: json.endpoint!,
+        keys: { p256dh: json.keys!.p256dh!, auth: json.keys!.auth! },
+      });
+      setSubscribed(true);
+    } catch {
+      setPushError("Couldn't enable notifications — try again");
+    }
+  }
+
+  async function handleToggleOff() {
+    setPushError(null);
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
+      if (subscription) {
+        await unsubscribePush(subscription.endpoint);
+        await subscription.unsubscribe();
+      }
+      setSubscribed(false);
+    } catch {
+      setPushError("Couldn't disable notifications — try again");
+    }
+  }
+
+  async function handleLeadChange(next: number) {
+    setLeadMinutes(next);
+    try {
+      await updateNotificationPrefs({ enabled: true, leadMinutes: next });
+    } catch {
+      setPushError("Couldn't save your lead time — try again");
+    }
   }
 
   return (
@@ -44,6 +129,54 @@ export default function SettingsView({ email, onSignOut }: Props) {
           </label>
         ))}
       </fieldset>
+
+      <div className="flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
+        <p className="px-1 text-xs uppercase text-ink-muted">Notifications</p>
+
+        {!supported ? (
+          <p className="text-sm text-ink-muted" data-testid="push-unsupported">
+            Install to Home Screen to enable notifications
+          </p>
+        ) : permission === "denied" ? (
+          <p className="text-sm text-ink-muted">
+            Notifications are blocked for this site — enable them in your browser settings to get
+            report-time reminders.
+          </p>
+        ) : (
+          <>
+            <label className="flex items-center justify-between gap-2 text-ink">
+              <span>Report-time reminders</span>
+              <input
+                type="checkbox"
+                data-testid="push-toggle"
+                checked={subscribed}
+                onChange={(e) => (e.target.checked ? handleToggleOn() : handleToggleOff())}
+                className="accent-accent"
+              />
+            </label>
+
+            {subscribed && (
+              <label className="flex items-center justify-between gap-2 text-ink">
+                <span>Remind me</span>
+                <select
+                  data-testid="push-lead"
+                  value={leadMinutes}
+                  onChange={(e) => handleLeadChange(Number(e.target.value))}
+                  className="rounded border border-edge bg-ground px-2 py-1"
+                >
+                  {LEAD_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {pushError && <p className="text-sm text-danger">{pushError}</p>}
+          </>
+        )}
+      </div>
 
       <div className="flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
         <p className="text-xs uppercase text-ink-muted">Home base</p>

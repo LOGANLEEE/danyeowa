@@ -2,6 +2,9 @@ import type {
   Airport,
   Flight,
   LegPatch,
+  NotificationPrefsInput,
+  PushConfig,
+  PushSubscribeInput,
   ScheduleConfirmInput,
   ScheduleLookupResponse,
   ScheduleSuggestResponse,
@@ -139,4 +142,37 @@ export async function getSharedView(token: string): Promise<SharedView | null> {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Failed to load shared view");
   return parseJson<SharedView>(res);
+}
+
+export async function getPushConfig(): Promise<PushConfig> {
+  const res = await fetch("/api/push/config");
+  if (!res.ok) throw new Error("Failed to load push config");
+  return parseJson<PushConfig>(res);
+}
+
+export async function subscribePush(input: PushSubscribeInput): Promise<void> {
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error("Failed to subscribe to push notifications");
+}
+
+export async function unsubscribePush(endpoint: string): Promise<void> {
+  const res = await fetch("/api/push/subscribe", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint }),
+  });
+  if (!res.ok) throw new Error("Failed to unsubscribe from push notifications");
+}
+
+export async function updateNotificationPrefs(input: NotificationPrefsInput): Promise<void> {
+  const res = await fetch("/api/push/prefs", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error("Failed to update notification preferences");
 }
