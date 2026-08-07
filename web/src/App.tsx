@@ -7,6 +7,7 @@ import Landing from "./Landing";
 import Login from "./Login";
 import SettingsView from "./SettingsView";
 import ShareView from "./ShareView";
+import SharedViewer from "./SharedViewer";
 import TabBar from "./TabBar";
 import type { TabName } from "./TabBar";
 import TripDetail from "./TripDetail";
@@ -15,7 +16,31 @@ import TripsView from "./TripsView";
 
 type SignedOutView = "landing" | "login";
 
+const SHARE_PATH_PREFIX = "/share/";
+
+/** Extracts the token from a `/share/:token` path, or `null` when the current path isn't a
+ * share link. Public family links must be reachable with zero app/auth chrome, so this check
+ * happens before any of App's signed-in/signed-out state or effects come into play. */
+function sharedTokenFromPath(pathname: string): string | null {
+  if (!pathname.startsWith(SHARE_PATH_PREFIX)) return null;
+  const token = pathname.slice(SHARE_PATH_PREFIX.length);
+  return token.length > 0 ? decodeURIComponent(token) : null;
+}
+
 export default function App() {
+  // Checked once at module-eval-adjacent render time (not in an effect) so that a /share/:token
+  // load never mounts the rest of App's state or fires its effects (health/me fetches) at all -
+  // family members opening a shared link have no account and must see zero auth-related network
+  // activity, not just a hidden login form.
+  const sharedToken = sharedTokenFromPath(location.pathname);
+  if (sharedToken !== null) {
+    return <SharedViewer token={sharedToken} />;
+  }
+
+  return <SignedInApp />;
+}
+
+function SignedInApp() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
   const [signedOutView, setSignedOutView] = useState<SignedOutView>("landing");

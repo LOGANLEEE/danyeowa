@@ -1,7 +1,14 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SharedView } from "@roaster/shared";
 import App from "./App";
+import { getSharedView } from "./api";
+
+vi.mock("./api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./api")>()),
+  getSharedView: vi.fn(),
+}));
 
 vi.mock("./auth-client", () => ({
   authClient: {
@@ -45,6 +52,30 @@ function stubSignedInFetch() {
 }
 
 describe("App", () => {
+  afterEach(() => {
+    window.history.pushState({}, "", "/");
+  });
+
+  it("renders the shared viewer for /share/:token with zero auth or app fetches", async () => {
+    const fetchSpy = vi.fn((_input: RequestInfo | URL) =>
+      Promise.reject(new Error("fetch should not be called on /share/ route")),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    const view: SharedView = { crewName: "Isis", generatedAt: "2026-08-15T00:00:00.000Z", trips: [] };
+    vi.mocked(getSharedView).mockResolvedValue(view);
+
+    window.history.pushState({}, "", "/share/tok123");
+    render(<App />);
+
+    expect(await screen.findByTestId("shared-hero")).toBeInTheDocument();
+    expect(screen.queryByTestId("tab-calendar")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const calledUrls = fetchSpy.mock.calls.map((c) => String(c[0]));
+    expect(calledUrls.some((u) => u.includes("/api/me"))).toBe(false);
+    expect(calledUrls.some((u) => u.includes("/api/auth"))).toBe(false);
+  });
+
   it("shows title, API status, and the landing page (not the login form) when signed out", async () => {
     stubSignedOutFetch();
     render(<App />);

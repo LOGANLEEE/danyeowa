@@ -5,6 +5,7 @@ import type {
   ScheduleConfirmInput,
   ScheduleLookupResponse,
   ShareLink,
+  SharedView,
   Trip,
   TripInput,
 } from "@roaster/shared";
@@ -105,4 +106,14 @@ export async function getShareLinks(): Promise<ShareLink[]> {
 export async function revokeShareLink(id: string): Promise<void> {
   const res = await fetch(`/api/share-links/${id}/revoke`, { method: "POST" });
   if (!res.ok) throw new Error("Failed to revoke share link");
+}
+
+/** Public, unauthenticated fetch of a family viewer's shared roster. Returns `null` when the
+ * link is unknown or has been revoked (both 404 identically server-side — no existence
+ * oracle), so the viewer page can show a single friendly "no longer active" state either way. */
+export async function getSharedView(token: string): Promise<SharedView | null> {
+  const res = await fetch(`/api/shared/${encodeURIComponent(token)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Failed to load shared view");
+  return parseJson<SharedView>(res);
 }
