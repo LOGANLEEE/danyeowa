@@ -264,6 +264,13 @@ export type SendPushResult =
   | { ok: true }
   | { ok: false; status: number; expired: boolean };
 
+// RFC 8291's aes128gcm framing adds a fixed 86-byte header (16 salt + 4 record-size +
+// 1 keyid-len + 65 keyid) plus a 16-byte GCM tag and a 1-byte padding delimiter to the
+// plaintext, and push services commonly cap the encrypted body at 4096 bytes (the
+// record size this implementation declares). Rejecting oversized plaintext up front
+// gives a clear error instead of a confusing rejection from the push service.
+const MAX_PAYLOAD_BYTES = 3800;
+
 /**
  * Sends a Web Push message: builds the RFC 8292 VAPID Authorization header and the
  * RFC 8291 aes128gcm-encrypted body, then POSTs to the subscription's push service
@@ -281,8 +288,16 @@ export async function sendPush(
     throw new Error("VAPID_PRIVATE_KEY / VAPID_PUBLIC_KEY must be configured to send push");
   }
 
-  const jwt = await buildVapidJwt(subscription.endpoint, vapidPrivateKey, "mailto:korlogan94@gmail.com");
-  const body = await encryptPayload(new TextEncoder().encode(JSON.stringify(payload)), subscription);
+  const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+  if (plaintext.byteLength > MAX_PAYLOAD_BYTES) {
+    throw new Error(
+      `Push payload too large: ${plaintext.byteLength} bytes exceeds the ${MAX_PAYLOAD_BYTES}-byte pre-encryption limit`,
+    );
+  }
+
+  const subject = env.VAPID_CONTACT ?? "mailto:korlogan94@gmail.com";
+  const jwt = await buildVapidJwt(subscription.endpoint, vapidPrivateKey, subject);
+  const body = await encryptPayload(plaintext, subscription);
 
   const res = await fetch(subscription.endpoint, {
     method: "POST",

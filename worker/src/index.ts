@@ -31,6 +31,12 @@ export type Env = {
    */
   VAPID_PRIVATE_KEY?: string;
   /**
+   * Contact address for the VAPID JWT's `sub` claim (RFC 8292 §2), as `mailto:<address>`
+   * or a `https://` contact URL. Falls back to a literal address in webpush.ts if unset,
+   * so this is optional in wrangler.jsonc `vars` but should be set for prod.
+   */
+  VAPID_CONTACT?: string;
+  /**
    * Test-only escape hatch: enables GET /api/__e2e/last-otp so the Playwright suite can
    * retrieve a dev-fallback OTP without a real inbox. Must NEVER be set in wrangler.jsonc
    * `vars` — it lives only in .dev.vars (gitignored), the e2e runner env, and vitest

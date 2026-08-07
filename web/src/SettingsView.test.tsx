@@ -1,8 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsView from "./SettingsView";
+import * as api from "./api";
 import * as theme from "./theme";
+
+vi.mock("./api", () => ({
+  getPushConfig: vi.fn(),
+  subscribePush: vi.fn(),
+  unsubscribePush: vi.fn(),
+  updateNotificationPrefs: vi.fn(),
+}));
 
 describe("SettingsView", () => {
   beforeEach(() => {
@@ -45,5 +53,152 @@ describe("SettingsView", () => {
 
     await user.click(screen.getByRole("button", { name: /sign out/i }));
     expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  describe("Notifications", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+      vi.clearAllMocks();
+    });
+
+    it("shows the install hint when push isn't supported (e.g. iOS Safari, not installed)", () => {
+      // No Notification/serviceWorker/PushManager stubbed — jsdom doesn't define them by
+      // default, so this is the natural "unsupported" state.
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+      expect(screen.getByTestId("push-unsupported")).toHaveTextContent(/install to home screen/i);
+      expect(screen.queryByTestId("push-toggle")).not.toBeInTheDocument();
+    });
+
+    it("shows a muted explanation when permission was previously denied", () => {
+      vi.stubGlobal("Notification", { permission: "denied", requestPermission: vi.fn() });
+      vi.stubGlobal("PushManager", class {});
+      Object.defineProperty(navigator, "serviceWorker", {
+        value: { getRegistration: vi.fn() },
+        configurable: true,
+      });
+      vi.mocked(api.getPushConfig).mockResolvedValue({
+        publicKey: "pubkey",
+        enabled: true,
+        leadMinutes: 120,
+        subscribed: false,
+      });
+
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      expect(screen.getByText(/blocked for this site/i)).toBeInTheDocument();
+      expect(screen.queryByTestId("push-toggle")).not.toBeInTheDocument();
+    });
+
+    it("subscribes on toggle-on: requests permission, subscribes pushManager, and POSTs the subscription", async () => {
+      // userEvent.setup() must run BEFORE stubbing Notification/serviceWorker: it attaches
+      // internal state to the current globals at setup time (see ShareView.test.tsx's
+      // navigator-stub note for the same pitfall).
+      const user = userEvent.setup();
+
+      const requestPermission = vi.fn().mockResolvedValue("granted");
+      vi.stubGlobal("Notification", { permission: "default", requestPermission });
+      vi.stubGlobal("PushManager", class {});
+
+      vi.mocked(api.getPushConfig).mockResolvedValue({
+        publicKey: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        enabled: true,
+        leadMinutes: 120,
+        subscribed: false,
+      });
+
+      const subscribe = vi.fn().mockResolvedValue({
+        toJSON: () => ({
+          endpoint: "https://push.example.com/abc",
+          keys: { p256dh: "p256dh-key", auth: "auth-key" },
+        }),
+      });
+      const registration = { pushManager: { subscribe } };
+      Object.defineProperty(navigator, "serviceWorker", {
+        value: { getRegistration: vi.fn().mockResolvedValue(registration) },
+        configurable: true,
+      });
+
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      const toggle = await screen.findByTestId("push-toggle");
+      await user.click(toggle);
+
+      await waitFor(() => expect(requestPermission).toHaveBeenCalled());
+      await waitFor(() => expect(subscribe).toHaveBeenCalled());
+      expect(subscribe.mock.calls[0]![0]).toMatchObject({ userVisibleOnly: true });
+      await waitFor(() =>
+        expect(api.subscribePush).toHaveBeenCalledWith({
+          endpoint: "https://push.example.com/abc",
+          keys: { p256dh: "p256dh-key", auth: "auth-key" },
+        }),
+      );
+      await waitFor(() => expect(toggle).toBeChecked());
+      expect(await screen.findByTestId("push-lead")).toBeInTheDocument();
+    });
+
+    it("unsubscribes on toggle-off: DELETEs the subscription and calls unsubscribe()", async () => {
+      const user = userEvent.setup();
+
+      vi.stubGlobal("Notification", { permission: "granted", requestPermission: vi.fn() });
+      vi.stubGlobal("PushManager", class {});
+
+      vi.mocked(api.getPushConfig).mockResolvedValue({
+        publicKey: "pubkey",
+        enabled: true,
+        leadMinutes: 60,
+        subscribed: true,
+      });
+
+      const unsubscribe = vi.fn().mockResolvedValue(true);
+      const existingSubscription = { endpoint: "https://push.example.com/xyz", unsubscribe };
+      const registration = {
+        pushManager: { getSubscription: vi.fn().mockResolvedValue(existingSubscription) },
+      };
+      Object.defineProperty(navigator, "serviceWorker", {
+        value: { getRegistration: vi.fn().mockResolvedValue(registration) },
+        configurable: true,
+      });
+
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      const toggle = await screen.findByTestId("push-toggle");
+      await waitFor(() => expect(toggle).toBeChecked());
+
+      await user.click(toggle);
+
+      await waitFor(() =>
+        expect(api.unsubscribePush).toHaveBeenCalledWith("https://push.example.com/xyz"),
+      );
+      await waitFor(() => expect(unsubscribe).toHaveBeenCalled());
+      await waitFor(() => expect(toggle).not.toBeChecked());
+    });
+
+    it("PUTs prefs when the lead-minutes select changes", async () => {
+      const user = userEvent.setup();
+
+      vi.stubGlobal("Notification", { permission: "granted", requestPermission: vi.fn() });
+      vi.stubGlobal("PushManager", class {});
+
+      vi.mocked(api.getPushConfig).mockResolvedValue({
+        publicKey: "pubkey",
+        enabled: true,
+        leadMinutes: 120,
+        subscribed: true,
+      });
+      Object.defineProperty(navigator, "serviceWorker", {
+        value: { getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }) },
+        configurable: true,
+      });
+
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      const select = await screen.findByTestId("push-lead");
+      await user.selectOptions(select, "30");
+
+      await waitFor(() =>
+        expect(api.updateNotificationPrefs).toHaveBeenCalledWith({ enabled: true, leadMinutes: 30 }),
+      );
+    });
   });
 });

@@ -206,4 +206,30 @@ describe("sendPush", () => {
     const badEnv = { ...env, VAPID_PRIVATE_KEY: undefined };
     await expect(sendPush(fakeSubscription(), { title: "x" }, badEnv)).rejects.toThrow(/VAPID/);
   });
+
+  it("rejects a payload whose pre-encryption JSON exceeds 3800 bytes, without calling fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const oversized = { title: "x", body: "a".repeat(3900) };
+    await expect(sendPush(fakeSubscription(), oversized, env)).rejects.toThrow(/too large/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("uses env.VAPID_CONTACT as the JWT sub when set, falling back to the literal address otherwise", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 201 })));
+
+    await sendPush(fakeSubscription(), { title: "x" }, { ...env, VAPID_CONTACT: "mailto:crew@example.com" });
+    const fetchMock = vi.mocked(fetch);
+    const [, init] = fetchMock.mock.calls[0]!;
+    const headers = init!.headers as Record<string, string>;
+    const jwt = /t=([\w-]+\.[\w-]+\.[\w-]+),/.exec(headers.Authorization ?? "")![1]!;
+    const [, payloadB64] = jwt.split(".");
+    const payload = JSON.parse(Buffer.from(__testing.base64urlDecode(payloadB64!)).toString("utf8"));
+    expect(payload.sub).toBe("mailto:crew@example.com");
+
+    vi.unstubAllGlobals();
+  });
 });
