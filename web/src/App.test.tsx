@@ -38,6 +38,7 @@ function stubSignedInFetch() {
       if (url.includes("/api/health")) return Promise.resolve(jsonResponse({ ok: true, d1: true }));
       if (url.includes("/api/me")) return Promise.resolve(jsonResponse({ email: "pilot@example.com" }));
       if (url.includes("/api/trips")) return Promise.resolve(jsonResponse({ trips: [] }));
+      if (url.includes("/api/share-links")) return Promise.resolve(jsonResponse({ links: [] }));
       return Promise.reject(new Error(`unexpected fetch: ${url}`));
     })
   );
@@ -84,7 +85,7 @@ describe("App", () => {
     await screen.findByTestId("tab-calendar");
 
     await user.click(screen.getByTestId("tab-share"));
-    expect(await screen.findByText(/invite family/i)).toBeInTheDocument();
+    expect(await screen.findByText(/family opens the link/i)).toBeInTheDocument();
 
     await user.click(screen.getByTestId("tab-settings"));
     expect(await screen.findByText("pilot@example.com")).toBeInTheDocument();

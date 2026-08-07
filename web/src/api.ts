@@ -4,6 +4,7 @@ import type {
   LegPatch,
   ScheduleConfirmInput,
   ScheduleLookupResponse,
+  ShareLink,
   Trip,
   TripInput,
 } from "@roaster/shared";
@@ -79,4 +80,29 @@ export async function confirmSchedule(input: ScheduleConfirmInput): Promise<void
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+export async function createShareLink(label?: string): Promise<ShareLink> {
+  const res = await fetch("/api/share-links", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(label ? { label } : {}),
+  });
+  if (!res.ok) throw new Error("Failed to create share link");
+  const body = await parseJson<{ id: string; token: string; label: string | null; createdAt: number }>(
+    res,
+  );
+  return { ...body, revoked: false };
+}
+
+export async function getShareLinks(): Promise<ShareLink[]> {
+  const res = await fetch("/api/share-links");
+  if (!res.ok) throw new Error("Failed to load share links");
+  const body = await parseJson<{ links: ShareLink[] }>(res);
+  return body.links;
+}
+
+export async function revokeShareLink(id: string): Promise<void> {
+  const res = await fetch(`/api/share-links/${id}/revoke`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to revoke share link");
 }
