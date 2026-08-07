@@ -56,6 +56,18 @@ export function layoverHours(arrUtcIso: string, nextDepUtcIso: string): number {
   return (Date.parse(nextDepUtcIso) - Date.parse(arrUtcIso)) / (60 * 60 * 1000);
 }
 
+/** Formats a fractional hour count as a compact duration badge: "1h" (< 24h, rounded to the
+ * nearest whole hour) or "2d 3h" (>= 24h, days + remaining whole hours). Negative/NaN input
+ * is clamped to "0h" — callers only feed this a layover that's already been guarded against
+ * negative values, but the formatter itself stays defensive. */
+export function formatHours(hours: number): string {
+  const totalHours = Number.isFinite(hours) ? Math.max(0, Math.round(hours)) : 0;
+  if (totalHours < 24) return `${totalHours}h`;
+  const days = Math.floor(totalHours / 24);
+  const remainingHours = totalHours % 24;
+  return `${days}d ${remainingHours}h`;
+}
+
 /** Local calendar date for `utcIso` in `tz`, as an ISO date string ("YYYY-MM-DD"). */
 export function localDateKey(utcIso: string, tz: string): string {
   const fmt = new Intl.DateTimeFormat("en-CA", {

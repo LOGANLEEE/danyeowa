@@ -2,7 +2,15 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DaySheet, { humanDateLabel } from "./DaySheet";
-import { confirmSchedule, createTrip, deleteTrip, getAirport, lookupSchedule, patchFlight } from "./api";
+import {
+  confirmSchedule,
+  createTrip,
+  deleteTrip,
+  getAirport,
+  lookupSchedule,
+  patchFlight,
+  suggestReturns,
+} from "./api";
 import type { TripWithFlights } from "./api";
 
 describe("humanDateLabel", () => {
@@ -24,6 +32,7 @@ vi.mock("./api", () => ({
   confirmSchedule: vi.fn(),
   deleteTrip: vi.fn(),
   patchFlight: vi.fn(),
+  suggestReturns: vi.fn(),
 }));
 
 const trip: TripWithFlights = {
@@ -60,6 +69,8 @@ describe("DaySheet", () => {
     vi.mocked(confirmSchedule).mockResolvedValue(undefined);
     vi.mocked(deleteTrip).mockReset();
     vi.mocked(patchFlight).mockReset();
+    vi.mocked(suggestReturns).mockReset();
+    vi.mocked(suggestReturns).mockResolvedValue({ suggestions: [] });
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
@@ -815,6 +826,310 @@ describe("DaySheet", () => {
       // No manual-entry form appeared - the outbound preview is untouched.
       expect(screen.getByTestId("autofill-card")).toBeInTheDocument();
       expect(screen.queryByTestId("manual-expand")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("return-suggestion chips", () => {
+    // EK412 DXB->SYD->CHC - final leg lands at CHC, away from home base DXB, so a successful
+    // add of this trip should trigger a return-suggestion fetch.
+    const EK412_LEGS = [
+      {
+        legSeq: 0,
+        origin: "DXB",
+        dest: "SYD",
+        depLocal: "10:15",
+        arrLocal: "06:00",
+        dayOffset: 1,
+        originTz: "Asia/Dubai",
+        destTz: "Australia/Sydney",
+        confirmCount: 3,
+      },
+      {
+        legSeq: 1,
+        origin: "SYD",
+        dest: "CHC",
+        depLocal: "07:45",
+        arrLocal: "12:55",
+        dayOffset: 0,
+        originTz: "Australia/Sydney",
+        destTz: "Pacific/Auckland",
+        confirmCount: 3,
+      },
+    ];
+    const EK412_SAVED: TripWithFlights = {
+      id: "trip-ek412",
+      userId: "u1",
+      label: null,
+      createdAt: Date.now(),
+      flights: [
+        {
+          id: "ek412-f1",
+          tripId: "trip-ek412",
+          userId: "u1",
+          flightNo: "EK412",
+          origin: "DXB",
+          dest: "SYD",
+          depUtc: "2026-08-20T06:15:00.000Z",
+          arrUtc: "2026-08-21T00:00:00.000Z",
+          reportUtc: "2026-08-20T04:45:00.000Z",
+          depTz: "Asia/Dubai",
+          arrTz: "Australia/Sydney",
+          source: "manual",
+          notes: null,
+          legSeq: 0,
+        },
+        {
+          id: "ek412-f2",
+          tripId: "trip-ek412",
+          userId: "u1",
+          flightNo: "EK412",
+          origin: "SYD",
+          dest: "CHC",
+          depUtc: "2026-08-21T22:00:00.000Z",
+          arrUtc: "2026-08-22T00:55:00.000Z",
+          reportUtc: "2026-08-21T20:30:00.000Z",
+          depTz: "Australia/Sydney",
+          arrTz: "Pacific/Auckland",
+          source: "manual",
+          notes: null,
+          legSeq: 1,
+        },
+      ],
+    };
+    // EK002 DXB->LHR (see top-level `trip` fixture) - final leg lands at LHR, also away from
+    // home base DXB, reused below for the "hidden on empty" and "hidden on error" cases so
+    // those tests don't need their own multi-leg fixture.
+
+    async function addEk412(user: ReturnType<typeof userEvent.setup>) {
+      vi.mocked(lookupSchedule).mockResolvedValueOnce({ legs: EK412_LEGS });
+      vi.mocked(createTrip).mockResolvedValueOnce(EK412_SAVED);
+      render(
+        <DaySheet
+          isoDate="2026-08-20"
+          trip={null}
+          trips={[]}
+          homeTz="Asia/Dubai"
+          onClose={vi.fn()}
+          onChanged={vi.fn()}
+          onAdded={vi.fn()}
+        />,
+      );
+      await user.type(screen.getByTestId("flightno-input"), "ek412");
+      await vi.advanceTimersByTimeAsync(400);
+      await screen.findByTestId("autofill-card");
+      await user.click(screen.getByRole("button", { name: /add to roster/i }));
+      await screen.findByTestId("rapid-banner");
+    }
+
+    it("fires suggestReturns with the saved trip's final dest as origin, next-day date, home DXB, outbound flightNo, and last-leg arrival", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await addEk412(user);
+
+      await waitFor(() =>
+        expect(suggestReturns).toHaveBeenCalledWith({
+          origin: "CHC",
+          date: "2026-08-23",
+          home: "DXB",
+          outbound: "EK412",
+          arrivedIso: "2026-08-22T00:55:00.000Z",
+        }),
+      );
+    });
+
+    it("renders up to 3 return chips above the recent chips, in server order, with weekday+day+layover badge text", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      vi.mocked(suggestReturns).mockResolvedValue({
+        suggestions: [
+          {
+            flightNo: "EK413",
+            legs: [],
+            layoverHours: 51,
+            sibling: true,
+            dateIso: "2026-08-23",
+          },
+          {
+            flightNo: "EK415",
+            legs: [],
+            layoverHours: 3,
+            sibling: false,
+            dateIso: "2026-08-24",
+          },
+        ],
+      });
+
+      await addEk412(user);
+
+      const ek413Chip = await screen.findByTestId("return-chip-EK413");
+      // "↩ EK413 · Sun 23 Aug · 2d 3h" - weekday+day+month from the suggestion's resolved
+      // dateIso (Asia/Dubai calendar), layover badge from formatHours(51) = "2d 3h".
+      expect(ek413Chip).toHaveTextContent("EK413");
+      expect(ek413Chip).toHaveTextContent("Sun 23 Aug");
+      expect(ek413Chip).toHaveTextContent("2d 3h");
+
+      const ek415Chip = await screen.findByTestId("return-chip-EK415");
+      expect(ek415Chip).toHaveTextContent("3h");
+
+      // Server order preserved (sibling-pinned EK413 first) - not re-sorted client-side.
+      const chips = screen.getAllByTestId(/^return-chip-/);
+      expect(chips[0]).toHaveAttribute("data-testid", "return-chip-EK413");
+      expect(chips[1]).toHaveAttribute("data-testid", "return-chip-EK415");
+    });
+
+    it("caps rendered return chips at 3 even when the server returns more", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      vi.mocked(suggestReturns).mockResolvedValue({
+        suggestions: [
+          { flightNo: "EK413", legs: [], layoverHours: 2, sibling: true, dateIso: "2026-08-23" },
+          { flightNo: "EK415", legs: [], layoverHours: 3, sibling: false, dateIso: "2026-08-23" },
+          { flightNo: "EK417", legs: [], layoverHours: 4, sibling: false, dateIso: "2026-08-23" },
+          { flightNo: "EK419", legs: [], layoverHours: 5, sibling: false, dateIso: "2026-08-24" },
+        ],
+      });
+
+      await addEk412(user);
+
+      await screen.findByTestId("return-chip-EK413");
+      expect(screen.getAllByTestId(/^return-chip-/)).toHaveLength(3);
+      expect(screen.queryByTestId("return-chip-EK419")).not.toBeInTheDocument();
+    });
+
+    it("tapping a return chip prefills add-mode with the suggestion's date and flight number, firing the existing lookup flow", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      vi.mocked(suggestReturns).mockResolvedValue({
+        suggestions: [
+          { flightNo: "EK413", legs: [], layoverHours: 2, sibling: true, dateIso: "2026-08-23" },
+        ],
+      });
+
+      await addEk412(user);
+      const chip = await screen.findByTestId("return-chip-EK413");
+
+      vi.mocked(lookupSchedule).mockResolvedValueOnce({
+        legs: [
+          {
+            legSeq: 0,
+            origin: "CHC",
+            dest: "DXB",
+            depLocal: "14:00",
+            arrLocal: "06:00",
+            dayOffset: 1,
+            originTz: "Pacific/Auckland",
+            destTz: "Asia/Dubai",
+            confirmCount: 3,
+          },
+        ],
+      });
+
+      await user.click(chip);
+
+      const input = screen.getByTestId("flightno-input") as HTMLInputElement;
+      expect(input.value).toBe("EK413");
+
+      await vi.advanceTimersByTimeAsync(400);
+      await waitFor(() => expect(lookupSchedule).toHaveBeenCalledWith("EK413", "2026-08-23"));
+      expect(await screen.findByTestId("autofill-card")).toBeInTheDocument();
+    });
+
+    it("hides the return-chip section when suggestReturns resolves empty", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      vi.mocked(suggestReturns).mockResolvedValue({ suggestions: [] });
+
+      await addEk412(user);
+      await waitFor(() => expect(suggestReturns).toHaveBeenCalled());
+
+      expect(screen.queryByTestId(/^return-chip-/)).not.toBeInTheDocument();
+    });
+
+    it("hides the return-chip section when suggestReturns rejects (fire-and-forget error)", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      vi.mocked(suggestReturns).mockRejectedValue(new Error("network error"));
+
+      await addEk412(user);
+      await waitFor(() => expect(suggestReturns).toHaveBeenCalled());
+
+      expect(screen.queryByTestId(/^return-chip-/)).not.toBeInTheDocument();
+    });
+
+    it("does not fire suggestReturns when the saved trip's final leg already lands at home base DXB", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      vi.mocked(lookupSchedule).mockResolvedValueOnce({
+        legs: [
+          {
+            legSeq: 0,
+            origin: "DXB",
+            dest: "LHR",
+            depLocal: "09:15",
+            arrLocal: "13:35",
+            dayOffset: 0,
+            originTz: "Asia/Dubai",
+            destTz: "Europe/London",
+            confirmCount: 3,
+          },
+          {
+            legSeq: 1,
+            origin: "LHR",
+            dest: "DXB",
+            depLocal: "20:00",
+            arrLocal: "06:00",
+            dayOffset: 1,
+            originTz: "Europe/London",
+            destTz: "Asia/Dubai",
+            confirmCount: 3,
+          },
+        ],
+      });
+      vi.mocked(createTrip).mockResolvedValueOnce({
+        id: "trip-roundtrip",
+        userId: "u1",
+        label: null,
+        createdAt: Date.now(),
+        flights: [
+          {
+            id: "rt-f1",
+            tripId: "trip-roundtrip",
+            userId: "u1",
+            flightNo: "EK005",
+            origin: "DXB",
+            dest: "LHR",
+            depUtc: "2026-08-20T05:15:00.000Z",
+            arrUtc: "2026-08-20T09:35:00.000Z",
+            reportUtc: "2026-08-20T03:45:00.000Z",
+            depTz: "Asia/Dubai",
+            arrTz: "Europe/London",
+            source: "manual",
+            notes: null,
+            legSeq: 0,
+          },
+          {
+            id: "rt-f2",
+            tripId: "trip-roundtrip",
+            userId: "u1",
+            flightNo: "EK005",
+            origin: "LHR",
+            dest: "DXB",
+            depUtc: "2026-08-20T16:00:00.000Z",
+            arrUtc: "2026-08-21T02:00:00.000Z",
+            reportUtc: "2026-08-20T14:30:00.000Z",
+            depTz: "Europe/London",
+            arrTz: "Asia/Dubai",
+            source: "manual",
+            notes: null,
+            legSeq: 1,
+          },
+        ],
+      });
+
+      render(
+        <DaySheet isoDate="2026-08-20" trip={null} trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
+      );
+      await user.type(screen.getByTestId("flightno-input"), "ek005");
+      await vi.advanceTimersByTimeAsync(400);
+      await screen.findByTestId("autofill-card");
+      await user.click(screen.getByRole("button", { name: /add to roster/i }));
+      await screen.findByTestId("rapid-banner");
+
+      expect(suggestReturns).not.toHaveBeenCalled();
+      expect(screen.queryByTestId(/^return-chip-/)).not.toBeInTheDocument();
     });
   });
 });

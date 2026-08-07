@@ -293,6 +293,7 @@ scheduleRouter.get("/schedule/suggest", async (c) => {
       legs,
       layoverHours: hours,
       sibling: outboundUpper ? isSibling(outboundUpper, flightNo) : false,
+      dateIso: operatingDate,
     });
   }
 

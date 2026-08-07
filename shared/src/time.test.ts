@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   dayOffset,
+  formatHours,
   formatLocal,
   layoverHours,
   legDatesFromPicked,
@@ -116,6 +117,29 @@ describe("layoverHours", () => {
 
   it("computes layovers spanning a day boundary", () => {
     expect(layoverHours("2026-08-10T23:00:00Z", "2026-08-11T02:00:00Z")).toBe(3);
+  });
+});
+
+describe("formatHours", () => {
+  it("formats sub-24h as whole hours", () => {
+    expect(formatHours(1)).toBe("1h");
+    expect(formatHours(23)).toBe("23h");
+  });
+
+  it("rounds a fractional value to the nearest whole hour before bucketing", () => {
+    expect(formatHours(1.0833333333333333)).toBe("1h");
+    // Rounds up to 24h, which then falls into the days-bucket branch.
+    expect(formatHours(23.6)).toBe("1d 0h");
+  });
+
+  it("formats 24h and above as days + remaining hours", () => {
+    expect(formatHours(24)).toBe("1d 0h");
+    expect(formatHours(51)).toBe("2d 3h");
+  });
+
+  it("clamps negative or non-finite input to 0h", () => {
+    expect(formatHours(-5)).toBe("0h");
+    expect(formatHours(NaN)).toBe("0h");
   });
 });
 

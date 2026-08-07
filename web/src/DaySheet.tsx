@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Flight, LegPatch } from "@roaster/shared";
-import { addDaysIso, formatLocal, localDateKey, wallToUtc } from "@roaster/shared";
-import { deleteTrip, patchFlight } from "./api";
+import type { Flight, LegPatch, ScheduleSuggestion } from "@roaster/shared";
+import { addDaysIso, formatHours, formatLocal, localDateKey, wallToUtc } from "@roaster/shared";
+import { deleteTrip, patchFlight, suggestReturns } from "./api";
 import type { TripWithFlights } from "./api";
 import { useRecentFlights } from "./useRecentFlights";
 import { useTripEntry } from "./useTripEntry";
 import type { UseTripEntryReturn } from "./useTripEntry";
+
+/** Crew's home base IATA — return suggestions are hidden once a trip already ends here. */
+const HOME_BASE_IATA = "DXB";
+
+/** Max return-suggestion chips rendered (server may return up to 8; client caps display at 3
+ * per the plan's chip-row density budget). */
+const MAX_RETURN_CHIPS = 3;
 
 /** A trip's away-span as local calendar dates (first departure's to last arrival's local
  * date, in `homeTz`) — null if the trip has no flights. */
@@ -410,6 +417,10 @@ function AddTripContent({
   // to offer the just-added flight as a chip immediately, not just after Done.
   const [sessionFlightNos, setSessionFlightNos] = useState<string[]>([]);
   const recentFlights = useRecentFlights(trips, sessionFlightNos);
+  // Return-flight suggestions for the just-added trip, when it ends away from home base -
+  // fire-and-forget fetched after each save, cleared on the next add so a stale list from a
+  // prior save never lingers over a new one.
+  const [returnSuggestions, setReturnSuggestions] = useState<ScheduleSuggestion[]>([]);
 
   // Single shared post-save transition for BOTH entry paths (autofill and manual): stamps
   // the rapid-entry "added" state, advances to the next suggested date, marks the day
@@ -445,6 +456,24 @@ function AddTripContent({
       }
       entry.switchToFlightNo();
       entry.setFlightNo("");
+
+      // Return-suggestion chips (Task 3): only when the SAVED trip's final leg lands away
+      // from home base — a trip that already returns home has nothing to suggest.
+      setReturnSuggestions([]);
+      const sortedFlights = [...createdTrip.flights].sort((a, b) => a.legSeq - b.legSeq);
+      const finalLeg = sortedFlights[sortedFlights.length - 1];
+      if (finalLeg && savedFlightNo && finalLeg.dest !== HOME_BASE_IATA) {
+        const nextDayIso = addDaysIso(localDateKey(finalLeg.arrUtc, finalLeg.arrTz), 1);
+        suggestReturns({
+          origin: finalLeg.dest,
+          date: nextDayIso,
+          home: HOME_BASE_IATA,
+          outbound: savedFlightNo,
+          arrivedIso: finalLeg.arrUtc,
+        })
+          .then((res) => setReturnSuggestions(res.suggestions))
+          .catch(() => setReturnSuggestions([]));
+      }
     },
   });
 
@@ -454,6 +483,15 @@ function AddTripContent({
 
   function chooseChip(flightNo: string) {
     entry.setFlightNo(flightNo);
+  }
+
+  /** Tapping a return-suggestion chip prefills add-mode on the suggestion's own resolved
+   * operating date (replacing whatever the banner's next-date suggestion currently is) and
+   * sets the flight number, reusing the existing debounced-lookup flow exactly like typing
+   * or a recent-flight chip would. */
+  function chooseReturnChip(suggestion: ScheduleSuggestion) {
+    setPickedDate(suggestion.dateIso);
+    entry.setFlightNo(suggestion.flightNo);
   }
 
   if (entry.mode === "flightno") {
@@ -519,6 +557,23 @@ function AddTripContent({
             placeholder="e.g. EK412"
             className="num rounded border border-edge bg-raised px-3 py-2 text-lg text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
           />
+
+          {returnSuggestions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {returnSuggestions.slice(0, MAX_RETURN_CHIPS).map((suggestion) => (
+                <button
+                  key={suggestion.flightNo}
+                  type="button"
+                  data-testid={`return-chip-${suggestion.flightNo}`}
+                  onClick={() => chooseReturnChip(suggestion)}
+                  className="rounded-full border border-edge px-3 py-1 text-sm text-ink transition-colors duration-[120ms] hover:border-accent"
+                >
+                  ↩ {suggestion.flightNo} · {humanDateLabel(suggestion.dateIso, homeTz)} ·{" "}
+                  {formatHours(suggestion.layoverHours)}
+                </button>
+              ))}
+            </div>
+          )}
 
           {recentFlights.length > 0 && (
             <div className="flex flex-wrap gap-2">

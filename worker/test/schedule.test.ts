@@ -343,6 +343,7 @@ describe("GET /api/schedule/suggest", () => {
         legs: Array<{ legSeq: number; origin: string; dest: string }>;
         layoverHours: number;
         sibling: boolean;
+        dateIso: string;
       }>;
     }>();
 
@@ -354,6 +355,8 @@ describe("GET /api/schedule/suggest", () => {
     expect(ek413.legs[0]).toMatchObject({ legSeq: 0, origin: "CHC", dest: "SYD" });
     expect(ek413.legs[1]).toMatchObject({ legSeq: 1, origin: "SYD", dest: "DXB" });
     expect(ek413.layoverHours).toBeCloseTo(1.0833333333333333, 6);
+    // Same-day operating match (query date === resolved date), per the comment above.
+    expect(ek413.dateIso).toBe("2026-08-21");
   });
 
   it("retries later operating days when the same-day connection is impossible (negative layover)", async () => {
@@ -373,13 +376,16 @@ describe("GET /api/schedule/suggest", () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json<{
-      suggestions: Array<{ flightNo: string; layoverHours: number; sibling: boolean }>;
+      suggestions: Array<{ flightNo: string; layoverHours: number; sibling: boolean; dateIso: string }>;
     }>();
 
     const ek413 = body.suggestions.find((s) => s.flightNo === "EK413");
     expect(ek413).toBeDefined();
     expect(ek413!.sibling).toBe(true);
     expect(ek413!.layoverHours).toBeCloseTo(23, 6);
+    // Rolled forward one day from the query date (2026-08-21) since the same-day departure
+    // was a negative layover, per the comment above.
+    expect(ek413!.dateIso).toBe("2026-08-22");
   });
 
   it("ranks non-sibling candidates by layover ascending when no sibling is present", async () => {

@@ -4,6 +4,7 @@ import type {
   LegPatch,
   ScheduleConfirmInput,
   ScheduleLookupResponse,
+  ScheduleSuggestResponse,
   ShareLink,
   SharedView,
   Trip,
@@ -81,6 +82,28 @@ export async function confirmSchedule(input: ScheduleConfirmInput): Promise<void
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+/** Looks up return-flight suggestions from `origin` (the outbound trip's final leg dest) back
+ * to `home`, ranked sibling-first then by ascending layover. Throws on a non-OK response —
+ * callers use this fire-and-forget and catch to hide the suggestion section. */
+export async function suggestReturns(params: {
+  origin: string;
+  date: string;
+  home: string;
+  outbound: string;
+  arrivedIso: string;
+}): Promise<ScheduleSuggestResponse> {
+  const query = new URLSearchParams({
+    origin: params.origin,
+    date: params.date,
+    home: params.home,
+    outbound: params.outbound,
+    arrivedIso: params.arrivedIso,
+  });
+  const res = await fetch(`/api/schedule/suggest?${query.toString()}`);
+  if (!res.ok) throw new Error("Failed to look up return suggestions");
+  return parseJson<ScheduleSuggestResponse>(res);
 }
 
 export async function createShareLink(label?: string): Promise<ShareLink> {
