@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 import { getPushConfig, subscribePush, unsubscribePush, updateNotificationPrefs } from "./api";
+import {
+  isInstallPromptAvailable,
+  isIos,
+  isRunningStandalone,
+  onInstallPromptAvailable,
+  showInstallPrompt,
+} from "./lib/install";
 import { urlBase64ToUint8Array } from "./lib/push";
 import { getStoredTheme, setTheme } from "./theme";
 import type { Theme } from "./theme";
@@ -36,6 +43,19 @@ export default function SettingsView({ email, onSignOut }: Props) {
   const [subscribed, setSubscribed] = useState(false);
   const [leadMinutes, setLeadMinutes] = useState(120);
   const [pushError, setPushError] = useState<string | null>(null);
+
+  const [installAvailable, setInstallAvailable] = useState(isInstallPromptAvailable);
+  const [standalone] = useState(isRunningStandalone);
+
+  useEffect(() => {
+    if (standalone) return;
+    return onInstallPromptAvailable(() => setInstallAvailable(true));
+  }, [standalone]);
+
+  async function handleInstall() {
+    const accepted = await showInstallPrompt();
+    if (accepted) setInstallAvailable(false);
+  }
 
   useEffect(() => {
     if (!supported) return;
@@ -176,6 +196,29 @@ export default function SettingsView({ email, onSignOut }: Props) {
             {pushError && <p className="text-sm text-danger">{pushError}</p>}
           </>
         )}
+      </div>
+
+      <div className="flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
+        <p className="px-1 text-xs uppercase text-ink-muted">App</p>
+
+        {standalone ? (
+          <p className="text-sm text-ink-muted" data-testid="installed-badge">
+            Installed ✓
+          </p>
+        ) : installAvailable ? (
+          <button
+            type="button"
+            data-testid="install-button"
+            onClick={handleInstall}
+            className="self-start rounded border border-accent px-3 py-2 text-accent transition-colors duration-[120ms] hover:bg-accent/10"
+          >
+            Install app
+          </button>
+        ) : isIos() ? (
+          <p className="text-sm text-ink-muted" data-testid="install-hint-ios">
+            Install: Share → Add to Home Screen
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">

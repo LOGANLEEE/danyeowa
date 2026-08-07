@@ -201,4 +201,62 @@ describe("SettingsView", () => {
       );
     });
   });
+
+  describe("App (install affordance)", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it("shows the installed badge when running in standalone display-mode", () => {
+      vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+      expect(screen.getByTestId("installed-badge")).toHaveTextContent(/installed/i);
+      expect(screen.queryByTestId("install-button")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("install-hint-ios")).not.toBeInTheDocument();
+    });
+
+    it("shows the iOS hint when not standalone and beforeinstallprompt never fires", () => {
+      vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
+      vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
+      );
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+      expect(screen.getByTestId("install-hint-ios")).toHaveTextContent(/add to home screen/i);
+      expect(screen.queryByTestId("install-button")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("installed-badge")).not.toBeInTheDocument();
+    });
+
+    it("shows nothing in the App section on a non-iOS browser with no install prompt available", () => {
+      vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+      expect(screen.queryByTestId("install-button")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("install-hint-ios")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("installed-badge")).not.toBeInTheDocument();
+    });
+
+    it("shows the Install app button once beforeinstallprompt fires, and prompts on click", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      expect(screen.queryByTestId("install-button")).not.toBeInTheDocument();
+
+      const prompt = vi.fn().mockResolvedValue(undefined);
+      const userChoice = Promise.resolve({ outcome: "accepted" as const });
+      const event = new Event("beforeinstallprompt", { cancelable: true }) as Event & {
+        prompt: typeof prompt;
+        userChoice: typeof userChoice;
+      };
+      event.prompt = prompt;
+      event.userChoice = userChoice;
+      window.dispatchEvent(event);
+
+      const button = await screen.findByTestId("install-button");
+      await user.click(button);
+
+      expect(prompt).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(screen.queryByTestId("install-button")).not.toBeInTheDocument());
+    });
+  });
 });
