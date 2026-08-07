@@ -428,6 +428,25 @@ describe("useTripEntry", () => {
         arrUtc: "2026-08-20T20:05:00.000Z",
         reportUtc: "2026-08-20T10:45:00.000Z",
       });
+
+      // Regression: confirmSchedule (POST /schedule/confirm) upserts flight_schedules rows
+      // keyed by (flight_no, leg_seq) PER FLIGHT, not per combined trip. EK098 is a
+      // single-leg flight, so its own schedule leg_seq must be confirmed as 0 - NOT the
+      // combined trip's leg_seq (1, since it's the second flight chained after EK097's leg
+      // 0). Confirming leg_seq 1 for EK098 would upsert a phantom SECOND leg into EK098's
+      // flight_schedules rows (a leg_seq that flight never actually has), which
+      // GET /schedule/lookup would then return on every future EK098 lookup - and each
+      // subsequent turnaround append would confirm an even higher phantom leg_seq, since
+      // the combined-trip leg_seq keeps growing across appends.
+      await waitFor(() => expect(confirmSchedule).toHaveBeenCalledTimes(2));
+      expect(confirmSchedule).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ flightNo: "EK097", legSeq: 0 }),
+      );
+      expect(confirmSchedule).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ flightNo: "EK098", legSeq: 0 }),
+      );
     });
 
     it("sets an inline miss flag (not manual fallback) when the appended flight number isn't in the schedule", async () => {

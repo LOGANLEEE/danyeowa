@@ -48,6 +48,14 @@ const LOOKUP_DEBOUNCE_MS = 400;
 export type AutofillLegDraft = {
   flightNo: string;
   legSeq: number;
+  /** This leg's own index WITHIN `flightNo`'s schedule (always 0-based per flight), distinct
+   * from `legSeq` (the combined-trip's continuing leg_seq across an outbound + appended
+   * flight). `flight_schedules` rows are keyed by (flightNo, leg_seq) PER FLIGHT — confirming
+   * a leg back to the crowd layer (POST /schedule/confirm) must upsert against this, not the
+   * trip-relative `legSeq`, or an appended second flight (whose combined legSeq starts above
+   * 0) would confirm into a nonexistent leg_seq slot for its OWN flight_no, fabricating a
+   * phantom extra leg that GET /schedule/lookup would then return on every future lookup. */
+  scheduleLegSeq: number;
   origin: string;
   dest: string;
   destTz: string;
@@ -61,8 +69,11 @@ export type AutofillLegDraft = {
 /** Builds autofill drafts for `legs`, dating them via `legDatesFromPicked` from `pickedDate`
  * (the FIRST of these legs' departure day - the caller passes the appropriate anchor: the
  * originally picked date for the outbound, or the last existing leg's arrival date when
- * appending a second flight). `legSeq` is renumbered continuing from `legSeqOffset` so an
- * appended flight's legs sort after the outbound's in the combined list. */
+ * appending a second flight). `legSeq` (the combined TRIP's leg_seq, used in the POST
+ * /api/trips payload) is renumbered continuing from `legSeqOffset` so an appended flight's
+ * legs sort after the outbound's in the combined list; `scheduleLegSeq` (this flight's OWN
+ * schedule leg index, used only for POST /schedule/confirm) always starts at 0 regardless of
+ * `legSeqOffset`. */
 function autofillLegsFrom(
   pickedDate: string,
   flightNo: string,
@@ -73,6 +84,7 @@ function autofillLegsFrom(
   return legs.map((leg, i) => ({
     flightNo,
     legSeq: legSeqOffset + i,
+    scheduleLegSeq: i,
     origin: leg.origin,
     dest: leg.dest,
     originTz: leg.originTz,
@@ -315,7 +327,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       });
       confirmPayloads.push({
         flightNo: leg.flightNo,
-        legSeq: leg.legSeq,
+        legSeq: leg.scheduleLegSeq,
         origin: leg.origin,
         dest: leg.dest,
         depLocal: leg.depTime,
