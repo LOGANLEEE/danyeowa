@@ -105,6 +105,13 @@ export type ProviderLeg = {
    * fetch (e.g. a scraper that only observed one date) — callers default to "1234567",
    * matching the existing crowd-confirm convention (see schedule.ts POST /schedule/confirm). */
   daysOfWeek?: string;
+  /** The calendar date (YYYY-MM-DD) this leg's data actually describes, when the provider
+   * can tell us — e.g. the fr24 scraper only observes the page's nearest-to-now operating
+   * date, which may not be the date the caller asked for. Omitted when the provider has no
+   * way to know (or the data isn't tied to a specific date at all). Callers persist this
+   * as-is (including omission -> null) so the cache never presents a nearest-date row as
+   * if it were verified for the exact date a caller requested. */
+  sourceDateIso?: string;
 };
 
 export type ScheduleLookupResponse = {

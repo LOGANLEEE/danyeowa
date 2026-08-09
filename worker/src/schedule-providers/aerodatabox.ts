@@ -80,7 +80,10 @@ export function parseAeroDataBoxFlight(flight: AeroDataBoxFlight): ProviderLeg[]
     (Date.parse(`${arrDateKey}T00:00:00Z`) - Date.parse(`${depDateKey}T00:00:00Z`)) / (24 * 60 * 60 * 1000),
   );
 
-  return [{ origin, dest, depLocal, arrLocal, dayOffset }];
+  // AeroDataBox is queried with the exact requested date (`.../{dateLocal}`), and the
+  // response's own departure date confirms what it actually returned - unlike the fr24
+  // scraper, this provider IS date-specific.
+  return [{ origin, dest, depLocal, arrLocal, dayOffset, sourceDateIso: depDateKey }];
 }
 
 /** Extracts "HH:MM" from an AeroDataBox local timestamp ("YYYY-MM-DD HH:mm[:ss][+HH:mm]"). */

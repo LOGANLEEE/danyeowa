@@ -4,7 +4,11 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "../src/db/schema";
 import { seedAirports } from "../src/db/seed-airports";
 import { seedSchedules } from "../src/db/seed-schedules";
+import type { Env } from "../src/index";
+import { refreshScheduleFromProviders } from "../src/schedule";
 import { signInAs } from "./helpers";
+// @ts-expect-error - ?raw has no type declaration in this project
+import fr24Ek372Html from "./fixtures/fr24-ek372.html?raw";
 
 beforeEach(async () => {
   const db = drizzle(env.DB, { schema });
@@ -75,14 +79,20 @@ describe("GET /api/schedule/lookup", () => {
     expect(res.status).toBe(200);
   });
 
-  it("404s with unknown_flight for a flight number with no schedule row", async () => {
-    const res = await SELF.fetch(
-      "https://example.com/api/schedule/lookup?flight_no=XX999&date=2026-08-20",
-      { headers: { Cookie: cookie } },
-    );
-    expect(res.status).toBe(404);
-    const body = await res.json<{ error: string }>();
-    expect(body.error).toBe("unknown_flight");
+  it("404s with unknown_flight when the cache misses AND every provider misses (fetch returns 404)", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => Promise.resolve(new Response("not found", { status: 404 }));
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=XX999&date=2026-08-20",
+        { headers: { Cookie: cookie } },
+      );
+      expect(res.status).toBe(404);
+      const body = await res.json<{ error: string }>();
+      expect(body.error).toBe("unknown_flight");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("404s with not_scheduled_that_day when the date's weekday (origin tz) isn't in days_of_week", async () => {
@@ -136,6 +146,205 @@ describe("GET /api/schedule/lookup", () => {
       { headers: { Cookie: cookie } },
     );
     expect(res.status).toBe(400);
+  });
+
+  // Plan 10 T2: cache-on-miss + stale-refresh. Kept in this describe block (reusing its
+  // shared `cookie`/IP) rather than a separate describe with its own signInAs, to stay
+  // under the 3-per-60s-per-IP OTP rate limit this test file already runs close to.
+  it("EK372: cache miss -> provider chain -> resolves DXB->BKK (proving the purged seed wrong, the cache right)", async () => {
+    // EK372 was seeded as DXB->TPE (WRONG, confirmed via live scrape - see task-1-report.md)
+    // and purged by drizzle/0007_purge_unverified_seed_schedules.sql. Post-purge this is a
+    // genuine cache miss that must fall through to the live provider chain. Mock the fr24
+    // scraper's HTTP call (the chain's first provider) with the same fixture T1 verified
+    // parses to DXB->BKK.
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => Promise.resolve(new Response(fr24Ek372Html));
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK372&date=2026-08-17",
+        { headers: { Cookie: cookie } },
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json<{ legs: Array<{ origin: string; dest: string; depLocal: string; arrLocal: string }> }>();
+      expect(body.legs).toHaveLength(1);
+      expect(body.legs[0]).toMatchObject({ origin: "DXB", dest: "BKK", depLocal: "09:40", arrLocal: "19:25" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    // The resolved leg must now be cached in D1 with live-scrape provenance.
+    const row = await env.DB.prepare(
+      "SELECT origin, dest, source, fetched_at, source_date_iso, confirm_count FROM flight_schedules WHERE flight_no = 'EK372' AND leg_seq = 0",
+    ).first<{ origin: string; dest: string; source: string; fetched_at: number; source_date_iso: string; confirm_count: number }>();
+    expect(row).toMatchObject({ origin: "DXB", dest: "BKK", source: "live-scrape", confirm_count: 0 });
+    expect(row?.fetched_at).toBeGreaterThan(0);
+    expect(row?.source_date_iso).toBe("2026-08-17");
+  });
+
+  it("second lookup for the same flight hits the cache - provider is NOT called again", async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchCallCount = 0;
+    globalThis.fetch = () => {
+      fetchCallCount++;
+      return Promise.resolve(new Response(fr24Ek372Html));
+    };
+    try {
+      const first = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK373&date=2026-08-17",
+        { headers: { Cookie: cookie } },
+      );
+      expect(first.status).toBe(200);
+      expect(fetchCallCount).toBe(1);
+
+      const second = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK373&date=2026-08-17",
+        { headers: { Cookie: cookie } },
+      );
+      expect(second.status).toBe(200);
+      // Still 1 - the second call was served entirely from the D1 cache row the first
+      // call wrote, with no provider fetch at all.
+      expect(fetchCallCount).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("provider-null (all providers miss) -> 404 unknown_flight, client falls back to manual entry", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => Promise.resolve(new Response("blocked", { status: 403 }));
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=XX111&date=2026-08-20",
+        { headers: { Cookie: cookie } },
+      );
+      expect(res.status).toBe(404);
+      const body = await res.json<{ error: string }>();
+      expect(body.error).toBe("unknown_flight");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    // Nothing was written to the cache for a fully-missed flight.
+    const row = await env.DB.prepare(
+      "SELECT * FROM flight_schedules WHERE flight_no = 'XX111'",
+    ).first();
+    expect(row).toBeNull();
+  });
+
+  it("a stale hit (>90d old, confirm_count=0) is served immediately without waiting on the refresh", async () => {
+    const ninetyOneDaysAgo = Date.now() - 91 * 24 * 60 * 60 * 1000;
+    await env.DB.prepare(
+      `INSERT INTO flight_schedules
+         (flight_no, leg_seq, origin, dest, dep_local, arr_local, day_offset, days_of_week, source, fetched_at, confirm_count)
+       VALUES ('EK900', 0, 'DXB', 'TPE', '10:00', '20:00', 0, '1234567', 'live-scrape', ?, 0)`,
+    )
+      .bind(ninetyOneDaysAgo)
+      .run();
+
+    const originalFetch = globalThis.fetch;
+    // A provider fetch that never resolves - if the route awaited the refresh before
+    // responding, this test would hang/timeout. It passing proves the response returns
+    // without waiting on the background refresh, exactly as `waitUntil` promises the
+    // response.
+    globalThis.fetch = () => new Promise<Response>(() => {});
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK900&date=2026-08-20",
+        { headers: { Cookie: cookie } },
+      );
+      // Served immediately from the stale row - still the ORIGINAL (stale) data, since
+      // the never-resolving refresh can't have overwritten it yet.
+      expect(res.status).toBe(200);
+      const body = await res.json<{ legs: Array<{ origin: string; dest: string }> }>();
+      expect(body.legs[0]).toMatchObject({ origin: "DXB", dest: "TPE" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("refreshScheduleFromProviders (the function waitUntil backgrounds) overwrites a stale row with fresh provider data", async () => {
+    // Exercises the exact function the stale-hit branch hands to `c.executionCtx.waitUntil`
+    // - waitUntil intentionally isn't awaited by the response, so it can't be observed via
+    // an HTTP round-trip in a test; calling it directly proves the refresh logic itself
+    // (provider chain -> cacheProviderLegs) is correct.
+    const ninetyOneDaysAgo = Date.now() - 91 * 24 * 60 * 60 * 1000;
+    await env.DB.prepare(
+      `INSERT INTO flight_schedules
+         (flight_no, leg_seq, origin, dest, dep_local, arr_local, day_offset, days_of_week, source, fetched_at, confirm_count)
+       VALUES ('EK903', 0, 'DXB', 'TPE', '10:00', '20:00', 0, '1234567', 'live-scrape', ?, 0)`,
+    )
+      .bind(ninetyOneDaysAgo)
+      .run();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => Promise.resolve(new Response(fr24Ek372Html));
+    try {
+      const database = drizzle(env.DB, { schema });
+      await refreshScheduleFromProviders(database, env as unknown as Env, "EK903", "2026-08-20");
+
+      const refreshed = await env.DB.prepare(
+        "SELECT origin, dest, fetched_at FROM flight_schedules WHERE flight_no = 'EK903' AND leg_seq = 0",
+      ).first<{ origin: string; dest: string; fetched_at: number }>();
+      expect(refreshed).toMatchObject({ origin: "DXB", dest: "BKK" });
+      expect(refreshed?.fetched_at).toBeGreaterThan(ninetyOneDaysAgo);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("a fresh hit (<90d old) does NOT trigger a background refresh", async () => {
+    await env.DB.prepare(
+      `INSERT INTO flight_schedules
+         (flight_no, leg_seq, origin, dest, dep_local, arr_local, day_offset, days_of_week, source, fetched_at, confirm_count)
+       VALUES ('EK901', 0, 'DXB', 'NRT', '10:00', '20:00', 0, '1234567', 'live-scrape', ?, 0)`,
+    )
+      .bind(Date.now() - 1000)
+      .run();
+
+    const originalFetch = globalThis.fetch;
+    let fetchCallCount = 0;
+    globalThis.fetch = () => {
+      fetchCallCount++;
+      return Promise.resolve(new Response(fr24Ek372Html));
+    };
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK901&date=2026-08-20",
+        { headers: { Cookie: cookie } },
+      );
+      expect(res.status).toBe(200);
+      expect(fetchCallCount).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("a stale but confirm_count>0 (crowd-confirmed) hit does NOT trigger a background refresh", async () => {
+    const ninetyOneDaysAgo = Date.now() - 91 * 24 * 60 * 60 * 1000;
+    await env.DB.prepare(
+      `INSERT INTO flight_schedules
+         (flight_no, leg_seq, origin, dest, dep_local, arr_local, day_offset, days_of_week, source, fetched_at, confirm_count)
+       VALUES ('EK902', 0, 'DXB', 'NRT', '10:00', '20:00', 0, '1234567', 'crowd', ?, 3)`,
+    )
+      .bind(ninetyOneDaysAgo)
+      .run();
+
+    const originalFetch = globalThis.fetch;
+    let fetchCallCount = 0;
+    globalThis.fetch = () => {
+      fetchCallCount++;
+      return Promise.resolve(new Response(fr24Ek372Html));
+    };
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK902&date=2026-08-20",
+        { headers: { Cookie: cookie } },
+      );
+      expect(res.status).toBe(200);
+      expect(fetchCallCount).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 
@@ -389,11 +598,23 @@ describe("GET /api/schedule/suggest", () => {
   });
 
   it("ranks non-sibling candidates by layover ascending when no sibling is present", async () => {
-    // Seed two DXB-home-bound candidates departing FCO (no EK107/EK108 ±1 sibling
-    // involved here since outbound is omitted): EK108 (short layover) should rank
-    // before a later-departing same-route candidate.
+    // Seed two DXB-home-bound candidates departing FCO (no ±1-numbered sibling involved
+    // here since outbound is omitted): ZZ800 (short layover) should rank before a
+    // later-departing same-route candidate. Both rows are seeded explicitly here (rather
+    // than relying on scripts/ek-schedules.json, which Plan 10 T2 pruned to only the
+    // live-verified rows) so this test doesn't depend on what the seed happens to contain.
     const db = drizzle(env.DB, { schema });
     await db.insert(schema.flightSchedules).values([
+      {
+        flightNo: "ZZ800",
+        legSeq: 0,
+        origin: "FCO",
+        dest: "DXB",
+        depLocal: "13:55",
+        arrLocal: "21:35",
+        dayOffset: 0,
+        daysOfWeek: "1234567",
+      },
       {
         flightNo: "ZZ900",
         legSeq: 0,
@@ -416,13 +637,13 @@ describe("GET /api/schedule/suggest", () => {
     }>();
 
     const flightNos = body.suggestions.map((s) => s.flightNo);
-    expect(flightNos).toContain("EK108");
+    expect(flightNos).toContain("ZZ800");
     expect(flightNos).toContain("ZZ900");
-    // EK108 departs FCO 13:55 local same day; ZZ900 departs FCO 23:00 local same day -
-    // EK108 has the shorter layover from a 00:00Z arrival, so it ranks first.
-    const idxEk108 = flightNos.indexOf("EK108");
+    // ZZ800 departs FCO 13:55 local same day; ZZ900 departs FCO 23:00 local same day -
+    // ZZ800 has the shorter layover from a 00:00Z arrival, so it ranks first.
+    const idxZz800 = flightNos.indexOf("ZZ800");
     const idxZz900 = flightNos.indexOf("ZZ900");
-    expect(idxEk108).toBeLessThan(idxZz900);
+    expect(idxZz800).toBeLessThan(idxZz900);
     // Layover values are non-decreasing across the ranked list.
     for (let i = 1; i < body.suggestions.length; i++) {
       expect(body.suggestions[i]!.layoverHours).toBeGreaterThanOrEqual(

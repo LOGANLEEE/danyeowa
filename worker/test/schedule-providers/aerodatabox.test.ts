@@ -10,7 +10,9 @@ function testEnv(overrides?: Partial<Env>): Env {
 describe("parseAeroDataBoxFlight", () => {
   it("parses the EK372 fixture to DXB->BKK", () => {
     const legs = parseAeroDataBoxFlight(fixtureFlights[0]!);
-    expect(legs).toEqual([{ origin: "DXB", dest: "BKK", depLocal: "09:40", arrLocal: "19:25", dayOffset: 0 }]);
+    expect(legs).toEqual([
+      { origin: "DXB", dest: "BKK", depLocal: "09:40", arrLocal: "19:25", dayOffset: 0, sourceDateIso: "2026-08-17" },
+    ]);
   });
 
   it("returns null when departure airport iata is missing", () => {
@@ -62,7 +64,9 @@ describe("AeroDataBoxProvider", () => {
     globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify(fixtureFlights)));
     try {
       const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
-      expect(legs).toEqual([{ origin: "DXB", dest: "BKK", depLocal: "09:40", arrLocal: "19:25", dayOffset: 0 }]);
+      expect(legs).toEqual([
+        { origin: "DXB", dest: "BKK", depLocal: "09:40", arrLocal: "19:25", dayOffset: 0, sourceDateIso: "2026-08-17" },
+      ]);
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -117,8 +117,12 @@ export async function parseFr24Html(res: Response): Promise<ProviderLeg | null> 
   const depDay = epochToLocalDateKey(std.timestamp, std.offset);
   const arrDay = epochToLocalDateKey(sta.timestamp, sta.offset);
   const dayOffset = Math.round((arrDay - depDay) / (24 * 60 * 60));
+  // The row's own departure-local calendar date is what this scrape actually describes -
+  // NOT necessarily the dateIso the caller requested (fr24's page only shows the nearest
+  // operating date to "now", see class doc comment).
+  const sourceDateIso = epochToLocalDateIso(std.timestamp, std.offset);
 
-  return { origin, dest, depLocal, arrLocal, dayOffset };
+  return { origin, dest, depLocal, arrLocal, dayOffset, sourceDateIso };
 }
 
 /** Formats a UTC epoch-seconds timestamp shifted by `offsetSec` (that airport's UTC
@@ -139,4 +143,14 @@ function epochToLocalDateKey(epochSec: number, offsetSec: number): number {
   const localMs = (epochSec + offsetSec) * 1000;
   const d = new Date(localMs);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / 1000;
+}
+
+/** Local calendar date as "YYYY-MM-DD", same offset math as `epochToLocalDateKey`. */
+function epochToLocalDateIso(epochSec: number, offsetSec: number): string {
+  const localMs = (epochSec + offsetSec) * 1000;
+  const d = new Date(localMs);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { parseFr24Html, Fr24ScrapeProvider } from "../../src/schedule-providers/scrape-fr24";
-import { fr24Ek372Html } from "../fixtures/fr24-ek372";
+// `?raw` (Vite import suffix) loads the fixture as a plain string; verified working under
+// @cloudflare/vitest-pool-workers (see task-2 report) - simpler than a generated .ts wrapper
+// and avoids node:fs, which is sandboxed inside the workerd test runtime.
+// @ts-expect-error - ?raw has no type declaration in this project
+import fr24Ek372Html from "../fixtures/fr24-ek372.html?raw";
 
 describe("parseFr24Html", () => {
   it("parses the EK372 fixture to DXB->BKK (proving the seeded DXB->TPE row wrong)", async () => {
@@ -19,6 +23,10 @@ describe("parseFr24Html", () => {
     // The fr24 page shows one row per calendar date, not a weekly pattern, so the
     // scraper can't derive an operating-day pattern from a single fetch.
     expect(leg?.daysOfWeek).toBeUndefined();
+    // The row's own local departure date is what this scrape actually describes - the
+    // trimmed fixture's first row is 17 Aug 2026, which may not equal whatever dateIso a
+    // caller requested (fr24's page isn't queryable by arbitrary date).
+    expect(leg?.sourceDateIso).toBe("2026-08-17");
   });
 
   it("returns null for a page with no data-row table (e.g. an error/blocked page)", async () => {

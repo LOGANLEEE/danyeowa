@@ -15,6 +15,23 @@ export const flightSchedules = sqliteTable(
     validTo: text("valid_to"),
     confirmCount: integer("confirm_count").notNull().default(0),
     lastConfirmedAt: integer("last_confirmed_at", { mode: "number" }),
+    /** Provenance of this row's data. 'seed-verified' = live-source-verified at seed time
+     * (Plan 5 T1); 'live-scrape' / 'live-api' = written by a cache-miss provider fetch
+     * (Plan 10 T2); 'crowd' = written/upgraded by a user confirm (POST /schedule/confirm).
+     * Nullable only for legacy rows pre-dating this column; the Plan 10 purge migration
+     * either assigns a source to every surviving row or deletes it, so post-purge this is
+     * effectively always set. */
+    source: text("source", { enum: ["live-scrape", "live-api", "seed-verified", "crowd"] }),
+    /** Epoch ms when this row's data was fetched/written by its `source`. Used to decide
+     * staleness (>90d && confirm_count=0 -> background refresh on next hit). */
+    fetchedAt: integer("fetched_at", { mode: "number" }),
+    /** The calendar date (YYYY-MM-DD) the provider's data actually describes, when known
+     * (e.g. the fr24 scraper only observes the page's nearest-to-now operating date, not
+     * the specific date a caller asked for). Null when the row isn't date-anchored (seed
+     * rows, crowd confirms, or a provider that can't tell us which date it described) -
+     * this stops the cache from presenting a nearest-date scrape as if it were verified
+     * for the exact date the caller requested. */
+    sourceDateIso: text("source_date_iso"),
   },
   (table) => [primaryKey({ columns: [table.flightNo, table.legSeq] })]
 );

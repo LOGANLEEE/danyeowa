@@ -43,6 +43,20 @@
       "when": 1786109820985,
       "tag": "0005_high_raza",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786278234517,
+      "tag": "0006_nosy_tyrannus",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786278248753,
+      "tag": "0007_purge_unverified_seed_schedules",
+      "breakpoints": true
     }
   ]
 }

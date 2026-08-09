@@ -1,5 +1,5 @@
 import { asc, eq, inArray, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import {
   ScheduleConfirmSchema,
@@ -8,9 +8,10 @@ import {
   addDaysIso,
   wallToUtc,
 } from "@roaster/shared";
-import type { ScheduleLookupResponse, ScheduleLeg, ScheduleSuggestion } from "@roaster/shared";
+import type { ScheduleLookupResponse, ScheduleLeg, ScheduleSuggestion, ProviderLeg } from "@roaster/shared";
 import * as schema from "./db/schema";
 import type { Env } from "./index";
+import { resolveFromProviders } from "./schedule-providers";
 
 type Variables = {
   user: { id: string; email: string; name: string | null } | null;
@@ -23,6 +24,77 @@ function db(env: Env) {
 }
 
 const flightNoQuerySchema = /^[A-Z]{2}\d{1,4}$/i;
+
+/** A row older than this with no crowd confirmation is treated as stale — served
+ * immediately, but refreshed in the background on the next hit (plan §Global Constraints). */
+const STALE_MS = 90 * 24 * 60 * 60 * 1000;
+
+/** Inserts (or upserts) provider-resolved legs into `flight_schedules` as a freshly-warmed
+ * cache entry: `confirmCount` always resets to 0 (a live fetch is not a crowd confirmation),
+ * `daysOfWeek` defaults to "1234567" when the provider couldn't derive a pattern from a
+ * single fetch (same convention as POST /schedule/confirm), and `sourceDateIso` is stored
+ * as-is (including `null`) so a nearest-date scrape is never presented as date-specific. */
+async function cacheProviderLegs(
+  database: DrizzleD1Database<typeof schema>,
+  flightNo: string,
+  legs: ProviderLeg[],
+  source: "live-scrape" | "live-api",
+  fetchedAt: number,
+): Promise<void> {
+  for (const [legSeq, leg] of legs.entries()) {
+    await database
+      .insert(schema.flightSchedules)
+      .values({
+        flightNo,
+        legSeq,
+        origin: leg.origin,
+        dest: leg.dest,
+        depLocal: leg.depLocal,
+        arrLocal: leg.arrLocal,
+        dayOffset: leg.dayOffset,
+        daysOfWeek: leg.daysOfWeek ?? "1234567",
+        source,
+        fetchedAt,
+        sourceDateIso: leg.sourceDateIso ?? null,
+        confirmCount: 0,
+      })
+      .onConflictDoUpdate({
+        target: [schema.flightSchedules.flightNo, schema.flightSchedules.legSeq],
+        set: {
+          origin: leg.origin,
+          dest: leg.dest,
+          depLocal: leg.depLocal,
+          arrLocal: leg.arrLocal,
+          dayOffset: leg.dayOffset,
+          daysOfWeek: leg.daysOfWeek ?? "1234567",
+          source,
+          fetchedAt,
+          sourceDateIso: leg.sourceDateIso ?? null,
+          confirmCount: 0,
+        },
+      });
+  }
+}
+
+/**
+ * Re-resolves `flightNo` via the live provider chain and overwrites its cached rows if
+ * successful; a provider miss leaves the (stale) cached rows untouched rather than
+ * deleting them - a stale-but-present row is still better than none. Exported (rather
+ * than inlined in the route handler) so it's directly `await`-able from tests: the real
+ * route only ever invokes it via `c.executionCtx.waitUntil`, which by design does not
+ * block the response and isn't synchronously observable from a black-box HTTP test.
+ */
+export async function refreshScheduleFromProviders(
+  database: DrizzleD1Database<typeof schema>,
+  env: Env,
+  flightNo: string,
+  dateIso: string,
+): Promise<void> {
+  const resolved = await resolveFromProviders(flightNo, dateIso, env);
+  if (resolved) {
+    await cacheProviderLegs(database, flightNo, resolved.legs, resolved.source, Date.now());
+  }
+}
 
 scheduleRouter.get("/schedule/lookup", async (c) => {
   const user = c.var.user;
@@ -37,14 +109,37 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
 
   const database = db(c.env);
 
-  const legRows = await database
+  let legRows = await database
     .select()
     .from(schema.flightSchedules)
     .where(eq(schema.flightSchedules.flightNo, flightNo))
     .orderBy(asc(schema.flightSchedules.legSeq));
 
   if (legRows.length === 0) {
-    return c.json({ error: "unknown_flight" }, 404);
+    // Cache miss: fall through to the live provider chain (scraper, then API fallback).
+    // A provider miss (network failure, blocked, not found, no key) is a normal outcome —
+    // respond 404 exactly as before so the client falls back to manual entry, never a 500.
+    const resolved = await resolveFromProviders(flightNo, date, c.env);
+    if (!resolved) {
+      return c.json({ error: "unknown_flight" }, 404);
+    }
+
+    await cacheProviderLegs(database, flightNo, resolved.legs, resolved.source, Date.now());
+
+    legRows = await database
+      .select()
+      .from(schema.flightSchedules)
+      .where(eq(schema.flightSchedules.flightNo, flightNo))
+      .orderBy(asc(schema.flightSchedules.legSeq));
+  } else {
+    // Cache hit: a row older than STALE_MS with no crowd confirmation is served as-is
+    // (never block the response on a re-fetch) but kicks off a best-effort background
+    // refresh via waitUntil, so the NEXT lookup benefits from fresher data.
+    const leg0 = legRows[0]!;
+    const isStale = leg0.confirmCount === 0 && leg0.fetchedAt !== null && Date.now() - leg0.fetchedAt > STALE_MS;
+    if (isStale) {
+      c.executionCtx.waitUntil(refreshScheduleFromProviders(database, c.env, flightNo, date));
+    }
   }
 
   // Resolve every leg's origin/dest tz from the airports table up front. Seed data

@@ -12,15 +12,21 @@ export type ScheduleSeed = {
   arrLocal: string;
   dayOffset: number;
   daysOfWeek: string;
+  /** Always "seed-verified" as of Plan 10 T2 - `scripts/ek-schedules.json` was pruned to
+   * ONLY the live-source-verified rows (see drizzle/0007_purge_unverified_seed_schedules.sql
+   * and task-2-report.md for the reconciled verified set). Kept as a field here (rather than
+   * hardcoded below) so a future seed file could carry a different source if ever needed. */
+  source: "seed-verified";
 };
 
 const seedData = scheduleData as ScheduleSeed[];
 
 export async function seedSchedules(db: DrizzleD1Database<typeof schema>): Promise<void> {
+  const now = Date.now();
   for (const leg of seedData) {
     await db
       .insert(flightSchedules)
-      .values(leg)
+      .values({ ...leg, fetchedAt: now })
       .onConflictDoUpdate({
         target: [flightSchedules.flightNo, flightSchedules.legSeq],
         set: {
@@ -30,6 +36,8 @@ export async function seedSchedules(db: DrizzleD1Database<typeof schema>): Promi
           arrLocal: leg.arrLocal,
           dayOffset: leg.dayOffset,
           daysOfWeek: leg.daysOfWeek,
+          source: leg.source,
+          fetchedAt: now,
         },
       });
   }
