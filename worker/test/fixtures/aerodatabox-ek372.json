@@ -1,0 +1,45 @@
+[
+  {
+    "departure": {
+      "airport": {
+        "icao": "OMDB",
+        "iata": "DXB",
+        "name": "Dubai International Airport",
+        "timeZone": "Asia/Dubai"
+      },
+      "scheduledTime": {
+        "utc": "2026-08-17 05:40Z",
+        "local": "2026-08-17 09:40+04:00"
+      },
+      "terminal": "3",
+      "quality": ["Basic", "Scheduled"]
+    },
+    "arrival": {
+      "airport": {
+        "icao": "VTBS",
+        "iata": "BKK",
+        "name": "Suvarnabhumi Airport",
+        "timeZone": "Asia/Bangkok"
+      },
+      "scheduledTime": {
+        "utc": "2026-08-17 12:25Z",
+        "local": "2026-08-17 19:25+07:00"
+      },
+      "terminal": "International",
+      "quality": ["Basic", "Scheduled"]
+    },
+    "number": "EK 372",
+    "callSign": "UAE372",
+    "status": "Expected",
+    "codeshareStatus": "IsOperator",
+    "isCargo": false,
+    "aircraft": {
+      "model": "Airbus A380-800"
+    },
+    "airline": {
+      "name": "Emirates",
+      "iata": "EK",
+      "icao": "UAE"
+    }
+  }
+]

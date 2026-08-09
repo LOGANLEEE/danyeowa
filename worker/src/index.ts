@@ -43,6 +43,14 @@ export type Env = {
    * bindings. The route 404s whenever this isn't exactly the string "true".
    */
   E2E_TEST_MODE?: string;
+  /**
+   * RapidAPI key for the AeroDataBox schedule-lookup fallback provider (used only when
+   * the flightradar24 scraper misses). MUST only ever be set as a Worker secret
+   * (`wrangler secret put AERODATABOX_KEY`) or in the gitignored .dev.vars for local dev -
+   * never committed to wrangler.jsonc `vars`. The provider (schedule-providers/aerodatabox.ts)
+   * returns null with no fetch when this is unset, so the app works without a key today.
+   */
+  AERODATABOX_KEY?: string;
 };
 
 type Session = Awaited<ReturnType<ReturnType<typeof createAuth>["api"]["getSession"]>>;

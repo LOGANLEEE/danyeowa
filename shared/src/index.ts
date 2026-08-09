@@ -84,6 +84,29 @@ export type ScheduleLeg = {
   confirmCount: number;
 };
 
+/**
+ * One leg of a flight's schedule as resolved by a live `ScheduleProvider` (scraper or
+ * API), before it's written into the `flight_schedules` cache table. Distinct from
+ * `ScheduleLeg` above: no `originTz`/`destTz` (providers return airport IATA codes only;
+ * tz resolution happens server-side against the `airports` table, same as the cache-hit
+ * path) and no `confirmCount` (a freshly-resolved leg hasn't been crowd-confirmed yet).
+ */
+export type ProviderLeg = {
+  origin: string;
+  dest: string;
+  /** Local departure clock time, "HH:MM". */
+  depLocal: string;
+  /** Local arrival clock time, "HH:MM". */
+  arrLocal: string;
+  /** Arrival calendar date minus departure calendar date, in the respective local tz's. */
+  dayOffset: number;
+  /** ISO weekday digits ("1"..."7", Monday-first) this leg operates, e.g. "1234567" for
+   * daily. Omitted when the provider can't derive an operating-day pattern from a single
+   * fetch (e.g. a scraper that only observed one date) — callers default to "1234567",
+   * matching the existing crowd-confirm convention (see schedule.ts POST /schedule/confirm). */
+  daysOfWeek?: string;
+};
+
 export type ScheduleLookupResponse = {
   legs: ScheduleLeg[];
 };
