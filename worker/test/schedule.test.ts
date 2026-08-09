@@ -231,6 +231,81 @@ describe("GET /api/schedule/lookup", () => {
     expect(row).toBeNull();
   });
 
+  // Negative cache (review fix #3+4): a junk/typo'd flight_no re-hit the provider chain on
+  // every single attempt before this, since a miss left nothing behind to short-circuit the
+  // next lookup - the fr24 scraper's own "single request, cached forever" doc comment was
+  // therefore false for exactly the codes that need the protection most.
+
+  it("records a schedule_lookup_misses row when every provider misses", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => Promise.resolve(new Response("not found", { status: 404 }));
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK9999&date=2026-08-20",
+        { headers: { Cookie: cookie } },
+      );
+      expect(res.status).toBe(404);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const row = await env.DB.prepare(
+      "SELECT flight_no, missed_at FROM schedule_lookup_misses WHERE flight_no = 'EK9999'",
+    ).first<{ flight_no: string; missed_at: number }>();
+    expect(row?.flight_no).toBe("EK9999");
+    expect(row?.missed_at).toBeGreaterThan(0);
+  });
+
+  it("a fresh miss 404s the NEXT lookup without calling any provider again", async () => {
+    const originalFetch = globalThis.fetch;
+    let fetchCallCount = 0;
+    globalThis.fetch = () => {
+      fetchCallCount++;
+      return Promise.resolve(new Response("not found", { status: 404 }));
+    };
+    try {
+      const first = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK9998&date=2026-08-20",
+        { headers: { Cookie: cookie } },
+      );
+      expect(first.status).toBe(404);
+      // fr24 then AeroDataBox both get a shot on the first (uncached) miss.
+      expect(fetchCallCount).toBeGreaterThan(0);
+      const callsAfterFirstMiss = fetchCallCount;
+
+      const second = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK9998&date=2026-08-20",
+        { headers: { Cookie: cookie } },
+      );
+      expect(second.status).toBe(404);
+      // No new provider calls - the negative cache short-circuited before the chain ran.
+      expect(fetchCallCount).toBe(callsAfterFirstMiss);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("an expired miss (older than the 24h TTL) re-tries the provider chain instead of shadowing forever", async () => {
+    const db = drizzle(env.DB, { schema });
+    await db.insert(schema.scheduleLookupMisses).values({
+      flightNo: "EK9997",
+      missedAt: Date.now() - 25 * 60 * 60 * 1000, // 25h ago - past the 24h TTL.
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => Promise.resolve(new Response(fr24Ek372Html));
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK9997&date=2026-08-17",
+        { headers: { Cookie: cookie } },
+      );
+      // The stale miss no longer shadows the chain, so the (mocked) provider resolves it.
+      expect(res.status).toBe(200);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   // Review fix: a live-resolved flight can touch an airport outside the 108-row seed
   // (providers return arbitrary real-world routes, unlike the old static seed). These
   // tests prove that reachable path degrades cleanly instead of 500ing.
@@ -503,11 +578,15 @@ describe("POST /api/schedule/confirm", () => {
     expect(res.status).toBe(200);
 
     const row = await env.DB.prepare(
-      "SELECT confirm_count, days_of_week FROM flight_schedules WHERE flight_no = 'EK999' AND leg_seq = 0",
-    ).first<{ confirm_count: number; days_of_week: string }>();
+      "SELECT confirm_count, days_of_week, source FROM flight_schedules WHERE flight_no = 'EK999' AND leg_seq = 0",
+    ).first<{ confirm_count: number; days_of_week: string; source: string | null }>();
     expect(row?.confirm_count).toBe(1);
     // A crowd-inserted row with no prior schedule data defaults to "always match".
     expect(row?.days_of_week).toBe("1234567");
+    // Regression: a net-new crowd-confirmed row must stamp source='crowd', not leave it
+    // NULL - drizzle/0007_purge_unverified_seed_schedules.sql purges exactly that predicate
+    // (source IS NULL OR source != 'seed-verified') on its next run.
+    expect(row?.source).toBe("crowd");
   });
 
   it("case-insensitive flight_no normalization on confirm", async () => {

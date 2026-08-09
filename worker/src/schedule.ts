@@ -29,6 +29,37 @@ const flightNoQuerySchema = /^[A-Z]{2}\d{1,4}$/i;
  * immediately, but refreshed in the background on the next hit (plan §Global Constraints). */
 const STALE_MS = 90 * 24 * 60 * 60 * 1000;
 
+/** How long a `schedule_lookup_misses` entry shadows the provider chain for its flight
+ * number. Keeps a junk/typo'd code (e.g. repeated attempts while typing) from paying a
+ * fresh scrape/API round-trip on every request, while letting a flight that's genuinely
+ * added to a provider's data later stop being shadowed after a day. */
+const MISS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** True when `flightNo` was recorded as a provider miss within the last `MISS_CACHE_TTL_MS`. */
+async function isRecentlyMissed(
+  database: DrizzleD1Database<typeof schema>,
+  flightNo: string,
+): Promise<boolean> {
+  const [row] = await database
+    .select({ missedAt: schema.scheduleLookupMisses.missedAt })
+    .from(schema.scheduleLookupMisses)
+    .where(eq(schema.scheduleLookupMisses.flightNo, flightNo))
+    .limit(1);
+  return row !== undefined && Date.now() - row.missedAt < MISS_CACHE_TTL_MS;
+}
+
+/** Records (or refreshes) a provider-chain miss for `flightNo` so subsequent lookups within
+ * `MISS_CACHE_TTL_MS` 404 immediately instead of re-querying every provider. */
+async function recordMiss(database: DrizzleD1Database<typeof schema>, flightNo: string): Promise<void> {
+  await database
+    .insert(schema.scheduleLookupMisses)
+    .values({ flightNo, missedAt: Date.now() })
+    .onConflictDoUpdate({
+      target: schema.scheduleLookupMisses.flightNo,
+      set: { missedAt: Date.now() },
+    });
+}
+
 /** Inserts (or upserts) provider-resolved legs into `flight_schedules` as a freshly-warmed
  * cache entry: `confirmCount` always resets to 0 (a live fetch is not a crowd confirmation),
  * `daysOfWeek` defaults to "1234567" when the provider couldn't derive a pattern from a
@@ -168,11 +199,19 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
     .orderBy(asc(schema.flightSchedules.legSeq));
 
   if (legRows.length === 0) {
+    // A flight number the provider chain already missed on recently (junk code, typo, or
+    // genuinely not scheduled) 404s immediately without re-querying every provider - see
+    // `schedule_lookup_misses` doc comment.
+    if (await isRecentlyMissed(database, flightNo)) {
+      return c.json({ error: "unknown_flight" }, 404);
+    }
+
     // Cache miss: fall through to the live provider chain (scraper, then API fallback).
     // A provider miss (network failure, blocked, not found, no key) is a normal outcome —
     // respond 404 exactly as before so the client falls back to manual entry, never a 500.
     const resolved = await resolveFromProviders(flightNo, date, c.env);
     if (!resolved) {
+      await recordMiss(database, flightNo);
       return c.json({ error: "unknown_flight" }, 404);
     }
 
@@ -187,6 +226,7 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
     // purge. The client's existing manual-entry fallback already handles this response.
     const stillMissing = await learnAirportsForLegs(database, resolved.legs);
     if (stillMissing.size > 0) {
+      await recordMiss(database, flightNo);
       return c.json({ error: "unknown_flight" }, 404);
     }
 
@@ -294,6 +334,7 @@ scheduleRouter.post("/schedule/confirm", async (c) => {
       daysOfWeek: "1234567",
       confirmCount: 1,
       lastConfirmedAt: now,
+      source: "crowd",
     })
     .onConflictDoUpdate({
       target: [schema.flightSchedules.flightNo, schema.flightSchedules.legSeq],

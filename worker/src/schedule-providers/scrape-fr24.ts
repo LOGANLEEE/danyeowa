@@ -39,7 +39,10 @@ export class Fr24ScrapeProvider implements ScheduleProvider {
     try {
       res = await fetch(url, {
         signal,
-        headers: { "User-Agent": "RoasterMeBot/1.0 (+schedule cache warm-up; single request, cached forever)" },
+        headers: {
+          "User-Agent":
+            "RoasterMeBot/1.0 (+schedule cache warm-up; one request per resolved flight, then cached; misses re-tried at most once per 24h via schedule_lookup_misses)",
+        },
       });
     } catch {
       return null;

@@ -35,3 +35,14 @@ export const flightSchedules = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.flightNo, table.legSeq] })]
 );
+
+/** Negative cache for GET /schedule/lookup: a flight number every provider in the chain
+ * returned null for. Checked BEFORE the provider chain runs, so a junk/typo'd flight number
+ * (e.g. repeated attempts while typing) 404s immediately from this table instead of paying a
+ * fresh scrape/API round-trip on every request. Entries expire after
+ * `MISS_CACHE_TTL_MS` (schedule.ts) - a flight that's genuinely added to a provider's data
+ * later isn't permanently shadowed by an old miss. */
+export const scheduleLookupMisses = sqliteTable("schedule_lookup_misses", {
+  flightNo: text("flight_no").primaryKey(),
+  missedAt: integer("missed_at", { mode: "number" }).notNull(),
+});

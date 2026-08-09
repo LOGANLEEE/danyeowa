@@ -249,6 +249,22 @@ describe("TripForm", () => {
     expect((screen.getByLabelText(/flight no/i) as HTMLInputElement).value).toBe("XX999");
   });
 
+  it("recovers to manual fallback when lookupSchedule rejects (schedule service unreachable), without leaving resolving stuck", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(lookupSchedule).mockRejectedValue(new Error("Failed to look up schedule"));
+
+    render(<TripForm {...baseProps({ initialDate: "2026-08-20" })} />);
+    await user.type(screen.getByTestId("flightno-input"), "ek001");
+    await vi.advanceTimersByTimeAsync(400);
+
+    // resolving must clear even though the lookup rejected — no stuck "checking schedule…".
+    await waitFor(() => expect(screen.queryByTestId("schedule-loading")).not.toBeInTheDocument());
+    // Manual fallback must still be reachable.
+    expect(await screen.findByTestId("manual-expand")).toBeInTheDocument();
+    await user.click(screen.getByTestId("manual-expand"));
+    expect(screen.getByLabelText(/flight no/i)).toBeInTheDocument();
+  });
+
   it("lets the user reach the manual path directly via the muted link, without a lookup miss", () => {
     render(<TripForm {...baseProps({ initialDate: "2026-08-20" })} />);
     expect(screen.getByTestId("manual-expand")).toBeInTheDocument();

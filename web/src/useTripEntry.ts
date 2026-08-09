@@ -133,20 +133,30 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     }
     const timer = setTimeout(async () => {
       setResolving(true);
-      const result = await lookupSchedule(candidate, pickedDate);
-      setResolving(false);
-      if (result) {
-        setAutofillLegs(autofillLegsFrom(pickedDate, candidate, result.legs));
-        setAutofillFlightNo(candidate);
-        setLookupMiss(false);
-        // A new outbound lookup replaces whatever was previewed before, including any
-        // appended flight from a prior preview.
-        setAppendedFlightNo(null);
-        setAppendLookupMiss(false);
-      } else {
+      try {
+        const result = await lookupSchedule(candidate, pickedDate);
+        if (result) {
+          setAutofillLegs(autofillLegsFrom(pickedDate, candidate, result.legs));
+          setAutofillFlightNo(candidate);
+          setLookupMiss(false);
+          // A new outbound lookup replaces whatever was previewed before, including any
+          // appended flight from a prior preview.
+          setAppendedFlightNo(null);
+          setAppendLookupMiss(false);
+        } else {
+          setAutofillLegs(null);
+          setAutofillFlightNo(null);
+          setLookupMiss(true);
+        }
+      } catch {
+        // The schedule service is unreachable (e.g. a non-404 error from the live provider
+        // chain) — treat it the same as a miss so the user can still fall back to manual
+        // entry instead of getting stuck on "checking schedule…" forever.
         setAutofillLegs(null);
         setAutofillFlightNo(null);
         setLookupMiss(true);
+      } finally {
+        setResolving(false);
       }
     }, LOOKUP_DEBOUNCE_MS);
     return () => clearTimeout(timer);

@@ -222,6 +222,32 @@ describe("useTripEntry", () => {
     expect(result.current.autofillLegs).not.toBeNull();
   });
 
+  it("recovers to manual fallback when lookupSchedule rejects, clearing `resolving` and setting `lookupMiss` (no unhandled rejection)", async () => {
+    vi.mocked(lookupSchedule).mockRejectedValue(new Error("Failed to look up schedule"));
+
+    const { result } = renderHook(() =>
+      useTripEntry({ pickedDate: "2026-08-20", homeTz: "Asia/Dubai", onSubmitted: vi.fn() }),
+    );
+
+    act(() => {
+      result.current.setFlightNo("EK001");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+
+    await waitFor(() => expect(result.current.resolving).toBe(false));
+    expect(result.current.autofillLegs).toBeNull();
+    expect(result.current.lookupMiss).toBe(true);
+
+    // Manual fallback is still reachable after the rejection.
+    act(() => {
+      result.current.switchToManual();
+    });
+    expect(result.current.mode).toBe("manual");
+    expect(result.current.legs[0]!.flightNo).toBe("EK001");
+  });
+
   it("switches to manual mode on an unknown flight (404) and prefills the flight no + picked date", async () => {
     vi.mocked(lookupSchedule).mockResolvedValue(null);
 
