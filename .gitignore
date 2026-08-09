@@ -12,6 +12,7 @@ playwright-report/
 /blob-report/
 /playwright/.cache/
 .playwright-mcp/
+/e2e/.auth/
 
 # local-state backups (wrangler D1 session tokens, dist snapshots) — never commit
 .wrangler.bak*/

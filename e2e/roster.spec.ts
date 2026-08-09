@@ -1,16 +1,21 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, EK412, humanDateLabel, openDaySheet, signInThroughUi, signOutThroughUi } from "./helpers";
+import { E2E_EMAIL, EK412, humanDateLabel, openDaySheet } from "./helpers";
 
 /**
  * Full e2e coverage of the Plan 6 tabbed, calendar-first UX against a real `wrangler dev`
- * (local D1). One coherent sign-in drives the entire primary flow — landing, calendar home,
- * day sheet, autofill add, rapid-entry chaining (banner + recent-chip re-add on the
- * suggested next date), Done's single refetch, both days marked on the calendar, the Trips
- * tab listing both, a detail edit, both deletes, and sign-out — so the suite stays within
- * the email-OTP rate limit (`worker/src/auth.ts`, `rateLimit: { window: 60, max: 3 }`,
- * IP-keyed, not per-email): this file sends exactly one OTP, autofill.spec.ts sends one more
- * for its manual-fallback + multi-leg coverage, for two sign-ins total across the run well
- * under the 3-per-60s budget.
+ * (local D1). Starts already signed in — the `chromium` project's storageState, written once
+ * by auth.setup.ts, is loaded fresh for this test's own context, so this file sends zero OTPs
+ * of its own. (The real sign-in UI walk — landing page in its signed-out state, "Sign in" CTA,
+ * email OTP, verified — is asserted once in auth.setup.ts instead of being duplicated here.)
+ *
+ * This file does NOT sign out: better-auth's sign-out deletes the session server-side, not
+ * just the local cookie, so calling it here would invalidate the SAME session
+ * share.spec.ts's storageState-backed context relies on (it runs after this file). Real
+ * sign-out UI coverage lives in share.spec.ts, the last file in the suite to run.
+ *
+ * Full flow covered: calendar home, day sheet, autofill add, rapid-entry chaining (banner +
+ * recent-chip re-add on the suggested next date), Done's single refetch, both days marked on
+ * the calendar, the Trips tab listing both, a detail edit, and both deletes.
  *
  * Idempotent by construction: any trip left over from a prior failed run is deleted by the
  * cleanup loop below before assertions begin, so re-running never accumulates state.
@@ -20,18 +25,11 @@ import { E2E_EMAIL, EK412, humanDateLabel, openDaySheet, signInThroughUi, signOu
  * with Google" button through Playwright. That path is covered by unit tests (Login.test.tsx)
  * that assert authClient.signIn.social is called correctly, plus manual verification.
  */
-test("sign-in -> calendar home -> day sheet -> autofill add -> rapid chain -> Trips tab -> edit -> delete both -> sign out", async ({
+test("calendar home -> day sheet -> autofill add -> rapid chain -> Trips tab -> edit -> delete both", async ({
   page,
 }) => {
-  // Landing renders with no header band (App.tsx renders no <header> at all when signed
-  // out on the landing view).
+  // Already signed in via the shared storageState (auth.setup.ts) — go straight to the app.
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /roaster/i, level: 1 })).toBeVisible();
-  await expect(page.locator("header")).toHaveCount(0);
-
-  await signInThroughUi(page);
-
-  // Signed in: calendar home is the default tab — month grid + tab bar both render.
   await expect(page.getByTestId("tab-calendar")).toBeVisible();
   await expect(page.getByTestId("calendar-next")).toBeVisible();
 
@@ -152,11 +150,6 @@ test("sign-in -> calendar home -> day sheet -> autofill add -> rapid chain -> Tr
     await page.getByTestId("confirm-delete").click();
   }
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
-
-  // --- Sign out -> back to landing. ---
-  await signOutThroughUi(page);
-  await expect(page.getByRole("heading", { name: /roaster/i, level: 1 })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
 });
 
 test.beforeAll(() => {

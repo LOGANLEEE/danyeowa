@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { UNKNOWN_FLIGHT_NO, humanDateLabel, openDaySheet, signInThroughUi, signOutThroughUi } from "./helpers";
+import { UNKNOWN_FLIGHT_NO, humanDateLabel, openDaySheet } from "./helpers";
 
 /**
  * Manual-fallback + multi-leg coverage for the day sheet's add flow, complementing
@@ -10,13 +10,11 @@ import { UNKNOWN_FLIGHT_NO, humanDateLabel, openDaySheet, signInThroughUi, signO
  *   2. EK384 (DXB -> BKK -> HKG, two legs) - a cheap smoke test that the autofill card
  *      renders both legs of a multi-leg schedule lookup.
  *
- * Both scenarios share a single sign-in (one test, one `signInThroughUi` call): better-auth's
- * email-OTP rate limit is IP-keyed (`worker/src/auth.ts`, `rateLimit: { window: 60, max: 3 }`),
- * not per-email, and the local dev server sees every Playwright request from the same IP.
- * Combined with roster.spec.ts's one sign-in, this suite sends 2 OTPs total - well under the
- * documented 3-per-60s budget.
+ * Starts already signed in via the shared storageState (auth.setup.ts, one OTP for the
+ * whole suite) - see playwright.config.ts's `chromium` project. This file no longer sends
+ * an OTP of its own; TURNAROUND's EK097/EK098 legs are pre-warmed cache rows (see
+ * scripts/seed-e2e-fixtures.sql) so this scenario never depends on a live provider fetch.
  */
-const AUTOFILL_EMAIL = "e2e-autofill@local.test";
 
 /** DXB -> BKK -> HKG, EK384 (scripts/ek-schedules.json): 2 legs, both same-day. */
 const EK384 = {
@@ -30,10 +28,12 @@ const EK384 = {
 const PICKED_DATE = "2026-11-12";
 
 /**
- * DXB -> SYD -> CHC, EK412 (scripts/ek-schedules.json), picked 2026-09-10 - a DIFFERENT
- * calendar cell than roster.spec.ts's own EK412 fixture (which uses pickedDate 2026-09-10
- * too, but that spec runs in its own signed-in session under a different test account
- * (E2E_EMAIL vs AUTOFILL_EMAIL), so the two never collide server-side).
+ * DXB -> SYD -> CHC, EK412 (scripts/ek-schedules.json), picked 2026-09-10 - the SAME
+ * calendar cell roster.spec.ts's own EK412 fixture uses. Both specs now run under the one
+ * shared signed-in account (see auth.setup.ts), so this doesn't collide server-side only
+ * because this file runs first (autofill -> roster -> share) and its own cleanup (this
+ * scenario's `cleanUpAllTrips` call further down) deletes the trip before roster.spec.ts's
+ * leading cleanup even starts.
  *
  * Leg0 DXB dep 10:15 Asia/Dubai (no DST) on 2026-09-10 = 2026-09-10T06:15:00.000Z.
  * Leg0 arr SYD 06:00 Australia/Sydney, dayOffset 1 -> local date 2026-09-11 =
@@ -108,7 +108,9 @@ async function cleanUpAllTrips(page: import("@playwright/test").Page) {
 test.describe.configure({ mode: "serial" });
 
 test("manual-entry fallback joins the rapid chain, then EK384 multi-leg smoke", async ({ page }) => {
-  await signInThroughUi(page, AUTOFILL_EMAIL);
+  // Already signed in via the shared storageState (auth.setup.ts).
+  await page.goto("/");
+  await expect(page.getByTestId("tab-calendar")).toBeVisible();
   await cleanUpAllTrips(page);
   await page.getByTestId("tab-trips").click();
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
@@ -284,8 +286,11 @@ test("manual-entry fallback joins the rapid chain, then EK384 multi-leg smoke", 
   await expect(page.getByTestId("autofill-dep")).toHaveCount(2);
   await expect(page.getByTestId("autofill-arr")).toHaveCount(2);
 
-  // Not saving this one - no seeded trip to clean up. Dismiss the sheet (its scrim would
-  // otherwise intercept the tab-bar clicks in signOutThroughUi) then sign out.
+  // Not saving this one - no seeded trip to clean up. Dismiss the sheet. (No sign-out here:
+  // the shared session (auth.setup.ts) must stay valid for roster.spec.ts and share.spec.ts,
+  // which run after this file and rely on the same storageState-backed server session —
+  // better-auth's sign-out deletes the session server-side, not just the local cookie, so
+  // signing out here would invalidate the session for every later spec too. Real sign-out UI
+  // coverage lives in share.spec.ts, the last file to run.)
   await page.getByTestId("sheet-close").click();
-  await signOutThroughUi(page);
 });
