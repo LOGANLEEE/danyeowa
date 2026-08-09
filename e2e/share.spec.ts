@@ -1,18 +1,25 @@
 import { expect, test } from "@playwright/test";
-import { EK412, openDaySheet, signInThroughUi } from "./helpers";
+import { EK412, openDaySheet, signOutThroughUi } from "./helpers";
 
 /**
  * Family share lifecycle, end to end against a real `wrangler dev` (local D1):
- *   crew signs in -> creates a trip (EK412 autofill fast path, same fixture roster.spec.ts
- *   uses) -> Share tab -> creates a link labeled "For Mom" -> a cookie-less browser context
- *   (no auth at all - the family member's own browser) opens /share/<token> and sees the
- *   crew name, an away trip row, and the "Home in N days" figure computed from the fixture
- *   dates -> back in the crew context, the link is revoked -> a fresh cookie-less load of
- *   the same URL shows the inactive message.
+ *   crew (already signed in via shared storageState, see auth.setup.ts) creates a trip
+ *   (EK412 autofill fast path, same fixture roster.spec.ts uses) -> Share tab -> creates a
+ *   link labeled "For Mom" -> a cookie-less browser context (no auth at all - the family
+ *   member's own browser) opens /share/<token> and sees the crew name, an away trip row, and
+ *   the "Home in N days" figure computed from the fixture dates -> back in the crew context,
+ *   the link is revoked -> a fresh cookie-less load of the same URL shows the inactive
+ *   message -> crew signs out (real UI), landing renders signed-out again.
  *
- * One sign-in (`signInThroughUi`), same OTP budget accounting as roster.spec.ts /
- * autofill.spec.ts (`worker/src/auth.ts`, IP-keyed rate limit, window 60s max 3): this file
- * is the third and last sign-in in the suite, so the full run's total stays at exactly 3.
+ * Sends zero OTPs of its own — the whole suite (autofill.spec.ts, roster.spec.ts, this file)
+ * shares ONE authenticated session written once by auth.setup.ts, well under better-auth's
+ * IP-keyed 3-per-60s rate limit (`worker/src/auth.ts`). Runs after roster.spec.ts, whose own
+ * test deletes all its trips before this file's leading cleanup runs, so the two files'
+ * same-dated EK412 fixture trips never coexist. This file is the LAST spec file in the run
+ * order (autofill -> roster -> share, alphabetical) and is deliberately the only one that
+ * calls `signOutThroughUi`: better-auth's sign-out deletes the session server-side, not just
+ * the local cookie, so calling it any earlier would invalidate the same shared session every
+ * later spec file's storageState-backed context depends on.
  *
  * The created trip's token is captured via a `page.waitForResponse` on the
  * `POST /api/share-links` call itself, not by parsing the UI (navigator.share is absent in
@@ -20,7 +27,6 @@ import { EK412, openDaySheet, signInThroughUi } from "./helpers";
  * Playwright can't reliably read across browser contexts here) - reading the network
  * response is both simpler and more robust than a clipboard-permission dance.
  */
-const SHARE_EMAIL = "e2e-share@local.test";
 const LABEL = "For Mom";
 
 async function cleanUpAllTrips(page: import("@playwright/test").Page) {
@@ -42,7 +48,9 @@ test("crew shares a link, family views it cookie-less, crew revokes, family sees
   page,
   browser,
 }) => {
-  await signInThroughUi(page, SHARE_EMAIL);
+  // Already signed in via the shared storageState (auth.setup.ts).
+  await page.goto("/");
+  await expect(page.getByTestId("tab-calendar")).toBeVisible();
   await cleanUpAllTrips(page);
 
   // --- Create a trip via the EK412 autofill fast path (same fixture as roster.spec.ts). ---
@@ -126,4 +134,10 @@ test("crew shares a link, family views it cookie-less, crew revokes, family sees
   await cleanUpAllTrips(page);
   await page.getByTestId("tab-trips").click();
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
+
+  // --- Sign out (real UI) -> back to landing. Safe here because this is the last spec file
+  // in the run order — no later file depends on the shared session staying valid. ---
+  await signOutThroughUi(page);
+  await expect(page.getByRole("heading", { name: /roaster/i, level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
 });

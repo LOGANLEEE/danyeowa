@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Airport, LegInput, ScheduleLeg } from "@roaster/shared";
-import { TripInputSchema, addDaysIso, legDatesFromPicked, reportDefault, wallToUtc } from "@roaster/shared";
+import { TripInputSchema, addDaysIso, legDatesFromPicked, wallToUtc } from "@roaster/shared";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
 import TripsCalendar from "./TripsCalendar";
 
@@ -17,33 +17,15 @@ type LegDraft = {
   dest: string;
   dep: string; // datetime-local wall time at origin
   arr: string; // datetime-local wall time at dest
-  report: string; // datetime-local wall time at origin, editable
-  reportTouched: boolean;
 };
 
 function emptyLeg(): LegDraft {
-  return { flightNo: "", origin: "", dest: "", dep: "", arr: "", report: "", reportTouched: false };
+  return { flightNo: "", origin: "", dest: "", dep: "", arr: "" };
 }
 
 /** Converts a `YYYY-MM-DDTHH:mm` datetime-local value to the wall-ISO seconds format wallToUtc expects. */
 function toWallIso(datetimeLocal: string): string {
   return datetimeLocal.length === 16 ? `${datetimeLocal}:00` : datetimeLocal;
-}
-
-/** Converts a UTC ISO instant back to a local wall `YYYY-MM-DDTHH:mm` string in the given tz. */
-function utcToDatetimeLocal(utcIso: string, tz: string): string {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(new Date(utcIso));
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
 
 const FLIGHT_NO_PATTERN = /^[A-Z]{2}\d{1,4}$/;
@@ -87,8 +69,10 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
   const [autofillLegs, setAutofillLegs] = useState<AutofillLegDraft[] | null>(null);
   const [autofillFlightNo, setAutofillFlightNo] = useState<string | null>(null);
   const [lookupMiss, setLookupMiss] = useState(false);
-  const [editingReportLeg, setEditingReportLeg] = useState<number | null>(null);
-  const [reportOverrides, setReportOverrides] = useState<Map<number, string>>(new Map());
+  // True while a debounced schedule lookup's fetch is in flight (not during the debounce
+  // delay itself) — drives the "checking schedule…" muted line and disables Add until the
+  // lookup resolves one way or the other (autofill card or manual fallback).
+  const [resolving, setResolving] = useState(false);
 
   const [legs, setLegs] = useState<LegDraft[]>([
     pickedDate ? { ...emptyLeg(), dep: `${pickedDate}T00:00` } : emptyLeg(),
@@ -114,19 +98,31 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
       setAutofillLegs(null);
       setAutofillFlightNo(null);
       setLookupMiss(false);
+      setResolving(false);
       return;
     }
     const timer = setTimeout(async () => {
-      const result = await lookupSchedule(candidate, pickedDate);
-      if (result) {
-        setAutofillLegs(autofillLegsFrom(pickedDate, result.legs));
-        setAutofillFlightNo(candidate);
-        setLookupMiss(false);
-        setReportOverrides(new Map());
-      } else {
+      setResolving(true);
+      try {
+        const result = await lookupSchedule(candidate, pickedDate);
+        if (result) {
+          setAutofillLegs(autofillLegsFrom(pickedDate, result.legs));
+          setAutofillFlightNo(candidate);
+          setLookupMiss(false);
+        } else {
+          setAutofillLegs(null);
+          setAutofillFlightNo(null);
+          setLookupMiss(true);
+        }
+      } catch {
+        // The schedule service is unreachable (e.g. a non-404 error from the live provider
+        // chain) — treat it the same as a miss so the user can still fall back to manual
+        // entry instead of getting stuck on "checking schedule…" forever.
         setAutofillLegs(null);
         setAutofillFlightNo(null);
         setLookupMiss(true);
+      } finally {
+        setResolving(false);
       }
     }, LOOKUP_DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -147,13 +143,6 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
     });
   }
 
-  function reportLocalFor(leg: AutofillLegDraft): string {
-    const override = reportOverrides.get(leg.legSeq);
-    if (override) return override;
-    const depUtc = wallToUtc(`${leg.depDate}T${leg.depTime}:00`, leg.originTz);
-    return utcToDatetimeLocal(reportDefault(depUtc), leg.originTz).slice(11);
-  }
-
   function switchToManual() {
     setLegs([
       { ...emptyLeg(), flightNo: flightNo.toUpperCase(), dep: pickedDate ? `${pickedDate}T00:00` : "" },
@@ -166,16 +155,6 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
       const current = prev[index];
       if (!current) return prev;
       const merged: LegDraft = { ...current, ...patch };
-
-      // Auto-fill report time = dep - 90min local, unless the user has edited it.
-      if (!merged.reportTouched && merged.dep) {
-        const originAirport = airports.get(merged.origin.toUpperCase());
-        if (originAirport) {
-          const depUtc = wallToUtc(toWallIso(merged.dep), originAirport.tz);
-          merged.report = utcToDatetimeLocal(reportDefault(depUtc), originAirport.tz);
-        }
-      }
-
       const next = [...prev];
       next[index] = merged;
       return next;
@@ -233,16 +212,14 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
       // Arrival date = this leg's own dep date + this leg's own dayOffset (arr date - dep date).
       const arrDate = addDaysIso(leg.depDate, leg.dayOffset);
       const arrUtc = wallToUtc(`${arrDate}T${leg.arrTime}:00`, leg.destTz);
-      const reportLocal = reportLocalFor(leg);
-      const reportUtc = wallToUtc(`${leg.depDate}T${reportLocal}:00`, leg.originTz);
 
+      // reportUtc intentionally omitted — the server derives it (dep - 90min) when absent.
       resolvedLegs.push({
         flightNo: autofillFlightNo,
         origin: leg.origin,
         dest: leg.dest,
         depUtc,
         arrUtc,
-        reportUtc,
       });
       confirmPayloads.push({
         flightNo: autofillFlightNo,
@@ -291,16 +268,13 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
       }
       const depUtc = wallToUtc(toWallIso(leg.dep), originAirport.tz);
       const arrUtc = wallToUtc(toWallIso(leg.arr), destAirport.tz);
-      const reportUtc = leg.reportTouched
-        ? wallToUtc(toWallIso(leg.report), originAirport.tz)
-        : reportDefault(depUtc);
+      // reportUtc intentionally omitted — the server derives it (dep - 90min) when absent.
       resolvedLegs.push({
         flightNo: leg.flightNo,
         origin: leg.origin,
         dest: leg.dest,
         depUtc,
         arrUtc,
-        reportUtc,
       });
     }
 
@@ -354,8 +328,6 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
         {autofillLegs && autofillFlightNo && (
           <div data-testid="autofill-card" className="entrance flex flex-col gap-3 rounded border border-edge bg-raised p-4">
             {autofillLegs.map((leg, index) => {
-              const reportLocal = reportLocalFor(leg);
-              const isEditingReport = editingReportLeg === leg.legSeq;
               return (
                 <div key={leg.legSeq} className="flex flex-col gap-2 border-t border-edge pt-3 first:border-t-0 first:pt-0">
                   <p className="text-ink">
@@ -390,36 +362,13 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
                       )}
                     </span>
                   </div>
-
-                  {isEditingReport ? (
-                    <input
-                      data-testid="report-chip"
-                      type="time"
-                      autoFocus
-                      value={reportLocal}
-                      onChange={(e) =>
-                        setReportOverrides((prev) => new Map(prev).set(leg.legSeq, e.target.value))
-                      }
-                      onBlur={() => setEditingReportLeg(null)}
-                      className="num w-fit rounded border border-accent bg-card px-2 py-1 text-report outline-none"
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      data-testid="report-chip"
-                      onClick={() => setEditingReportLeg(leg.legSeq)}
-                      className="num w-fit rounded border border-edge px-2 py-1 text-sm text-report transition-colors duration-[120ms] hover:border-accent"
-                    >
-                      Report {reportLocal} · tap to edit
-                    </button>
-                  )}
                 </div>
               );
             })}
             <p className="text-sm text-ink-muted">times from schedule — edit if your roster differs</p>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || resolving}
               className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
             >
               Add trip
@@ -427,7 +376,13 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
           </div>
         )}
 
-        {!autofillLegs && (
+        {resolving && (
+          <p data-testid="schedule-loading" className="text-sm text-ink-muted">
+            checking schedule…
+          </p>
+        )}
+
+        {!autofillLegs && !resolving && (
           <div className="flex flex-col gap-2">
             {lookupMiss && <p className="text-sm text-ink-muted">unknown flight — enter details</p>}
             <button
@@ -514,17 +469,6 @@ export default function TripForm({ onSubmitted, initialDate, now, homeTz }: Prop
               value={leg.arr}
               onChange={(e) => updateLeg(index, { arr: e.target.value })}
               className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
-            />
-
-            <label htmlFor={`report-${index}`} className="text-sm text-report">
-              Report (local)
-            </label>
-            <input
-              id={`report-${index}`}
-              type="datetime-local"
-              value={leg.report}
-              onChange={(e) => updateLeg(index, { report: e.target.value, reportTouched: true })}
-              className="num rounded border border-edge bg-raised px-3 py-2 text-report outline-none transition-colors duration-[120ms] focus:border-accent"
             />
           </fieldset>
         );

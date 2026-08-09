@@ -84,6 +84,49 @@ export type ScheduleLeg = {
   confirmCount: number;
 };
 
+/**
+ * One leg of a flight's schedule as resolved by a live `ScheduleProvider` (scraper or
+ * API), before it's written into the `flight_schedules` cache table. Distinct from
+ * `ScheduleLeg` above: no `originTz`/`destTz` (providers return airport IATA codes only;
+ * tz resolution happens server-side against the `airports` table, same as the cache-hit
+ * path) and no `confirmCount` (a freshly-resolved leg hasn't been crowd-confirmed yet).
+ */
+export type ProviderLeg = {
+  origin: string;
+  dest: string;
+  /** Local departure clock time, "HH:MM". */
+  depLocal: string;
+  /** Local arrival clock time, "HH:MM". */
+  arrLocal: string;
+  /** Arrival calendar date minus departure calendar date, in the respective local tz's. */
+  dayOffset: number;
+  /** ISO weekday digits ("1"..."7", Monday-first) this leg operates, e.g. "1234567" for
+   * daily. Omitted when the provider can't derive an operating-day pattern from a single
+   * fetch (e.g. a scraper that only observed one date) — callers default to "1234567",
+   * matching the existing crowd-confirm convention (see schedule.ts POST /schedule/confirm). */
+  daysOfWeek?: string;
+  /** The calendar date (YYYY-MM-DD) this leg's data actually describes, when the provider
+   * can tell us — e.g. the fr24 scraper only observes the page's nearest-to-now operating
+   * date, which may not be the date the caller asked for. Omitted when the provider has no
+   * way to know (or the data isn't tied to a specific date at all). Callers persist this
+   * as-is (including omission -> null) so the cache never presents a nearest-date row as
+   * if it were verified for the exact date a caller requested. */
+  sourceDateIso?: string;
+  /** Origin airport metadata, when the provider's own response happens to carry it
+   * (currently: AeroDataBox only — its `airport.timeZone` is a genuine IANA name, e.g.
+   * "Asia/Dubai"). Omitted by providers that can't supply a trustworthy tz (the fr24
+   * scraper only has city+country text, which is NOT sufficient to derive an IANA zone
+   * safely — many countries span multiple zones, and a raw UTC offset silently breaks
+   * across DST). Used to self-warm the `airports` table when a live-resolved leg touches
+   * an IATA code outside the seeded set — see schedule.ts `learnAirportsForLegs`. Never
+   * fabricated: a leg with an unresolvable airport is dropped rather than given a guessed
+   * tz, since every downstream consumer (wallToUtc, report calc, ...) assumes `tz` is a
+   * real IANA name and silently produces wrong times otherwise. */
+  originAirport?: { name: string; tz: string };
+  /** Destination airport metadata — see `originAirport`. */
+  destAirport?: { name: string; tz: string };
+};
+
 export type ScheduleLookupResponse = {
   legs: ScheduleLeg[];
 };

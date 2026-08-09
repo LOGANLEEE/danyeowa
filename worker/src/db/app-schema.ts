@@ -44,6 +44,15 @@ export const airports = sqliteTable("airports", {
   city: text("city").notNull(),
   name: text("name").notNull(),
   tz: text("tz").notNull(),
+  /** Provenance of this row. Nullable: every row seeded before Plan 10 T2-fix has no
+   * source (the original 108-airport seed, scripts/airports-ek.json, predates this
+   * column and is never re-migrated to backfill it - "seeded, no marker" is itself
+   * meaningful and left alone). 'live-api' = self-warmed from a live provider's response
+   * when a resolved flight touched an IATA outside the seed (see schedule.ts
+   * `learnAirportsForLegs`) - ONLY AeroDataBox ever writes this, since it's the only
+   * provider whose response carries a genuine IANA tz name; the fr24 scraper never
+   * learns an airport (see ProviderLeg.originAirport doc comment for why). */
+  source: text("source", { enum: ["live-api"] }),
 });
 
 export const tripsRelations = relations(trips, ({ many }) => ({

@@ -6,7 +6,7 @@ import type { TripWithFlights } from "./api";
 
 type Props = { trip: TripWithFlights; onDone: () => void; onBack: () => void };
 
-type LegEdits = { dep: string; arr: string; report: string };
+type LegEdits = { dep: string; arr: string };
 
 /** Converts a UTC ISO instant to a local wall `YYYY-MM-DDTHH:mm` string in the given tz. */
 function utcToDatetimeLocal(utcIso: string, tz: string): string {
@@ -33,7 +33,6 @@ function legEditsFrom(flight: Flight): LegEdits {
   return {
     dep: utcToDatetimeLocal(flight.depUtc, flight.depTz),
     arr: utcToDatetimeLocal(flight.arrUtc, flight.arrTz),
-    report: utcToDatetimeLocal(flight.reportUtc, flight.depTz),
   };
 }
 
@@ -65,10 +64,11 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
     const patch: LegPatch = {};
     const depUtc = wallToUtc(toWallIso(edits.dep), flight.depTz);
     const arrUtc = wallToUtc(toWallIso(edits.arr), flight.arrTz);
-    const reportUtc = wallToUtc(toWallIso(edits.report), flight.depTz);
+    // reportUtc is intentionally never patched from this form — the server's PATCH handler
+    // still recomputes report_utc from the new dep_utc (worker/src/trips.ts) whenever depUtc
+    // changes, keeping report time consistent (dep - 90min) automatically.
     if (depUtc !== flight.depUtc) patch.depUtc = depUtc;
     if (arrUtc !== flight.arrUtc) patch.arrUtc = arrUtc;
-    if (reportUtc !== flight.reportUtc) patch.reportUtc = reportUtc;
 
     if (Object.keys(patch).length === 0) {
       cancelEdit();
@@ -151,17 +151,6 @@ export default function TripDetail({ trip, onDone, onBack }: Props) {
                     value={edits.arr}
                     onChange={(e) => setEdits({ ...edits, arr: e.target.value })}
                     className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
-                  />
-
-                  <label htmlFor={`report-${flight.id}`} className="text-sm text-report">
-                    Report (local)
-                  </label>
-                  <input
-                    id={`report-${flight.id}`}
-                    type="datetime-local"
-                    value={edits.report}
-                    onChange={(e) => setEdits({ ...edits, report: e.target.value })}
-                    className="num rounded border border-edge bg-raised px-3 py-2 text-report outline-none transition-colors duration-[120ms] focus:border-accent"
                   />
 
                   <div className="flex gap-2">

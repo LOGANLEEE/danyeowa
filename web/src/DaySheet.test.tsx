@@ -220,8 +220,10 @@ describe("DaySheet", () => {
       dest: "LHR",
       depUtc: "2026-08-20T05:15:00.000Z",
       arrUtc: "2026-08-20T12:35:00.000Z",
-      reportUtc: "2026-08-20T03:45:00.000Z",
     });
+    // reportUtc is never included in the saved payload — the server derives it (dep - 90min)
+    // from depUtc when absent (Plan 10 Task 3: report removed from all entry forms).
+    expect(payload!.legs[0]).not.toHaveProperty("reportUtc");
 
     await waitFor(() => expect(confirmSchedule).toHaveBeenCalled());
 
@@ -244,6 +246,81 @@ describe("DaySheet", () => {
     // refetch): the just-added flight is still offered as a recent-flight chip immediately,
     // fed from this session's own adds rather than the (stale-until-Done) trips prop.
     expect(screen.getByTestId("recent-chip-EK001")).toBeInTheDocument();
+  });
+
+  it("add flow: renders no report input or chip anywhere in the autofill card (flight-code-only entry)", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(lookupSchedule).mockResolvedValue({
+      legs: [
+        {
+          legSeq: 0,
+          origin: "DXB",
+          dest: "LHR",
+          depLocal: "09:15",
+          arrLocal: "13:35",
+          dayOffset: 0,
+          originTz: "Asia/Dubai",
+          destTz: "Europe/London",
+          confirmCount: 3,
+        },
+      ],
+    });
+
+    render(
+      <DaySheet isoDate="2026-08-20" trip={null} trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
+    );
+
+    await user.type(screen.getByTestId("flightno-input"), "ek001");
+    await vi.advanceTimersByTimeAsync(400);
+    await screen.findByTestId("autofill-card");
+
+    expect(screen.queryByTestId("report-chip")).not.toBeInTheDocument();
+    expect(screen.queryByText(/report/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/report/i)).not.toBeInTheDocument();
+  });
+
+  it("add flow: shows a muted 'checking schedule…' line and disables Add while the lookup is in flight", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    let resolveLookup!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    vi.mocked(lookupSchedule).mockReturnValue(
+      new Promise((resolve) => {
+        resolveLookup = resolve;
+      }),
+    );
+
+    render(
+      <DaySheet isoDate="2026-08-20" trip={null} trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
+    );
+
+    expect(screen.queryByTestId("schedule-loading")).not.toBeInTheDocument();
+
+    await user.type(screen.getByTestId("flightno-input"), "ek001");
+    await vi.advanceTimersByTimeAsync(400);
+
+    expect(await screen.findByTestId("schedule-loading")).toHaveTextContent(/checking schedule/i);
+    // No manual-fallback link while still resolving - only after the lookup settles.
+    expect(screen.queryByTestId("manual-expand")).not.toBeInTheDocument();
+
+    await waitFor(() =>
+      resolveLookup({
+        legs: [
+          {
+            legSeq: 0,
+            origin: "DXB",
+            dest: "LHR",
+            depLocal: "09:15",
+            arrLocal: "13:35",
+            dayOffset: 0,
+            originTz: "Asia/Dubai",
+            destTz: "Europe/London",
+            confirmCount: 3,
+          },
+        ],
+      }),
+    );
+
+    await screen.findByTestId("autofill-card");
+    expect(screen.queryByTestId("schedule-loading")).not.toBeInTheDocument();
   });
 
   it("rapid entry: recent-flight chips render from the trips fixture, and tapping one fills + immediately looks up", async () => {
@@ -608,9 +685,13 @@ describe("DaySheet", () => {
     expect(screen.getByText(/DXB/)).toBeInTheDocument();
     expect(screen.getByText(/LHR/)).toBeInTheDocument();
     expect(screen.getByText("EK002")).toBeInTheDocument();
+    // Report still displays (view mode) - only the entry/edit FORMS lose it.
+    expect(screen.getByText(/report/i)).toBeInTheDocument();
 
     // Edit.
     await user.click(screen.getByTestId("edit-leg"));
+    // No report input in the edit form (Plan 10 Task 3).
+    expect(screen.queryByLabelText(/report/i)).not.toBeInTheDocument();
     const depInput = screen.getByLabelText(/departure/i) as HTMLInputElement;
     await user.clear(depInput);
     await user.type(depInput, "2026-08-11T07:15");
@@ -618,6 +699,8 @@ describe("DaySheet", () => {
 
     await waitFor(() => expect(patchFlight).toHaveBeenCalledWith("f1", { depUtc: "2026-08-11T03:15:00.000Z" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    // Back to display mode - report still shown.
+    expect(screen.getByText(/report/i)).toBeInTheDocument();
 
     // Delete with confirm.
     await user.click(screen.getByTestId("delete-trip"));
@@ -644,6 +727,10 @@ describe("DaySheet", () => {
 
     const depInput = screen.getByLabelText(/departure/i) as HTMLInputElement;
     expect(depInput.value).toBe("2026-08-20T00:00");
+
+    // Manual fallback has no report row (flight-code-only entry, Plan 10 Task 3).
+    expect(screen.queryByLabelText(/report/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/report \(local\)/i)).not.toBeInTheDocument();
   });
 
   it("manual entry: after a successful save, joins the same rapid-entry chain as the autofill path (banner, cleared+refocused input, chips, Done)", async () => {

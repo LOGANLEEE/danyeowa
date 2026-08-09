@@ -107,7 +107,7 @@ POST   /push/subscribe · DELETE /push/subscribe
 3. One confirm saves the whole trip — user skips typing intermediate/return legs.
 4. Degrades gracefully: unknown flight → plain manual entry.
 
-**Seeding:** one-time local scrape of a modern source (emirates.com flight-schedules pages or FR24/FlightConnections route data) → JSON committed to repo → seeded into D1. No recurring scrape, no runtime external dependency. Crowdsourcing keeps data fresh thereafter.
+**Data source (supersedes the original one-time-scrape-seed plan, Plan 10, 2026-08-09):** `flight_schedules` is a cache, not a static seed. On a lookup miss (or a stale row — >90 days old with no crowd confirmations), the Worker calls a provider chain server-side: (1) a flightradar24 scraper, (2) AeroDataBox via RapidAPI when `AERODATABOX_KEY` is configured, (3) give up → client degrades to plain manual entry. A resolved flight is written to D1 (`source='live-scrape'|'live-api'`, `fetched_at`) and served exactly like a cache hit on every subsequent lookup — the app gets more accurate the more it's used, with no recurring crawl and no bulk scraping (one request per miss, cached forever after). `airports` self-warms the same way when a provider supplies verified IATA + IANA-timezone metadata (AeroDataBox only — the scraper's page doesn't carry a safe-to-trust timezone, so it never learns a new airport). Crowd-confirm still upgrades any row's `confirm_count`/times when a user corrects it. A small set of manually-verified rows (`source='seed-verified'`) ships pre-seeded; every previously-seeded-but-unverified row was purged (it was a known source of wrong data, e.g. EK372 was seeded to the wrong destination) rather than left to mislead users until crowd-corrected.
 
 ## 6. PWA / offline
 

@@ -65,7 +65,7 @@ type Props = {
   onAdded: (isoDate: string) => void;
 };
 
-type LegEdits = { dep: string; arr: string; report: string };
+type LegEdits = { dep: string; arr: string };
 
 /** Converts a UTC ISO instant to a local wall `YYYY-MM-DDTHH:mm` string in the given tz. */
 function utcToDatetimeLocal(utcIso: string, tz: string): string {
@@ -92,7 +92,6 @@ function legEditsFrom(flight: Flight): LegEdits {
   return {
     dep: utcToDatetimeLocal(flight.depUtc, flight.depTz),
     arr: utcToDatetimeLocal(flight.arrUtc, flight.arrTz),
-    report: utcToDatetimeLocal(flight.reportUtc, flight.depTz),
   };
 }
 
@@ -127,10 +126,12 @@ function LegEditor({
     const patch: LegPatch = {};
     const depUtc = wallToUtc(toWallIso(edits.dep), flight.depTz);
     const arrUtc = wallToUtc(toWallIso(edits.arr), flight.arrTz);
-    const reportUtc = wallToUtc(toWallIso(edits.report), flight.depTz);
+    // reportUtc is intentionally never patched from this form — omitting depUtc's own report
+    // recompute means the server's PATCH handler will still fall through to recomputing
+    // report_utc from the new dep_utc (worker/src/trips.ts), matching the product behavior:
+    // moving the departure keeps the report time consistent (dep - 90min) automatically.
     if (depUtc !== flight.depUtc) patch.depUtc = depUtc;
     if (arrUtc !== flight.arrUtc) patch.arrUtc = arrUtc;
-    if (reportUtc !== flight.reportUtc) patch.reportUtc = reportUtc;
 
     if (Object.keys(patch).length === 0) return;
 
@@ -167,17 +168,6 @@ function LegEditor({
         value={edits.arr}
         onChange={(e) => setEdits({ ...edits, arr: e.target.value })}
         className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
-      />
-
-      <label htmlFor={`report-${flight.id}`} className="text-sm text-report">
-        Report (local)
-      </label>
-      <input
-        id={`report-${flight.id}`}
-        type="datetime-local"
-        value={edits.report}
-        onChange={(e) => setEdits({ ...edits, report: e.target.value })}
-        className="num rounded border border-edge bg-raised px-3 py-2 text-report outline-none transition-colors duration-[120ms] focus:border-accent"
       />
 
       {error && (
@@ -597,8 +587,6 @@ function AddTripContent({
               ? entry.autofillLegs.filter((leg) => leg.flightNo === entry.appendedFlightNo)
               : [];
             const renderLegFields = (leg: (typeof entry.autofillLegs)[number], index: number) => {
-              const reportLocal = entry.reportLocalFor(leg);
-              const isEditingReport = entry.editingReportLeg === leg.legSeq;
               return (
                 <div key={leg.legSeq} className="flex flex-col gap-2 border-t border-edge pt-3 first:border-t-0 first:pt-0">
                   <p className="text-ink">
@@ -631,29 +619,6 @@ function AddTripContent({
                       {leg.dayOffset > 0 && <sup className="num text-ink-muted">+{leg.dayOffset}</sup>}
                     </span>
                   </div>
-
-                  {isEditingReport ? (
-                    <input
-                      data-testid="report-chip"
-                      type="time"
-                      autoFocus
-                      value={reportLocal}
-                      onChange={(e) =>
-                        entry.setReportOverrides((prev) => new Map(prev).set(leg.legSeq, e.target.value))
-                      }
-                      onBlur={() => entry.setEditingReportLeg(null)}
-                      className="num w-fit rounded border border-accent bg-card px-2 py-1 text-report outline-none"
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      data-testid="report-chip"
-                      onClick={() => entry.setEditingReportLeg(leg.legSeq)}
-                      className="num w-fit rounded border border-edge px-2 py-1 text-sm text-report transition-colors duration-[120ms] hover:border-accent"
-                    >
-                      Report {reportLocal} · tap to edit
-                    </button>
-                  )}
                 </div>
               );
             };
@@ -689,7 +654,7 @@ function AddTripContent({
 
                 <button
                   type="submit"
-                  disabled={entry.submitting}
+                  disabled={entry.submitting || entry.resolving}
                   className="min-h-[48px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
                 >
                   Add to roster
@@ -698,7 +663,13 @@ function AddTripContent({
             );
           })()}
 
-        {!entry.autofillLegs && (
+        {entry.resolving && (
+          <p data-testid="schedule-loading" className="text-sm text-ink-muted">
+            checking schedule…
+          </p>
+        )}
+
+        {!entry.autofillLegs && !entry.resolving && (
           <div className="flex flex-col gap-2">
             {entry.lookupMiss && <p className="text-sm text-ink-muted">unknown flight — enter details</p>}
             <button
@@ -800,17 +771,6 @@ function AddTripContent({
               value={leg.arr}
               onChange={(e) => entry.updateLeg(index, { arr: e.target.value })}
               className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
-            />
-
-            <label htmlFor={`report-${index}`} className="text-sm text-report">
-              Report (local)
-            </label>
-            <input
-              id={`report-${index}`}
-              type="datetime-local"
-              value={leg.report}
-              onChange={(e) => entry.updateLeg(index, { report: e.target.value, reportTouched: true })}
-              className="num rounded border border-edge bg-raised px-3 py-2 text-report outline-none transition-colors duration-[120ms] focus:border-accent"
             />
           </fieldset>
         );

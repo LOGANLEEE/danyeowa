@@ -1,5 +1,5 @@
 import { asc, eq, inArray, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/d1";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import {
   ScheduleConfirmSchema,
@@ -8,9 +8,10 @@ import {
   addDaysIso,
   wallToUtc,
 } from "@roaster/shared";
-import type { ScheduleLookupResponse, ScheduleLeg, ScheduleSuggestion } from "@roaster/shared";
+import type { ScheduleLookupResponse, ScheduleLeg, ScheduleSuggestion, ProviderLeg } from "@roaster/shared";
 import * as schema from "./db/schema";
 import type { Env } from "./index";
+import { resolveFromProviders } from "./schedule-providers";
 
 type Variables = {
   user: { id: string; email: string; name: string | null } | null;
@@ -23,6 +24,176 @@ function db(env: Env) {
 }
 
 const flightNoQuerySchema = /^[A-Z]{2}\d{1,4}$/i;
+
+/** A row older than this with no crowd confirmation is treated as stale — served
+ * immediately, but refreshed in the background on the next hit (plan §Global Constraints). */
+const STALE_MS = 90 * 24 * 60 * 60 * 1000;
+
+/** How long a `schedule_lookup_misses` entry shadows the provider chain for its flight
+ * number. Keeps a junk/typo'd code (e.g. repeated attempts while typing) from paying a
+ * fresh scrape/API round-trip on every request. Deliberately short (1h, not e.g. 24h):
+ * the miss row is cleared immediately on any successful resolution (see `clearMiss`), so
+ * this TTL only bounds the worst case where a flight starts operating or a mistyped code
+ * gets corrected WITHOUT a clearing event in between - capping outbound re-tries per junk
+ * code at ~24/day while recovering within an hour rather than shadowing a whole day.
+ */
+const MISS_CACHE_TTL_MS = 60 * 60 * 1000;
+
+/** True when `flightNo` was recorded as a provider miss within the last `MISS_CACHE_TTL_MS`. */
+async function isRecentlyMissed(
+  database: DrizzleD1Database<typeof schema>,
+  flightNo: string,
+): Promise<boolean> {
+  const [row] = await database
+    .select({ missedAt: schema.scheduleLookupMisses.missedAt })
+    .from(schema.scheduleLookupMisses)
+    .where(eq(schema.scheduleLookupMisses.flightNo, flightNo))
+    .limit(1);
+  return row !== undefined && Date.now() - row.missedAt < MISS_CACHE_TTL_MS;
+}
+
+/** Records (or refreshes) a provider-chain miss for `flightNo` so subsequent lookups within
+ * `MISS_CACHE_TTL_MS` 404 immediately instead of re-querying every provider. */
+async function recordMiss(database: DrizzleD1Database<typeof schema>, flightNo: string): Promise<void> {
+  await database
+    .insert(schema.scheduleLookupMisses)
+    .values({ flightNo, missedAt: Date.now() })
+    .onConflictDoUpdate({
+      target: schema.scheduleLookupMisses.flightNo,
+      set: { missedAt: Date.now() },
+    });
+}
+
+/** Clears any negative-cache row for `flightNo` so it stops shadowing the provider chain.
+ * Called on every path that proves the flight number IS resolvable after all - a live
+ * provider resolution (the flight started operating, or a same-code retry that happened to
+ * hit a transient provider failure earlier) or a crowd confirm (a human just entered real
+ * data for it) - so the negative cache self-heals immediately instead of waiting out
+ * `MISS_CACHE_TTL_MS`. A no-op (0 rows affected) when there was no miss row, which is the
+ * common case and fine to pay unconditionally rather than SELECT-then-maybe-DELETE. */
+async function clearMiss(database: DrizzleD1Database<typeof schema>, flightNo: string): Promise<void> {
+  await database.delete(schema.scheduleLookupMisses).where(eq(schema.scheduleLookupMisses.flightNo, flightNo));
+}
+
+/** Inserts (or upserts) provider-resolved legs into `flight_schedules` as a freshly-warmed
+ * cache entry: `confirmCount` always resets to 0 (a live fetch is not a crowd confirmation),
+ * `daysOfWeek` defaults to "1234567" when the provider couldn't derive a pattern from a
+ * single fetch (same convention as POST /schedule/confirm), and `sourceDateIso` is stored
+ * as-is (including `null`) so a nearest-date scrape is never presented as date-specific. */
+async function cacheProviderLegs(
+  database: DrizzleD1Database<typeof schema>,
+  flightNo: string,
+  legs: ProviderLeg[],
+  source: "live-scrape" | "live-api",
+  fetchedAt: number,
+): Promise<void> {
+  for (const [legSeq, leg] of legs.entries()) {
+    await database
+      .insert(schema.flightSchedules)
+      .values({
+        flightNo,
+        legSeq,
+        origin: leg.origin,
+        dest: leg.dest,
+        depLocal: leg.depLocal,
+        arrLocal: leg.arrLocal,
+        dayOffset: leg.dayOffset,
+        daysOfWeek: leg.daysOfWeek ?? "1234567",
+        source,
+        fetchedAt,
+        sourceDateIso: leg.sourceDateIso ?? null,
+        confirmCount: 0,
+      })
+      .onConflictDoUpdate({
+        target: [schema.flightSchedules.flightNo, schema.flightSchedules.legSeq],
+        set: {
+          origin: leg.origin,
+          dest: leg.dest,
+          depLocal: leg.depLocal,
+          arrLocal: leg.arrLocal,
+          dayOffset: leg.dayOffset,
+          daysOfWeek: leg.daysOfWeek ?? "1234567",
+          source,
+          fetchedAt,
+          sourceDateIso: leg.sourceDateIso ?? null,
+          confirmCount: 0,
+        },
+      });
+  }
+}
+
+/**
+ * Ensures every origin/dest IATA code referenced by `legs` exists in the `airports`
+ * table, self-warming it from the RESOLVED PROVIDER LEG's own airport metadata when
+ * possible. Returns the set of codes that are STILL missing after the attempt (empty =
+ * fully resolved, safe to cache/serve).
+ *
+ * Only ever writes a row when a leg carries `originAirport`/`destAirport` with a real
+ * IANA `tz` (currently: AeroDataBox only - see `ProviderLeg.originAirport` doc comment
+ * for why the fr24 scraper can never safely supply this: it only has city+country TEXT,
+ * and neither a country name nor a raw UTC offset is sufficient to derive a correct IANA
+ * zone - many countries span multiple zones, and an offset alone silently breaks across
+ * DST boundaries `wallToUtc` handles for every other airport in this table). A leg with
+ * no usable metadata for a missing code is left unresolved rather than guessed.
+ */
+async function learnAirportsForLegs(
+  database: DrizzleD1Database<typeof schema>,
+  legs: ProviderLeg[],
+): Promise<Set<string>> {
+  const allCodes = new Set(legs.flatMap((leg) => [leg.origin, leg.dest]));
+  const existing = await database
+    .select({ iata: schema.airports.iata })
+    .from(schema.airports)
+    .where(inArray(schema.airports.iata, [...allCodes]));
+  const known = new Set(existing.map((a) => a.iata));
+
+  // Collect learnable {iata -> {name, tz}} pairs from whichever leg happens to carry
+  // metadata for a still-missing code (a multi-leg response might only annotate some legs).
+  const learnable = new Map<string, { name: string; tz: string }>();
+  for (const leg of legs) {
+    if (!known.has(leg.origin) && leg.originAirport && !learnable.has(leg.origin)) {
+      learnable.set(leg.origin, leg.originAirport);
+    }
+    if (!known.has(leg.dest) && leg.destAirport && !learnable.has(leg.dest)) {
+      learnable.set(leg.dest, leg.destAirport);
+    }
+  }
+
+  for (const [iata, meta] of learnable) {
+    await database
+      .insert(schema.airports)
+      .values({ iata, city: meta.name, name: meta.name, tz: meta.tz, source: "live-api" })
+      .onConflictDoNothing();
+    known.add(iata);
+  }
+
+  return new Set([...allCodes].filter((code) => !known.has(code)));
+}
+
+/**
+ * Re-resolves `flightNo` via the live provider chain and overwrites its cached rows if
+ * successful; a provider miss (or an unresolvable airport - see `learnAirportsForLegs`)
+ * leaves the (stale) cached rows untouched rather than deleting them - a stale-but-present
+ * row is still better than none. Exported (rather than inlined in the route handler) so
+ * it's directly `await`-able from tests: the real route only ever invokes it via
+ * `c.executionCtx.waitUntil`, which by design does not block the response and isn't
+ * synchronously observable from a black-box HTTP test.
+ */
+export async function refreshScheduleFromProviders(
+  database: DrizzleD1Database<typeof schema>,
+  env: Env,
+  flightNo: string,
+  dateIso: string,
+): Promise<void> {
+  const resolved = await resolveFromProviders(flightNo, dateIso, env);
+  if (!resolved) return;
+
+  const stillMissing = await learnAirportsForLegs(database, resolved.legs);
+  if (stillMissing.size > 0) return; // can't safely refresh - leave the stale row as-is.
+
+  await cacheProviderLegs(database, flightNo, resolved.legs, resolved.source, Date.now());
+  await clearMiss(database, flightNo);
+}
 
 scheduleRouter.get("/schedule/lookup", async (c) => {
   const user = c.var.user;
@@ -37,20 +208,75 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
 
   const database = db(c.env);
 
-  const legRows = await database
+  let legRows = await database
     .select()
     .from(schema.flightSchedules)
     .where(eq(schema.flightSchedules.flightNo, flightNo))
     .orderBy(asc(schema.flightSchedules.legSeq));
 
   if (legRows.length === 0) {
-    return c.json({ error: "unknown_flight" }, 404);
+    // A flight number the provider chain already missed on recently (junk code, typo, or
+    // genuinely not scheduled) 404s immediately without re-querying every provider - see
+    // `schedule_lookup_misses` doc comment.
+    if (await isRecentlyMissed(database, flightNo)) {
+      return c.json({ error: "unknown_flight" }, 404);
+    }
+
+    // Cache miss: fall through to the live provider chain (scraper, then API fallback).
+    // A provider miss (network failure, blocked, not found, no key) is a normal outcome —
+    // respond 404 exactly as before so the client falls back to manual entry, never a 500.
+    const resolved = await resolveFromProviders(flightNo, date, c.env);
+    if (!resolved) {
+      await recordMiss(database, flightNo);
+      return c.json({ error: "unknown_flight" }, 404);
+    }
+
+    // A resolved leg can touch an airport outside our seeded set (providers return
+    // arbitrary real-world routes) - attempt to self-warm it, and if that's not possible
+    // (see learnAirportsForLegs doc comment), DEGRADE to the same 404 a provider miss
+    // gets, rather than caching/serving a leg whose tz we can't safely resolve. This is a
+    // deliberate choice over the alternative (guess a tz, e.g. fall back to UTC): every
+    // downstream consumer of `airports.tz` (wallToUtc, report-time calc, ...) assumes a
+    // real IANA name and would silently compute wrong times for a fabricated one - the
+    // same "never present a guess with false confidence" reasoning behind the Task 2 seed
+    // purge. The client's existing manual-entry fallback already handles this response.
+    const stillMissing = await learnAirportsForLegs(database, resolved.legs);
+    if (stillMissing.size > 0) {
+      await recordMiss(database, flightNo);
+      return c.json({ error: "unknown_flight" }, 404);
+    }
+
+    await cacheProviderLegs(database, flightNo, resolved.legs, resolved.source, Date.now());
+    // This flight_no just proved resolvable - a stale miss row (e.g. from an earlier
+    // transient provider failure, or this being the fix for a previously mistyped code)
+    // must not keep shadowing it for the rest of MISS_CACHE_TTL_MS.
+    await clearMiss(database, flightNo);
+
+    legRows = await database
+      .select()
+      .from(schema.flightSchedules)
+      .where(eq(schema.flightSchedules.flightNo, flightNo))
+      .orderBy(asc(schema.flightSchedules.legSeq));
+  } else {
+    // Cache hit: a row older than STALE_MS with no crowd confirmation is served as-is
+    // (never block the response on a re-fetch) but kicks off a best-effort background
+    // refresh via waitUntil, so the NEXT lookup benefits from fresher data.
+    const leg0 = legRows[0]!;
+    const isStale = leg0.confirmCount === 0 && leg0.fetchedAt !== null && Date.now() - leg0.fetchedAt > STALE_MS;
+    if (isStale) {
+      c.executionCtx.waitUntil(refreshScheduleFromProviders(database, c.env, flightNo, date));
+    }
   }
 
-  // Resolve every leg's origin/dest tz from the airports table up front. Seed data
-  // guarantees airport coverage for every flight_schedules row, so a missing airport
-  // here means the reference data is broken — fail loud with a 500 rather than
-  // silently dropping legs.
+  // Resolve every leg's origin/dest tz from the airports table up front. Seed rows are
+  // guaranteed coverage at seed time, and a fresh provider-resolved miss above already
+  // learned (or degraded to 404 for) every code it introduced via learnAirportsForLegs -
+  // but a row can still reference an unresolvable airport if it predates that fix, was
+  // crowd-inserted via POST /schedule/confirm with a typo'd/foreign code, or a background
+  // refresh (refreshScheduleFromProviders) failed to learn one after this row was already
+  // cached. In every one of those cases a 500 is never the right response to a client -
+  // degrade to the same unknown_flight 404 a cache miss gets, so the client falls back to
+  // manual entry instead of crashing.
   const iatas = [...new Set(legRows.flatMap((leg) => [leg.origin, leg.dest]))];
   const airportRows = await database
     .select()
@@ -61,10 +287,7 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
   for (const leg of legRows) {
     for (const code of [leg.origin, leg.dest]) {
       if (!airportByIata.has(code)) {
-        return c.json(
-          { error: `schedule reference data error: unknown airport ${code} for flight ${flightNo}` },
-          500,
-        );
+        return c.json({ error: "unknown_flight" }, 404);
       }
     }
   }
@@ -131,6 +354,7 @@ scheduleRouter.post("/schedule/confirm", async (c) => {
       daysOfWeek: "1234567",
       confirmCount: 1,
       lastConfirmedAt: now,
+      source: "crowd",
     })
     .onConflictDoUpdate({
       target: [schema.flightSchedules.flightNo, schema.flightSchedules.legSeq],
@@ -144,6 +368,10 @@ scheduleRouter.post("/schedule/confirm", async (c) => {
         lastConfirmedAt: now,
       },
     });
+  // Belt-and-braces: a human just confirmed real data for this flight_no, so any stale
+  // negative-cache row for it (e.g. an earlier mistyped-then-corrected attempt) must not
+  // keep shadowing GET /schedule/lookup.
+  await clearMiss(database, flightNo);
 
   return c.json({ ok: true }, 200);
 });

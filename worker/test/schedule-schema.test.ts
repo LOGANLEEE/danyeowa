@@ -72,13 +72,41 @@ describe("flight_schedules schema", () => {
     expect(result?.dest).toBe("SYD");
   });
 
-  it("seeds at least 80 rows", async () => {
+  it("seeds only the live-verified rows, each marked source='seed-verified'", async () => {
+    // Plan 10 T2 purged flight_schedules from a seed table (152 rows, mostly guessed via
+    // EK's numbering convention - one of which, EK372, was confirmed actively WRONG) down
+    // to a cache warmed by live provider fetches. scripts/ek-schedules.json now carries only
+    // the ~17 rows independently verified against a live source (see
+    // .superpowers/sdd/2026-08-09-plan10-live-schedules/task-2-report.md) - "seed at least
+    // 80 rows" no longer reflects the design and would mask a regression back toward
+    // reintroducing guessed data.
     const db = drizzle(env.DB, { schema });
     await seedSchedules(db);
 
-    const result = await env.DB.prepare("SELECT COUNT(*) as count FROM flight_schedules").first<{
-      count: number;
-    }>();
-    expect(result?.count).toBeGreaterThanOrEqual(80);
+    // Scoped to source='seed-verified' rather than a bare table count, since an earlier
+    // test in this file (composite PK test) inserts its own EK999 rows with no source set
+    // - this file has no per-test D1 reset, so those rows are still present here.
+    const countResult = await env.DB.prepare(
+      "SELECT COUNT(*) as count FROM flight_schedules WHERE source = 'seed-verified'"
+    ).first<{ count: number }>();
+    expect(countResult?.count).toBe(17);
+
+    // Every row seedSchedules() wrote (i.e. everything the ek-schedules.json flight
+    // numbers cover) must be marked seed-verified - none left null/other, and no
+    // previously-purged flight number (e.g. EK108, approximated-only) got reintroduced.
+    const flightNos = new Set(
+      (
+        await env.DB.prepare("SELECT DISTINCT flight_no FROM flight_schedules WHERE source = 'seed-verified'").all<{
+          flight_no: string;
+        }>()
+      ).results.map((r) => r.flight_no),
+    );
+    expect(flightNos).toEqual(
+      new Set([
+        "EK001", "EK002", "EK073", "EK203", "EK318",
+        "EK384", "EK385", "EK404", "EK412", "EK413",
+        "EK448", "EK449", "EK500",
+      ]),
+    );
   });
 });
