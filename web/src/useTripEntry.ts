@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Airport, LegInput, ScheduleLeg } from "@roaster/shared";
-import { TripInputSchema, addDaysIso, legDatesFromPicked, reportDefault, wallToUtc } from "@roaster/shared";
+import { TripInputSchema, addDaysIso, legDatesFromPicked, wallToUtc } from "@roaster/shared";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";
 
@@ -10,33 +10,15 @@ export type LegDraft = {
   dest: string;
   dep: string; // datetime-local wall time at origin
   arr: string; // datetime-local wall time at dest
-  report: string; // datetime-local wall time at origin, editable
-  reportTouched: boolean;
 };
 
 function emptyLeg(): LegDraft {
-  return { flightNo: "", origin: "", dest: "", dep: "", arr: "", report: "", reportTouched: false };
+  return { flightNo: "", origin: "", dest: "", dep: "", arr: "" };
 }
 
 /** Converts a `YYYY-MM-DDTHH:mm` datetime-local value to the wall-ISO seconds format wallToUtc expects. */
 function toWallIso(datetimeLocal: string): string {
   return datetimeLocal.length === 16 ? `${datetimeLocal}:00` : datetimeLocal;
-}
-
-/** Converts a UTC ISO instant back to a local wall `YYYY-MM-DDTHH:mm` string in the given tz. */
-function utcToDatetimeLocal(utcIso: string, tz: string): string {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(new Date(utcIso));
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
 }
 
 const FLIGHT_NO_PATTERN = /^[A-Z]{2}\d{1,4}$/;
@@ -111,9 +93,8 @@ type Options = {
 /**
  * Reusable flight-entry logic extracted from the Plan-5 TripForm stepper: flight-no lookup
  * (debounced), autofill preview editing, manual-entry fallback, and save (createTrip +
- * fire-and-forget confirmSchedule). Payload construction is byte-identical to the original
- * stepper — same helper functions (legDatesFromPicked, wallToUtc, reportDefault), same
- * field-by-field assembly.
+ * fire-and-forget confirmSchedule). `reportUtc` is intentionally never included in the saved
+ * payload (Plan 10 Task 3) — the server derives it from `depUtc` on create.
  */
 export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   const [mode, setMode] = useState<EntryMode>("flightno");
@@ -122,8 +103,10 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   const [autofillLegs, setAutofillLegs] = useState<AutofillLegDraft[] | null>(null);
   const [autofillFlightNo, setAutofillFlightNo] = useState<string | null>(null);
   const [lookupMiss, setLookupMiss] = useState(false);
-  const [editingReportLeg, setEditingReportLeg] = useState<number | null>(null);
-  const [reportOverrides, setReportOverrides] = useState<Map<number, string>>(new Map());
+  // True while a debounced schedule lookup's fetch is in flight (not during the debounce
+  // delay itself) — drives the "checking schedule…" muted line and disables Add until the
+  // lookup resolves one way or the other (autofill card or manual fallback).
+  const [resolving, setResolving] = useState(false);
 
   // Turnaround chaining (Task 2): an appended second flight's own flight number and legs,
   // tracked separately from the outbound so the "✕ remove appended" revert can drop exactly
@@ -145,15 +128,17 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       setAutofillLegs(null);
       setAutofillFlightNo(null);
       setLookupMiss(false);
+      setResolving(false);
       return;
     }
     const timer = setTimeout(async () => {
+      setResolving(true);
       const result = await lookupSchedule(candidate, pickedDate);
+      setResolving(false);
       if (result) {
         setAutofillLegs(autofillLegsFrom(pickedDate, candidate, result.legs));
         setAutofillFlightNo(candidate);
         setLookupMiss(false);
-        setReportOverrides(new Map());
         // A new outbound lookup replaces whatever was previewed before, including any
         // appended flight from a prior preview.
         setAppendedFlightNo(null);
@@ -200,17 +185,10 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   }
 
   /** Reverts the "+ add flight" chain back to single-flight state, dropping every leg tagged
-   * with the appended flight number (and any report-time override made on those legs). */
+   * with the appended flight number. */
   function removeAppendedFlight() {
     if (!appendedFlightNo) return;
     setAutofillLegs((prev) => (prev ? prev.filter((leg) => leg.flightNo !== appendedFlightNo) : prev));
-    setReportOverrides((prev) => {
-      const next = new Map(prev);
-      for (const leg of autofillLegs ?? []) {
-        if (leg.flightNo === appendedFlightNo) next.delete(leg.legSeq);
-      }
-      return next;
-    });
     setAppendedFlightNo(null);
     setAppendLookupMiss(false);
   }
@@ -222,13 +200,6 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       next[index] = { ...next[index]!, ...patch };
       return next;
     });
-  }
-
-  function reportLocalFor(leg: AutofillLegDraft): string {
-    const override = reportOverrides.get(leg.legSeq);
-    if (override) return override;
-    const depUtc = wallToUtc(`${leg.depDate}T${leg.depTime}:00`, leg.originTz);
-    return utcToDatetimeLocal(reportDefault(depUtc), leg.originTz).slice(11);
   }
 
   function switchToManual() {
@@ -248,16 +219,6 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       const current = prev[index];
       if (!current) return prev;
       const merged: LegDraft = { ...current, ...patch };
-
-      // Auto-fill report time = dep - 90min local, unless the user has edited it.
-      if (!merged.reportTouched && merged.dep) {
-        const originAirport = airports.get(merged.origin.toUpperCase());
-        if (originAirport) {
-          const depUtc = wallToUtc(toWallIso(merged.dep), originAirport.tz);
-          merged.report = utcToDatetimeLocal(reportDefault(depUtc), originAirport.tz);
-        }
-      }
-
       const next = [...prev];
       next[index] = merged;
       return next;
@@ -314,16 +275,14 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       // Arrival date = this leg's own dep date + this leg's own dayOffset (arr date - dep date).
       const arrDate = addDaysIso(leg.depDate, leg.dayOffset);
       const arrUtc = wallToUtc(`${arrDate}T${leg.arrTime}:00`, leg.destTz);
-      const reportLocal = reportLocalFor(leg);
-      const reportUtc = wallToUtc(`${leg.depDate}T${reportLocal}:00`, leg.originTz);
 
+      // reportUtc intentionally omitted — the server derives it (dep - 90min) when absent.
       resolvedLegs.push({
         flightNo: leg.flightNo,
         origin: leg.origin,
         dest: leg.dest,
         depUtc,
         arrUtc,
-        reportUtc,
       });
       confirmPayloads.push({
         flightNo: leg.flightNo,
@@ -371,16 +330,13 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       }
       const depUtc = wallToUtc(toWallIso(leg.dep), originAirport.tz);
       const arrUtc = wallToUtc(toWallIso(leg.arr), destAirport.tz);
-      const reportUtc = leg.reportTouched
-        ? wallToUtc(toWallIso(leg.report), originAirport.tz)
-        : reportDefault(depUtc);
+      // reportUtc intentionally omitted — the server derives it (dep - 90min) when absent.
       resolvedLegs.push({
         flightNo: leg.flightNo,
         origin: leg.origin,
         dest: leg.dest,
         depUtc,
         arrUtc,
-        reportUtc,
       });
     }
 
@@ -408,12 +364,8 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     autofillLegs,
     autofillFlightNo,
     lookupMiss,
-    editingReportLeg,
-    setEditingReportLeg,
-    reportOverrides,
-    setReportOverrides,
+    resolving,
     updateAutofillLeg,
-    reportLocalFor,
     switchToManual,
     switchToFlightNo,
     legs,

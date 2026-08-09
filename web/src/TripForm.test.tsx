@@ -101,7 +101,9 @@ describe("TripForm", () => {
     expect(card).toHaveTextContent("DXB → LHR");
     expect(screen.getAllByTestId("autofill-dep")[0]).toHaveValue("09:15");
     expect(screen.getAllByTestId("autofill-arr")[0]).toHaveValue("13:35");
-    expect(screen.getByTestId("report-chip")).toHaveTextContent("07:45");
+    // No report chip/input anywhere in the autofill card (flight-code-only entry).
+    expect(screen.queryByTestId("report-chip")).not.toBeInTheDocument();
+    expect(screen.queryByText(/report/i)).not.toBeInTheDocument();
 
     // Edit the autofilled dep time before saving - the saved/confirmed values must
     // reflect this edit, not just echo the schedule lookup's original prefill.
@@ -119,10 +121,10 @@ describe("TripForm", () => {
       dest: "LHR",
       depUtc: "2026-08-20T05:45:00.000Z",
       arrUtc: "2026-08-20T12:35:00.000Z",
-      // Report is still the unedited default (dep - 90min), recomputed from the EDITED
-      // dep time (09:45 -> 08:15 local -> 04:15Z), not the original 09:15 prefill.
-      reportUtc: "2026-08-20T04:15:00.000Z",
     });
+    // reportUtc is never included in the saved payload — the server derives it (dep - 90min)
+    // from depUtc when absent (Plan 10 Task 3: report removed from all entry forms).
+    expect(payload!.legs[0]).not.toHaveProperty("reportUtc");
 
     await waitFor(() => expect(confirmSchedule).toHaveBeenCalled());
     expect(confirmSchedule).toHaveBeenCalledWith({
@@ -190,47 +192,44 @@ describe("TripForm", () => {
     expect(payload!.legs[1]!.depUtc).toBe("2026-08-20T21:45:00.000Z");
   });
 
-  it("shows the report chip default and expands to an editable time input on tap, using the edited value in the saved payload", async () => {
+  it("shows a muted 'checking schedule…' line and disables Add while the lookup is in flight, then clears once the autofill card appears", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    vi.mocked(lookupSchedule).mockResolvedValue({
-      legs: [
-        {
-          legSeq: 0,
-          origin: "DXB",
-          dest: "LHR",
-          depLocal: "09:15",
-          arrLocal: "13:35",
-          dayOffset: 0,
-          originTz: "Asia/Dubai",
-          destTz: "Europe/London",
-          confirmCount: 3,
-        },
-      ],
-    });
-    vi.mocked(createTrip).mockResolvedValue({
-      id: "trip-1",
-      userId: "u1",
-      label: null,
-      createdAt: Date.now(),
-      flights: [],
-    });
+    let resolveLookup!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    vi.mocked(lookupSchedule).mockReturnValue(
+      new Promise((resolve) => {
+        resolveLookup = resolve;
+      }),
+    );
 
     render(<TripForm {...baseProps({ initialDate: "2026-08-20" })} />);
+    expect(screen.queryByTestId("schedule-loading")).not.toBeInTheDocument();
+
     await user.type(screen.getByTestId("flightno-input"), "ek001");
     await vi.advanceTimersByTimeAsync(400);
+
+    expect(await screen.findByTestId("schedule-loading")).toHaveTextContent(/checking schedule/i);
+    expect(screen.queryByTestId("manual-expand")).not.toBeInTheDocument();
+
+    await waitFor(() =>
+      resolveLookup({
+        legs: [
+          {
+            legSeq: 0,
+            origin: "DXB",
+            dest: "LHR",
+            depLocal: "09:15",
+            arrLocal: "13:35",
+            dayOffset: 0,
+            originTz: "Asia/Dubai",
+            destTz: "Europe/London",
+            confirmCount: 3,
+          },
+        ],
+      }),
+    );
+
     await screen.findByTestId("autofill-card");
-
-    await user.click(screen.getByTestId("report-chip"));
-    const reportInput = screen.getByTestId("report-chip") as HTMLInputElement;
-    expect(reportInput.tagName).toBe("INPUT");
-
-    fireEvent.change(reportInput, { target: { value: "07:00" } });
-    await user.tab();
-
-    await user.click(screen.getByRole("button", { name: /^add trip$/i }));
-    await waitFor(() => expect(createTrip).toHaveBeenCalled());
-    const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
-    expect(payload!.legs[0]!.reportUtc).toBe("2026-08-20T03:00:00.000Z");
+    expect(screen.queryByTestId("schedule-loading")).not.toBeInTheDocument();
   });
 
   it("falls back to the manual multi-leg fields on an unknown flight (404)", async () => {
@@ -286,9 +285,8 @@ describe("TripForm", () => {
     const arrInput = screen.getByLabelText(/arrival/i);
     await user.type(arrInput, "2026-08-10T13:10");
 
-    await waitFor(() => {
-      expect(screen.getByLabelText(/report/i)).toHaveValue("2026-08-10T07:15");
-    });
+    // No report row in the manual fallback form (flight-code-only entry, Plan 10 Task 3).
+    expect(screen.queryByLabelText(/report/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /add trip|submit/i }));
 
@@ -302,8 +300,9 @@ describe("TripForm", () => {
       dest: "LHR",
       depUtc: "2026-08-10T04:45:00.000Z",
       arrUtc: "2026-08-10T12:10:00.000Z",
-      reportUtc: "2026-08-10T03:15:00.000Z",
     });
+    // reportUtc is never included in the manual payload either — server-derived.
+    expect(payload!.legs[0]).not.toHaveProperty("reportUtc");
     expect(onSubmitted).toHaveBeenCalled();
     // Manual path never confirms a schedule (no reference lookup was used).
     expect(confirmSchedule).not.toHaveBeenCalled();

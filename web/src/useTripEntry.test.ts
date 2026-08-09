@@ -75,7 +75,6 @@ describe("useTripEntry", () => {
 
     await waitFor(() => expect(result.current.autofillLegs).not.toBeNull());
     expect(result.current.autofillLegs![0]).toMatchObject({ depTime: "09:15", arrTime: "13:35" });
-    expect(result.current.reportLocalFor(result.current.autofillLegs![0]!)).toBe("07:45");
 
     // Edit the autofilled dep time before saving - the saved/confirmed values must reflect
     // this edit, not just echo the schedule lookup's original prefill.
@@ -96,10 +95,10 @@ describe("useTripEntry", () => {
       dest: "LHR",
       depUtc: "2026-08-20T05:45:00.000Z",
       arrUtc: "2026-08-20T12:35:00.000Z",
-      // Report is still the unedited default (dep - 90min), recomputed from the EDITED
-      // dep time (09:45 -> 08:15 local -> 04:15Z), not the original 09:15 prefill.
-      reportUtc: "2026-08-20T04:15:00.000Z",
     });
+    // reportUtc is never included in the saved payload — the server derives it (dep - 90min)
+    // from depUtc when absent (Plan 10 Task 3: report removed from all entry forms).
+    expect(payload!.legs[0]).not.toHaveProperty("reportUtc");
 
     await waitFor(() => expect(confirmSchedule).toHaveBeenCalled());
     expect(confirmSchedule).toHaveBeenCalledWith({
@@ -174,52 +173,53 @@ describe("useTripEntry", () => {
     expect(payload!.legs[1]!.depUtc).toBe("2026-08-20T21:45:00.000Z");
   });
 
-  it("uses an edited report override in the saved payload", async () => {
-    vi.mocked(lookupSchedule).mockResolvedValue({
-      legs: [
-        {
-          legSeq: 0,
-          origin: "DXB",
-          dest: "LHR",
-          depLocal: "09:15",
-          arrLocal: "13:35",
-          dayOffset: 0,
-          originTz: "Asia/Dubai",
-          destTz: "Europe/London",
-          confirmCount: 3,
-        },
-      ],
-    });
-    vi.mocked(createTrip).mockResolvedValue({
-      id: "trip-1",
-      userId: "u1",
-      label: null,
-      createdAt: Date.now(),
-      flights: [],
-    });
+  it("sets `resolving` true only while the lookup's fetch is in flight (post-debounce), false once it settles either way", async () => {
+    let resolveLookup!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    vi.mocked(lookupSchedule).mockReturnValue(
+      new Promise((resolve) => {
+        resolveLookup = resolve;
+      }),
+    );
 
     const { result } = renderHook(() =>
       useTripEntry({ pickedDate: "2026-08-20", homeTz: "Asia/Dubai", onSubmitted: vi.fn() }),
     );
 
+    expect(result.current.resolving).toBe(false);
+
     act(() => {
       result.current.setFlightNo("EK001");
     });
+    // Still debouncing - the fetch hasn't fired yet, so not resolving.
+    expect(result.current.resolving).toBe(false);
+
     await act(async () => {
       await vi.advanceTimersByTimeAsync(400);
     });
-    await waitFor(() => expect(result.current.autofillLegs).not.toBeNull());
-
-    act(() => {
-      result.current.setReportOverrides(new Map([[0, "07:00"]]));
-    });
+    // Debounce elapsed, fetch is in flight (mocked promise not yet settled).
+    expect(result.current.resolving).toBe(true);
+    expect(result.current.autofillLegs).toBeNull();
 
     await act(async () => {
-      await result.current.handleAutofillSubmit();
+      resolveLookup({
+        legs: [
+          {
+            legSeq: 0,
+            origin: "DXB",
+            dest: "LHR",
+            depLocal: "09:15",
+            arrLocal: "13:35",
+            dayOffset: 0,
+            originTz: "Asia/Dubai",
+            destTz: "Europe/London",
+            confirmCount: 3,
+          },
+        ],
+      });
     });
-    await waitFor(() => expect(createTrip).toHaveBeenCalled());
-    const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
-    expect(payload!.legs[0]!.reportUtc).toBe("2026-08-20T03:00:00.000Z");
+
+    expect(result.current.resolving).toBe(false);
+    expect(result.current.autofillLegs).not.toBeNull();
   });
 
   it("switches to manual mode on an unknown flight (404) and prefills the flight no + picked date", async () => {
@@ -286,8 +286,6 @@ describe("useTripEntry", () => {
       result.current.updateLeg(0, { arr: "2026-08-10T13:10" });
     });
 
-    expect(result.current.legs[0]!.report).toBe("2026-08-10T07:15");
-
     await act(async () => {
       await result.current.handleManualSubmit();
     });
@@ -301,8 +299,9 @@ describe("useTripEntry", () => {
       dest: "LHR",
       depUtc: "2026-08-10T04:45:00.000Z",
       arrUtc: "2026-08-10T12:10:00.000Z",
-      reportUtc: "2026-08-10T03:15:00.000Z",
     });
+    // reportUtc is never included in the manual payload either — server-derived.
+    expect(payload!.legs[0]).not.toHaveProperty("reportUtc");
     expect(onSubmitted).toHaveBeenCalled();
     // Manual path never confirms a schedule (no reference lookup was used).
     expect(confirmSchedule).not.toHaveBeenCalled();
@@ -408,26 +407,27 @@ describe("useTripEntry", () => {
       expect(payload!.legs).toHaveLength(2);
 
       // Leg 0 (EK097): dep 2026-08-20 08:20 Asia/Dubai (+4) -> 04:20Z; arr 2026-08-20 12:35
-      // Europe/Madrid (+2 in Aug) -> 10:35Z; report = dep-90min local (06:50 Asia/Dubai) -> 02:50Z.
+      // Europe/Madrid (+2 in Aug) -> 10:35Z.
       expect(payload!.legs[0]).toMatchObject({
         flightNo: "EK097",
         origin: "DXB",
         dest: "BCN",
         depUtc: "2026-08-20T04:20:00.000Z",
         arrUtc: "2026-08-20T10:35:00.000Z",
-        reportUtc: "2026-08-20T02:50:00.000Z",
       });
       // Leg 1 (EK098): depDate = EK097's arrival local date (2026-08-20); dep 14:15
       // Europe/Madrid (+2) -> 12:15Z; arrDate = depDate + dayOffset(1) = 2026-08-21, arr 00:05
-      // Asia/Dubai (+4) -> 2026-08-20T20:05Z; report = dep-90min local (12:45 Madrid) -> 10:45Z.
+      // Asia/Dubai (+4) -> 2026-08-20T20:05Z.
       expect(payload!.legs[1]).toMatchObject({
         flightNo: "EK098",
         origin: "BCN",
         dest: "DXB",
         depUtc: "2026-08-20T12:15:00.000Z",
         arrUtc: "2026-08-20T20:05:00.000Z",
-        reportUtc: "2026-08-20T10:45:00.000Z",
       });
+      // reportUtc omitted for both legs — server-derived.
+      expect(payload!.legs[0]).not.toHaveProperty("reportUtc");
+      expect(payload!.legs[1]).not.toHaveProperty("reportUtc");
 
       // Regression: confirmSchedule (POST /schedule/confirm) upserts flight_schedules rows
       // keyed by (flight_no, leg_seq) PER FLIGHT, not per combined trip. EK098 is a

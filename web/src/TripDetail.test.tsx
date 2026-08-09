@@ -60,6 +60,10 @@ describe("TripDetail", () => {
 
     await user.click(screen.getByTestId("edit-leg"));
 
+    // No report input in the edit form (Plan 10 Task 3: report removed from all entry/edit
+    // forms, still displayed read-only in the summary line — see the test above).
+    expect(screen.queryByLabelText(/report/i)).not.toBeInTheDocument();
+
     const depInput = screen.getByLabelText(/departure/i) as HTMLInputElement;
     await user.clear(depInput);
     // Original dep was 2026-08-11T06:15 local Dubai (UTC+4). Bump 1 hour to 07:15.
