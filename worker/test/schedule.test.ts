@@ -235,6 +235,13 @@ describe("GET /api/schedule/lookup", () => {
   // every single attempt before this, since a miss left nothing behind to short-circuit the
   // next lookup - the fr24 scraper's own "single request, cached forever" doc comment was
   // therefore false for exactly the codes that need the protection most.
+  //
+  // Re-review fix: the negative cache must self-heal rather than block for its full TTL - a
+  // flight that starts operating, or a mistyped code that gets corrected, must not stay
+  // hard-404 for up to an hour with no way to recover early. `clearMiss` is called on every
+  // path that proves a flight_no IS resolvable (provider success, background refresh
+  // success, crowd confirm), and the TTL itself was shortened from 24h to 1h as the bound on
+  // the remaining un-clearable case (see MISS_CACHE_TTL_MS doc comment in schedule.ts).
 
   it("records a schedule_lookup_misses row when every provider misses", async () => {
     const originalFetch = globalThis.fetch;
@@ -285,11 +292,11 @@ describe("GET /api/schedule/lookup", () => {
     }
   });
 
-  it("an expired miss (older than the 24h TTL) re-tries the provider chain instead of shadowing forever", async () => {
+  it("an expired miss (older than the 1h TTL) re-tries the provider chain instead of shadowing forever", async () => {
     const db = drizzle(env.DB, { schema });
     await db.insert(schema.scheduleLookupMisses).values({
       flightNo: "EK9997",
-      missedAt: Date.now() - 25 * 60 * 60 * 1000, // 25h ago - past the 24h TTL.
+      missedAt: Date.now() - 61 * 60 * 1000, // 61min ago - past the 1h TTL.
     });
 
     const originalFetch = globalThis.fetch;
@@ -304,6 +311,68 @@ describe("GET /api/schedule/lookup", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("a successful provider resolution CLEARS the miss row (self-heal), so the flight isn't shadowed for the rest of the TTL", async () => {
+    // Exercises `refreshScheduleFromProviders` directly - the same function the real route
+    // invokes via `waitUntil` on a stale cache-hit's background refresh - which is the actual
+    // self-healing path: a fresh (within-TTL) miss row correctly short-circuits the ROUTE'S
+    // own provider chain (see the previous test), but a background refresh or any other
+    // caller that goes straight to the provider chain and succeeds must still clear the old
+    // miss row so a plain lookup right after isn't shadowed for the remainder of the TTL.
+    const db = drizzle(env.DB, { schema });
+    await db.insert(schema.scheduleLookupMisses).values({
+      flightNo: "EK374",
+      missedAt: Date.now(), // fresh - well within the 1h TTL.
+    });
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => Promise.resolve(new Response(fr24Ek372Html));
+    try {
+      await refreshScheduleFromProviders(db, env as unknown as Env, "EK374", "2026-08-17");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const missRow = await env.DB.prepare(
+      "SELECT * FROM schedule_lookup_misses WHERE flight_no = 'EK374'",
+    ).first();
+    expect(missRow).toBeNull();
+
+    // And the negative cache no longer shadows a plain lookup for this flight_no either.
+    const res = await SELF.fetch(
+      "https://example.com/api/schedule/lookup?flight_no=EK374&date=2026-08-17",
+      { headers: { Cookie: cookie } },
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("crowd-confirming a flight clears its negative-cache row, so a mistyped-then-corrected code recovers immediately", async () => {
+    const db = drizzle(env.DB, { schema });
+    await db.insert(schema.scheduleLookupMisses).values({
+      flightNo: "EK9996",
+      missedAt: Date.now(),
+    });
+
+    const res = await SELF.fetch("https://example.com/api/schedule/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Cookie: cookie },
+      body: JSON.stringify({
+        flightNo: "EK9996",
+        legSeq: 0,
+        origin: "DXB",
+        dest: "LHR",
+        depLocal: "09:00",
+        arrLocal: "13:00",
+        dayOffset: 0,
+      }),
+    });
+    expect(res.status).toBe(200);
+
+    const missRow = await env.DB.prepare(
+      "SELECT * FROM schedule_lookup_misses WHERE flight_no = 'EK9996'",
+    ).first();
+    expect(missRow).toBeNull();
   });
 
   // Review fix: a live-resolved flight can touch an airport outside the 108-row seed

@@ -31,9 +31,13 @@ const STALE_MS = 90 * 24 * 60 * 60 * 1000;
 
 /** How long a `schedule_lookup_misses` entry shadows the provider chain for its flight
  * number. Keeps a junk/typo'd code (e.g. repeated attempts while typing) from paying a
- * fresh scrape/API round-trip on every request, while letting a flight that's genuinely
- * added to a provider's data later stop being shadowed after a day. */
-const MISS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+ * fresh scrape/API round-trip on every request. Deliberately short (1h, not e.g. 24h):
+ * the miss row is cleared immediately on any successful resolution (see `clearMiss`), so
+ * this TTL only bounds the worst case where a flight starts operating or a mistyped code
+ * gets corrected WITHOUT a clearing event in between - capping outbound re-tries per junk
+ * code at ~24/day while recovering within an hour rather than shadowing a whole day.
+ */
+const MISS_CACHE_TTL_MS = 60 * 60 * 1000;
 
 /** True when `flightNo` was recorded as a provider miss within the last `MISS_CACHE_TTL_MS`. */
 async function isRecentlyMissed(
@@ -58,6 +62,17 @@ async function recordMiss(database: DrizzleD1Database<typeof schema>, flightNo: 
       target: schema.scheduleLookupMisses.flightNo,
       set: { missedAt: Date.now() },
     });
+}
+
+/** Clears any negative-cache row for `flightNo` so it stops shadowing the provider chain.
+ * Called on every path that proves the flight number IS resolvable after all - a live
+ * provider resolution (the flight started operating, or a same-code retry that happened to
+ * hit a transient provider failure earlier) or a crowd confirm (a human just entered real
+ * data for it) - so the negative cache self-heals immediately instead of waiting out
+ * `MISS_CACHE_TTL_MS`. A no-op (0 rows affected) when there was no miss row, which is the
+ * common case and fine to pay unconditionally rather than SELECT-then-maybe-DELETE. */
+async function clearMiss(database: DrizzleD1Database<typeof schema>, flightNo: string): Promise<void> {
+  await database.delete(schema.scheduleLookupMisses).where(eq(schema.scheduleLookupMisses.flightNo, flightNo));
 }
 
 /** Inserts (or upserts) provider-resolved legs into `flight_schedules` as a freshly-warmed
@@ -177,6 +192,7 @@ export async function refreshScheduleFromProviders(
   if (stillMissing.size > 0) return; // can't safely refresh - leave the stale row as-is.
 
   await cacheProviderLegs(database, flightNo, resolved.legs, resolved.source, Date.now());
+  await clearMiss(database, flightNo);
 }
 
 scheduleRouter.get("/schedule/lookup", async (c) => {
@@ -231,6 +247,10 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
     }
 
     await cacheProviderLegs(database, flightNo, resolved.legs, resolved.source, Date.now());
+    // This flight_no just proved resolvable - a stale miss row (e.g. from an earlier
+    // transient provider failure, or this being the fix for a previously mistyped code)
+    // must not keep shadowing it for the rest of MISS_CACHE_TTL_MS.
+    await clearMiss(database, flightNo);
 
     legRows = await database
       .select()
@@ -348,6 +368,10 @@ scheduleRouter.post("/schedule/confirm", async (c) => {
         lastConfirmedAt: now,
       },
     });
+  // Belt-and-braces: a human just confirmed real data for this flight_no, so any stale
+  // negative-cache row for it (e.g. an earlier mistyped-then-corrected attempt) must not
+  // keep shadowing GET /schedule/lookup.
+  await clearMiss(database, flightNo);
 
   return c.json({ ok: true }, 200);
 });
