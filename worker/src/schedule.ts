@@ -77,12 +77,61 @@ async function cacheProviderLegs(
 }
 
 /**
+ * Ensures every origin/dest IATA code referenced by `legs` exists in the `airports`
+ * table, self-warming it from the RESOLVED PROVIDER LEG's own airport metadata when
+ * possible. Returns the set of codes that are STILL missing after the attempt (empty =
+ * fully resolved, safe to cache/serve).
+ *
+ * Only ever writes a row when a leg carries `originAirport`/`destAirport` with a real
+ * IANA `tz` (currently: AeroDataBox only - see `ProviderLeg.originAirport` doc comment
+ * for why the fr24 scraper can never safely supply this: it only has city+country TEXT,
+ * and neither a country name nor a raw UTC offset is sufficient to derive a correct IANA
+ * zone - many countries span multiple zones, and an offset alone silently breaks across
+ * DST boundaries `wallToUtc` handles for every other airport in this table). A leg with
+ * no usable metadata for a missing code is left unresolved rather than guessed.
+ */
+async function learnAirportsForLegs(
+  database: DrizzleD1Database<typeof schema>,
+  legs: ProviderLeg[],
+): Promise<Set<string>> {
+  const allCodes = new Set(legs.flatMap((leg) => [leg.origin, leg.dest]));
+  const existing = await database
+    .select({ iata: schema.airports.iata })
+    .from(schema.airports)
+    .where(inArray(schema.airports.iata, [...allCodes]));
+  const known = new Set(existing.map((a) => a.iata));
+
+  // Collect learnable {iata -> {name, tz}} pairs from whichever leg happens to carry
+  // metadata for a still-missing code (a multi-leg response might only annotate some legs).
+  const learnable = new Map<string, { name: string; tz: string }>();
+  for (const leg of legs) {
+    if (!known.has(leg.origin) && leg.originAirport && !learnable.has(leg.origin)) {
+      learnable.set(leg.origin, leg.originAirport);
+    }
+    if (!known.has(leg.dest) && leg.destAirport && !learnable.has(leg.dest)) {
+      learnable.set(leg.dest, leg.destAirport);
+    }
+  }
+
+  for (const [iata, meta] of learnable) {
+    await database
+      .insert(schema.airports)
+      .values({ iata, city: meta.name, name: meta.name, tz: meta.tz, source: "live-api" })
+      .onConflictDoNothing();
+    known.add(iata);
+  }
+
+  return new Set([...allCodes].filter((code) => !known.has(code)));
+}
+
+/**
  * Re-resolves `flightNo` via the live provider chain and overwrites its cached rows if
- * successful; a provider miss leaves the (stale) cached rows untouched rather than
- * deleting them - a stale-but-present row is still better than none. Exported (rather
- * than inlined in the route handler) so it's directly `await`-able from tests: the real
- * route only ever invokes it via `c.executionCtx.waitUntil`, which by design does not
- * block the response and isn't synchronously observable from a black-box HTTP test.
+ * successful; a provider miss (or an unresolvable airport - see `learnAirportsForLegs`)
+ * leaves the (stale) cached rows untouched rather than deleting them - a stale-but-present
+ * row is still better than none. Exported (rather than inlined in the route handler) so
+ * it's directly `await`-able from tests: the real route only ever invokes it via
+ * `c.executionCtx.waitUntil`, which by design does not block the response and isn't
+ * synchronously observable from a black-box HTTP test.
  */
 export async function refreshScheduleFromProviders(
   database: DrizzleD1Database<typeof schema>,
@@ -91,9 +140,12 @@ export async function refreshScheduleFromProviders(
   dateIso: string,
 ): Promise<void> {
   const resolved = await resolveFromProviders(flightNo, dateIso, env);
-  if (resolved) {
-    await cacheProviderLegs(database, flightNo, resolved.legs, resolved.source, Date.now());
-  }
+  if (!resolved) return;
+
+  const stillMissing = await learnAirportsForLegs(database, resolved.legs);
+  if (stillMissing.size > 0) return; // can't safely refresh - leave the stale row as-is.
+
+  await cacheProviderLegs(database, flightNo, resolved.legs, resolved.source, Date.now());
 }
 
 scheduleRouter.get("/schedule/lookup", async (c) => {
@@ -124,6 +176,20 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
       return c.json({ error: "unknown_flight" }, 404);
     }
 
+    // A resolved leg can touch an airport outside our seeded set (providers return
+    // arbitrary real-world routes) - attempt to self-warm it, and if that's not possible
+    // (see learnAirportsForLegs doc comment), DEGRADE to the same 404 a provider miss
+    // gets, rather than caching/serving a leg whose tz we can't safely resolve. This is a
+    // deliberate choice over the alternative (guess a tz, e.g. fall back to UTC): every
+    // downstream consumer of `airports.tz` (wallToUtc, report-time calc, ...) assumes a
+    // real IANA name and would silently compute wrong times for a fabricated one - the
+    // same "never present a guess with false confidence" reasoning behind the Task 2 seed
+    // purge. The client's existing manual-entry fallback already handles this response.
+    const stillMissing = await learnAirportsForLegs(database, resolved.legs);
+    if (stillMissing.size > 0) {
+      return c.json({ error: "unknown_flight" }, 404);
+    }
+
     await cacheProviderLegs(database, flightNo, resolved.legs, resolved.source, Date.now());
 
     legRows = await database
@@ -142,10 +208,15 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
     }
   }
 
-  // Resolve every leg's origin/dest tz from the airports table up front. Seed data
-  // guarantees airport coverage for every flight_schedules row, so a missing airport
-  // here means the reference data is broken — fail loud with a 500 rather than
-  // silently dropping legs.
+  // Resolve every leg's origin/dest tz from the airports table up front. Seed rows are
+  // guaranteed coverage at seed time, and a fresh provider-resolved miss above already
+  // learned (or degraded to 404 for) every code it introduced via learnAirportsForLegs -
+  // but a row can still reference an unresolvable airport if it predates that fix, was
+  // crowd-inserted via POST /schedule/confirm with a typo'd/foreign code, or a background
+  // refresh (refreshScheduleFromProviders) failed to learn one after this row was already
+  // cached. In every one of those cases a 500 is never the right response to a client -
+  // degrade to the same unknown_flight 404 a cache miss gets, so the client falls back to
+  // manual entry instead of crashing.
   const iatas = [...new Set(legRows.flatMap((leg) => [leg.origin, leg.dest]))];
   const airportRows = await database
     .select()
@@ -156,10 +227,7 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
   for (const leg of legRows) {
     for (const code of [leg.origin, leg.dest]) {
       if (!airportByIata.has(code)) {
-        return c.json(
-          { error: `schedule reference data error: unknown airport ${code} for flight ${flightNo}` },
-          500,
-        );
+        return c.json({ error: "unknown_flight" }, 404);
       }
     }
   }

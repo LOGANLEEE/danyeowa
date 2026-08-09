@@ -1,0 +1,1 @@
+ALTER TABLE `airports` ADD `source` text;

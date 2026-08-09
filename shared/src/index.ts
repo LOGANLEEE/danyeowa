@@ -112,6 +112,19 @@ export type ProviderLeg = {
    * as-is (including omission -> null) so the cache never presents a nearest-date row as
    * if it were verified for the exact date a caller requested. */
   sourceDateIso?: string;
+  /** Origin airport metadata, when the provider's own response happens to carry it
+   * (currently: AeroDataBox only — its `airport.timeZone` is a genuine IANA name, e.g.
+   * "Asia/Dubai"). Omitted by providers that can't supply a trustworthy tz (the fr24
+   * scraper only has city+country text, which is NOT sufficient to derive an IANA zone
+   * safely — many countries span multiple zones, and a raw UTC offset silently breaks
+   * across DST). Used to self-warm the `airports` table when a live-resolved leg touches
+   * an IATA code outside the seeded set — see schedule.ts `learnAirportsForLegs`. Never
+   * fabricated: a leg with an unresolvable airport is dropped rather than given a guessed
+   * tz, since every downstream consumer (wallToUtc, report calc, ...) assumes `tz` is a
+   * real IANA name and silently produces wrong times otherwise. */
+  originAirport?: { name: string; tz: string };
+  /** Destination airport metadata — see `originAirport`. */
+  destAirport?: { name: string; tz: string };
 };
 
 export type ScheduleLookupResponse = {

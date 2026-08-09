@@ -231,6 +231,96 @@ describe("GET /api/schedule/lookup", () => {
     expect(row).toBeNull();
   });
 
+  // Review fix: a live-resolved flight can touch an airport outside the 108-row seed
+  // (providers return arbitrary real-world routes, unlike the old static seed). These
+  // tests prove that reachable path degrades cleanly instead of 500ing.
+
+  it("fr24-only resolve to an un-seeded airport (no tz metadata available) -> DEGRADES to 404, nothing cached", async () => {
+    // ZAG (Zagreb) is not in scripts/airports-ek.json. fr24's HTML only ever carries
+    // city+country TEXT for an airport (see ProviderLeg.originAirport doc comment for why
+    // that's not safe to turn into an IANA tz) - so this is fr24's OWN un-learnable case,
+    // not a fixture gap. Minimal synthetic row: two data-rows (parser only reads the
+    // first) with DXB (seeded) -> ZAG (not seeded).
+    const zagRowHtml = `<table id="tbl-datatable"><tbody>
+      <tr class=" data-row">
+        <td class="hidden-xs hidden-sm" data-timestamp="1786945200" data-offset="14400">9:40 AM</td>
+        <td title="Dubai International Airport, United Arab Emirates" class="hidden-xs hidden-sm"> Dubai <a href="https://www.flightradar24.com/data/airports/dxb" class="fs-10 fbold">(DXB)</a></td>
+        <td title="Zagreb Airport, Croatia" class="hidden-xs hidden-sm"> Zagreb <a href="https://www.flightradar24.com/data/airports/zag" class="fs-10 fbold">(ZAG)</a></td>
+        <td class="hidden-xs hidden-sm" data-timestamp="1786945200" data-offset="14400">9:40 AM</td>
+        <td class="hidden-xs hidden-sm" data-timestamp="1786958400" data-offset="7200">1:00 PM</td>
+      </tr>
+      <tr class=" data-row"><td class="hidden-xs hidden-sm" data-timestamp="1786858800" data-offset="14400">9:40 AM</td></tr>
+    </tbody></table>`;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => Promise.resolve(new Response(zagRowHtml));
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK779&date=2026-08-17",
+        { headers: { Cookie: cookie } },
+      );
+      expect(res.status).toBe(404);
+      const body = await res.json<{ error: string }>();
+      expect(body.error).toBe("unknown_flight");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    // Nothing cached - a leg with an unresolvable airport is dropped, not served/cached
+    // with a guessed tz.
+    const scheduleRow = await env.DB.prepare(
+      "SELECT * FROM flight_schedules WHERE flight_no = 'EK779'",
+    ).first();
+    expect(scheduleRow).toBeNull();
+    const airportRow = await env.DB.prepare("SELECT * FROM airports WHERE iata = 'ZAG'").first();
+    expect(airportRow).toBeNull();
+  });
+
+  it("AeroDataBox resolve to an un-seeded airport (real IANA tz available) -> self-warms airports, succeeds", async () => {
+    // AeroDataBox's response DOES carry a genuine airport.timeZone, unlike fr24 - so this
+    // is the case where self-warming is actually safe. fr24 is mocked to miss (403) so the
+    // chain falls through to AeroDataBox (AERODATABOX_KEY is set in vitest.config.ts test
+    // bindings); the same fetch mock branches by URL to serve each provider differently.
+    const aeroDataBoxBody = JSON.stringify([
+      {
+        departure: {
+          airport: { iata: "DXB", name: "Dubai International Airport", timeZone: "Asia/Dubai" },
+          scheduledTime: { local: "2026-08-17 09:40+04:00" },
+        },
+        arrival: {
+          airport: { iata: "ZAG", name: "Zagreb Airport", timeZone: "Europe/Zagreb" },
+          scheduledTime: { local: "2026-08-17 13:00+02:00" },
+        },
+      },
+    ]);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("flightradar24.com")) {
+        return Promise.resolve(new Response("blocked", { status: 403 }));
+      }
+      return Promise.resolve(new Response(aeroDataBoxBody));
+    };
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK778&date=2026-08-17",
+        { headers: { Cookie: cookie } },
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json<{ legs: Array<{ origin: string; dest: string; destTz: string }> }>();
+      expect(body.legs[0]).toMatchObject({ origin: "DXB", dest: "ZAG", destTz: "Europe/Zagreb" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    // ZAG must now exist in `airports`, self-warmed with source='live-api'.
+    const airportRow = await env.DB.prepare(
+      "SELECT tz, source FROM airports WHERE iata = 'ZAG'",
+    ).first<{ tz: string; source: string }>();
+    expect(airportRow).toEqual({ tz: "Europe/Zagreb", source: "live-api" });
+  });
+
   it("a stale hit (>90d old, confirm_count=0) is served immediately without waiting on the refresh", async () => {
     const ninetyOneDaysAgo = Date.now() - 91 * 24 * 60 * 60 * 1000;
     await env.DB.prepare(

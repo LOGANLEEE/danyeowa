@@ -16,6 +16,7 @@ export default defineConfig(async () => {
             GOOGLE_CLIENT_ID: "test-google-client-id",
             GOOGLE_CLIENT_SECRET: "test-google-client-secret",
             VAPID_PUBLIC_KEY: "test-vapid-public-key",
+            AERODATABOX_KEY: "test-aerodatabox-key",
           },
         },
       }),

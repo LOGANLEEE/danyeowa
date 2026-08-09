@@ -11,7 +11,16 @@ describe("parseAeroDataBoxFlight", () => {
   it("parses the EK372 fixture to DXB->BKK", () => {
     const legs = parseAeroDataBoxFlight(fixtureFlights[0]!);
     expect(legs).toEqual([
-      { origin: "DXB", dest: "BKK", depLocal: "09:40", arrLocal: "19:25", dayOffset: 0, sourceDateIso: "2026-08-17" },
+      {
+        origin: "DXB",
+        dest: "BKK",
+        depLocal: "09:40",
+        arrLocal: "19:25",
+        dayOffset: 0,
+        sourceDateIso: "2026-08-17",
+        originAirport: { name: "Dubai International Airport", tz: "Asia/Dubai" },
+        destAirport: { name: "Suvarnabhumi Airport", tz: "Asia/Bangkok" },
+      },
     ]);
   });
 
@@ -65,11 +74,29 @@ describe("AeroDataBoxProvider", () => {
     try {
       const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
       expect(legs).toEqual([
-        { origin: "DXB", dest: "BKK", depLocal: "09:40", arrLocal: "19:25", dayOffset: 0, sourceDateIso: "2026-08-17" },
+        {
+          origin: "DXB",
+          dest: "BKK",
+          depLocal: "09:40",
+          arrLocal: "19:25",
+          dayOffset: 0,
+          sourceDateIso: "2026-08-17",
+          originAirport: { name: "Dubai International Airport", tz: "Asia/Dubai" },
+          destAirport: { name: "Suvarnabhumi Airport", tz: "Asia/Bangkok" },
+        },
       ]);
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("omits airport metadata when the response's airport object has no name/timeZone (e.g. a leaner schema variant)", () => {
+    const legs = parseAeroDataBoxFlight({
+      departure: { airport: { iata: "DXB" }, scheduledTime: { local: "2026-08-17 09:40+04:00" } },
+      arrival: { airport: { iata: "BKK" }, scheduledTime: { local: "2026-08-17 19:25+07:00" } },
+    });
+    expect(legs?.[0]?.originAirport).toBeUndefined();
+    expect(legs?.[0]?.destAirport).toBeUndefined();
   });
 
   it("returns null on a non-ok response", async () => {

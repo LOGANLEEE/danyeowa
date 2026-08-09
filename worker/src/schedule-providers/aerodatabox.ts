@@ -10,14 +10,23 @@ import type { ScheduleProvider } from "./index";
  * GET https://aerodatabox.p.rapidapi.com/flights/number/{flightNo}/{dateLocal}
  * -> 200: Array<FlightContract>, where each FlightContract has `departure`/`arrival`
  * (each a `FlightAirportMovementContract`: `airport.iata` + `scheduledTime.local`, a
- * "YYYY-MM-DD HH:mm[:ss]+HH:mm"-shaped local timestamp).
+ * "YYYY-MM-DD HH:mm[:ss]+HH:mm"-shaped local timestamp). Each `airport` object ALSO
+ * carries `name` and `timeZone` (a genuine IANA name, e.g. "Asia/Dubai") - unlike the
+ * fr24 scraper (city/country text only), this is trustworthy enough to self-warm the
+ * `airports` table for a code we haven't seeded (see schedule.ts `learnAirportsForLegs`).
  *
  * Only the fields this provider actually reads are typed below - the real response has
  * many more (status, aircraft, airline, ...) that aren't needed for a schedule leg.
  */
 type AeroDataBoxFlight = {
-  departure?: { airport?: { iata?: string }; scheduledTime?: { local?: string } };
-  arrival?: { airport?: { iata?: string }; scheduledTime?: { local?: string } };
+  departure?: {
+    airport?: { iata?: string; name?: string; timeZone?: string };
+    scheduledTime?: { local?: string };
+  };
+  arrival?: {
+    airport?: { iata?: string; name?: string; timeZone?: string };
+    scheduledTime?: { local?: string };
+  };
 };
 
 /** AeroDataBox provider (RapidAPI). Returns `null` immediately (no fetch) when
@@ -80,10 +89,20 @@ export function parseAeroDataBoxFlight(flight: AeroDataBoxFlight): ProviderLeg[]
     (Date.parse(`${arrDateKey}T00:00:00Z`) - Date.parse(`${depDateKey}T00:00:00Z`)) / (24 * 60 * 60 * 1000),
   );
 
+  // Only attach airport metadata when BOTH name and timeZone are present - a partial
+  // record (e.g. name with no timeZone) is not enough to safely learn a new airport row,
+  // so it's better to omit it entirely than pass through something incomplete.
+  const originName = flight.departure?.airport?.name;
+  const originTz = flight.departure?.airport?.timeZone;
+  const originAirport = originName && originTz ? { name: originName, tz: originTz } : undefined;
+  const destName = flight.arrival?.airport?.name;
+  const destTz = flight.arrival?.airport?.timeZone;
+  const destAirport = destName && destTz ? { name: destName, tz: destTz } : undefined;
+
   // AeroDataBox is queried with the exact requested date (`.../{dateLocal}`), and the
   // response's own departure date confirms what it actually returned - unlike the fr24
   // scraper, this provider IS date-specific.
-  return [{ origin, dest, depLocal, arrLocal, dayOffset, sourceDateIso: depDateKey }];
+  return [{ origin, dest, depLocal, arrLocal, dayOffset, sourceDateIso: depDateKey, originAirport, destAirport }];
 }
 
 /** Extracts "HH:MM" from an AeroDataBox local timestamp ("YYYY-MM-DD HH:mm[:ss][+HH:mm]"). */

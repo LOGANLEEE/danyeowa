@@ -57,6 +57,13 @@
       "when": 1786278248753,
       "tag": "0007_purge_unverified_seed_schedules",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786279641787,
+      "tag": "0008_curved_tag",
+      "breakpoints": true
     }
   ]
 }
