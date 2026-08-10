@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { EK412, openDaySheet, signOutThroughUi } from "./helpers";
+import { EK412, openAddForm, signOutThroughUi } from "./helpers";
 
 /**
  * Family share lifecycle, end to end against a real `wrangler dev` (local D1):
@@ -55,14 +55,13 @@ test("crew shares a link, family views it cookie-less, crew revokes, family sees
 
   // --- Create a trip via the EK412 autofill fast path (same fixture as roster.spec.ts). ---
   await page.getByTestId("tab-calendar").click();
-  await openDaySheet(page, EK412.pickedDate);
-  const sheet = page.getByTestId("day-sheet");
-  await expect(sheet).toBeVisible();
+  await openAddForm(page, EK412.pickedDate);
   await page.getByTestId("flightno-input").fill(EK412.flightNo.slice(2));
   await expect(page.getByTestId("autofill-card")).toBeVisible();
   await page.getByRole("button", { name: /add to roster/i }).click();
-  // Save closes the sheet immediately - no rapid-entry banner/Done step anymore.
-  await expect(sheet).not.toBeVisible();
+  // Save clears the form and the refetch flips the day's detail card to the trip view - no
+  // bottom sheet to close.
+  await expect(page.getByTestId("delete-trip")).toBeVisible();
 
   // The fixture trip is in September while this suite runs in real time well before that
   // (today's actual date), so the "away" hero (the plan's "Home in N days" figure) never

@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
-import { UNKNOWN_FLIGHT_NO, openDaySheet } from "./helpers";
+import { UNKNOWN_FLIGHT_NO, openAddForm } from "./helpers";
 
 /**
- * Manual-fallback + multi-leg coverage for the day sheet's add flow, complementing
+ * Manual-fallback + multi-leg coverage for the inline add-trip form, complementing
  * roster.spec.ts's primary EK412-autofill + sequential-add + Trips-tab + edit/delete flow:
  *   1. Unknown flight (EK999, no flight_schedules row) - lookup miss falls through to the
- *      full manual-entry path. The sheet closes on save (rapid-entry chaining is gone), so a
- *      second manual add happens via a fresh day-sheet open on the next day.
+ *      full manual-entry path. The form clears and the day flips to the trip view on save, so
+ *      a second manual add happens via a fresh empty-day form on the next day.
  *   2. EK384 (DXB -> BKK -> HKG, two legs) - a cheap smoke test that the autofill card
  *      renders both legs of a multi-leg schedule lookup.
  *
@@ -110,19 +110,18 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
   await page.getByTestId("tab-calendar").click();
 
-  const sheet = page.getByTestId("day-sheet");
   const autofillCard = page.getByTestId("autofill-card");
+  const dayCard = page.getByTestId("day-detail-card");
 
   // --- Scenario A: two pairings added sequentially. EK412 (DXB->SYD->CHC, lands away from
-  // home) is added on its picked date; the sheet closes immediately on save (rapid-entry
-  // chaining, the "added" state, and the return-suggestion chip are all gone), so EK413 (the
-  // flight home) is added separately, on its own known operating date, via a fresh day-sheet
-  // open - the same lookup flow as any other flight number, just typed rather than suggested.
-  // Runs FIRST (Sept dates) — pickCalendarDay/openDaySheet (helpers.ts) only navigate the
-  // calendar FORWARD via calendar-next, so every scenario in this file must run in
-  // chronological date order. ---
-  await openDaySheet(page, EK412_RETURN.outbound.pickedDate);
-  await expect(sheet).toBeVisible();
+  // home) is added on its picked date; the form clears and the day flips to the trip view on
+  // save (rapid-entry chaining, the "added" state, and the return-suggestion chip are all
+  // gone), so EK413 (the flight home) is added separately, on its own known operating date,
+  // via a fresh empty-day form - the same lookup flow as any other flight number, just typed
+  // rather than suggested. Runs FIRST (Sept dates) — pickCalendarDay/openAddForm (helpers.ts)
+  // only navigate the calendar FORWARD via calendar-next, so every scenario in this file must
+  // run in chronological date order. ---
+  await openAddForm(page, EK412_RETURN.outbound.pickedDate);
   await page.getByTestId("flightno-input").fill(EK412_RETURN.outbound.flightNo.slice(2));
   await expect(autofillCard).toBeVisible();
   await expect(autofillCard).toContainText(`${EK412_RETURN.outbound.origin} → ${EK412_RETURN.outbound.dest}`);
@@ -130,19 +129,18 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await expect(page.getByTestId("autofill-arr").first()).toHaveValue(EK412_RETURN.outbound.arrTime);
   await page.getByRole("button", { name: /add to roster/i }).click();
 
-  // Save closes the sheet immediately - no rapid-entry banner/Done step anymore.
-  await expect(sheet).not.toBeVisible();
+  // Save clears the form immediately - no rapid-entry banner/Done step anymore.
+  await expect(page.getByTestId("delete-trip")).toBeVisible();
   await expect(page.getByTestId(`calendar-day-${EK412_RETURN.outbound.pickedDate}`)).toHaveClass(
     /bg-accent-soft/,
   );
 
-  await openDaySheet(page, EK412_RETURN.ret.dateIso);
-  await expect(sheet).toBeVisible();
+  await openAddForm(page, EK412_RETURN.ret.dateIso);
   await page.getByTestId("flightno-input").fill(EK412_RETURN.ret.flightNo.slice(2));
   await expect(autofillCard).toBeVisible();
   await expect(autofillCard).toContainText("CHC → SYD");
   await page.getByRole("button", { name: /add to roster/i }).click();
-  await expect(sheet).not.toBeVisible();
+  await expect(page.getByTestId("delete-trip")).toBeVisible();
 
   // Both pairings' spans marked on the calendar (EK412 away-span + EK413's own operating date).
   await expect(page.getByTestId(`calendar-day-${EK412_RETURN.outbound.pickedDate}`)).toHaveClass(
@@ -162,17 +160,19 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   // --- Scenario B: turnaround - "+ add flight" chains EK098 onto EK097's preview as ONE
   // combined trip (leg_seq continues), before any save. The appended card renders alongside
   // the outbound card; saving posts a single trip with both legs, which the Trips tab shows
-  // as one round trip (DXB->BCN->DXB) worth of rows. The sheet closes immediately on save -
+  // as one round trip (DXB->BCN->DXB) worth of rows. The form clears immediately on save -
   // both legs are already combined into the one preview, so there's nothing left to chain. ---
-  await openDaySheet(page, TURNAROUND.pickedDate);
-  await expect(sheet).toBeVisible();
+  await openAddForm(page, TURNAROUND.pickedDate);
   await page.getByTestId("flightno-input").fill(TURNAROUND.outbound.flightNo.slice(2));
   await expect(autofillCard).toBeVisible();
   await expect(autofillCard).toContainText(`${TURNAROUND.outbound.origin} → ${TURNAROUND.outbound.dest}`);
 
   await page.getByTestId("append-flight").click();
   await page.getByTestId("append-flightno-input").fill(TURNAROUND.appended.flightNo.slice(2));
-  await sheet.getByRole("button", { name: "Add", exact: true }).click();
+  // Scoped to the day card, not the whole page: the tab bar's center + button also has an
+  // accessible name of "Add" (its aria-label, no visible text), which `getByRole` would
+  // otherwise match too.
+  await dayCard.getByRole("button", { name: "Add", exact: true }).click();
 
   const appendedCard = page.getByTestId("appended-card");
   await expect(appendedCard).toBeVisible();
@@ -180,7 +180,7 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await expect(appendedCard).toContainText(`${TURNAROUND.appended.origin} → ${TURNAROUND.appended.dest}`);
 
   await page.getByRole("button", { name: /add to roster/i }).click();
-  await expect(sheet).not.toBeVisible();
+  await expect(page.getByTestId("delete-trip")).toBeVisible();
 
   await expect(page.getByTestId(`calendar-day-${TURNAROUND.pickedDate}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${TURNAROUND.spanEndDate}`)).toHaveClass(/bg-accent-soft/);
@@ -194,13 +194,12 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
   await page.getByTestId("tab-calendar").click();
 
-  // --- Scenario 1: unknown flight -> lookup miss -> manual expand -> full save. The sheet
-  // closes on save (rapid-entry chaining is gone), so a second manual add happens via a fresh
-  // day-sheet open on the following day. PICKED_DATE (2026-11-12) is after both scenarios
+  // --- Scenario 1: unknown flight -> lookup miss -> manual expand -> full save. The form
+  // clears on save (rapid-entry chaining is gone), so a second manual add happens via a fresh
+  // empty-day form on the following day. PICKED_DATE (2026-11-12) is after both scenarios
   // above (2026-09-10..16), so the calendar's forward-only navigation reaches it without ever
   // needing to go back. ---
-  await openDaySheet(page, PICKED_DATE);
-  await expect(sheet).toBeVisible();
+  await openAddForm(page, PICKED_DATE);
   await page.getByTestId("flightno-input").fill(UNKNOWN_FLIGHT_NO.slice(2));
   await expect(page.getByText(/unknown flight/i)).toBeVisible();
   await expect(page.getByTestId("autofill-card")).not.toBeVisible();
@@ -220,14 +219,14 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await page.getByLabel(/arrival \(local\)/i).fill(`${PICKED_DATE}T13:35`);
   await page.getByRole("button", { name: /add to roster/i }).click();
 
-  // Save closes the sheet - no rapid-entry banner/next-date suggestion to check anymore.
-  await expect(sheet).not.toBeVisible();
+  // Save flips the day to the trip view - no rapid-entry banner/next-date suggestion to check
+  // anymore.
+  await expect(page.getByTestId("delete-trip")).toBeVisible();
   await expect(page.getByTestId(`calendar-day-${PICKED_DATE}`)).toHaveClass(/bg-accent-soft/);
 
-  // --- Second manual add, on the following day via a fresh day-sheet open. ---
+  // --- Second manual add, on the following day via a fresh empty-day form. ---
   const nextIso = "2026-11-13";
-  await openDaySheet(page, nextIso);
-  await expect(sheet).toBeVisible();
+  await openAddForm(page, nextIso);
   await page.getByTestId("flightno-input").fill(UNKNOWN_FLIGHT_NO.slice(2));
   await expect(page.getByText(/unknown flight/i)).toBeVisible();
   await page.getByTestId("manual-expand").click();
@@ -240,7 +239,7 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await depInput.fill(`${nextIso}T09:15`);
   await page.getByLabel(/arrival \(local\)/i).fill(`${nextIso}T13:35`);
   await page.getByRole("button", { name: /add to roster/i }).click();
-  await expect(sheet).not.toBeVisible();
+  await expect(page.getByTestId("delete-trip")).toBeVisible();
 
   // Both manual-entry days marked on the calendar.
   await expect(page.getByTestId(`calendar-day-${PICKED_DATE}`)).toHaveClass(/bg-accent-soft/);
@@ -254,8 +253,7 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await page.getByTestId("tab-calendar").click();
 
   // --- Scenario 2: multi-leg smoke - EK384 lookup renders both legs in the autofill card. ---
-  await openDaySheet(page, PICKED_DATE);
-  await expect(sheet).toBeVisible();
+  await openAddForm(page, PICKED_DATE);
   await page.getByTestId("flightno-input").fill(EK384.flightNo.slice(2));
 
   await expect(autofillCard).toBeVisible();
@@ -266,11 +264,11 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await expect(page.getByTestId("autofill-dep")).toHaveCount(2);
   await expect(page.getByTestId("autofill-arr")).toHaveCount(2);
 
-  // Not saving this one - no seeded trip to clean up. Dismiss the sheet. (No sign-out here:
-  // the shared session (auth.setup.ts) must stay valid for roster.spec.ts and share.spec.ts,
-  // which run after this file and rely on the same storageState-backed server session —
-  // better-auth's sign-out deletes the session server-side, not just the local cookie, so
-  // signing out here would invalidate the session for every later spec too. Real sign-out UI
-  // coverage lives in share.spec.ts, the last file to run.)
-  await page.getByTestId("sheet-close").click();
+  // Not saving this one - no seeded trip to clean up, and there's no sheet to dismiss (the
+  // form lives on the day card; simply leaving it in preview state is enough). No sign-out
+  // here: the shared session (auth.setup.ts) must stay valid for roster.spec.ts and
+  // share.spec.ts, which run after this file and rely on the same storageState-backed server
+  // session — better-auth's sign-out deletes the session server-side, not just the local
+  // cookie, so signing out here would invalidate the session for every later spec too. Real
+  // sign-out UI coverage lives in share.spec.ts, the last file to run.
 });

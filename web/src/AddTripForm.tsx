@@ -1,39 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { formatLocal } from "@roaster/shared";
 import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
-import type { TripWithFlights } from "./api";
 import { useTripEntry } from "./useTripEntry";
 import type { UseTripEntryReturn } from "./useTripEntry";
-
-type Props = {
-  /** Local ISO date ("YYYY-MM-DD") this sheet is open for. */
-  isoDate: string;
-  /** All trips already fetched by the caller — used for recent-flight chips and to skip
-   * occupied days when suggesting the next rapid-entry date. No extra fetch. */
-  trips: TripWithFlights[];
-  homeTz: string;
-  onClose: () => void;
-  /** Called once, on dismiss (Done / scrim / close / Escape) — caller should refetch trips.
-   * NOT called per-add during rapid entry, to keep chaining snappy. */
-  onChanged: () => void;
-  /** Called after each successful add with the isoDate that was added, so the caller can mark
-   * the day optimistically (no refetch needed for that). */
-  onAdded: (isoDate: string) => void;
-};
-
-/** Humanizes a local ISO calendar date ("YYYY-MM-DD") as "Wed 20 Aug" (weekday short + day
- * + month short) using the home tz's own calendar — reuses formatLocal's withDate branch
- * (weekday/day/month/hour/minute) by feeding it a synthetic noon-UTC instant for that
- * calendar date (noon avoids any tz day-boundary slippage for all realistic offsets), then
- * drops the time portion. */
-export function humanDateLabel(isoDate: string, homeTz: string): string {
-  return formatLocal(`${isoDate}T12:00:00.000Z`, homeTz, { withDate: true }).split(" ").slice(0, 3).join(" ");
-}
-
-function dayTitle(isoDate: string, homeTz: string): string {
-  return `${humanDateLabel(isoDate, homeTz)} — add trip`;
-}
 
 /** Muted "+ add flight" control shown under the preview card while previewing a single
  * flight (hidden once a flight is already appended — the ✕ on the appended card is the only
@@ -97,39 +65,32 @@ function AppendFlightControl({ entry, airlinePrefix }: { entry: UseTripEntryRetu
 }
 
 /** Empty-day content: flight-no -> autofill preview -> "Add to roster", with an inline
- * manual fallback on a lookup miss. Driven entirely by useTripEntry. After a successful add,
- * chains into a rapid-entry "added" state (Plan 6 Task 5): the sheet stays open, the flight
- * field clears + refocuses, recent-flight chips offer a one-tap re-add, and a next-date
- * suggestion (skipping occupied days, including ones just added) advances the picked date for
- * the next entry — without a per-add refetch (the parent marks the day optimistically). */
-function AddTripContent({
+ * manual fallback on a lookup miss. Driven entirely by useTripEntry. Renders directly on the
+ * day-detail card (Plan 11: no more "Add trip" button, no bottom sheet) — a successful save
+ * fires `onSubmitted` and the caller remounts this component (a `key` bump) so it comes back
+ * showing a blank flight-no field while the parent's own refetch brings the new trip in and
+ * flips the card over to the trip view. */
+export default function AddTripForm({
   isoDate,
   homeTz,
-  trips,
-  onDone,
-  onAdded,
+  onSubmitted,
 }: {
   isoDate: string;
   homeTz: string;
-  trips: TripWithFlights[];
-  /** Dismisses the sheet — fires the parent's single refetch, then closes. */
-  onDone: () => void;
-  onAdded: (isoDate: string) => void;
+  /** Fires once, right after a successful save (autofill or manual). */
+  onSubmitted: () => void;
 }) {
   const flightNoInputRef = useRef<HTMLInputElement>(null);
   const pickedDate = isoDate;
   const [airlinePrefix] = useState(getAirlinePrefix);
 
   // One flight per day is the norm, and a turnaround's second leg is appended to this same
-  // preview before saving (see AppendFlightControl) — so a save ends the interaction. The
-  // sheet closes, which fires the parent's refetch and puts the new mark on the grid.
+  // preview before saving (see AppendFlightControl) — so a save ends the interaction here; the
+  // caller (DayDetailCard) remounts this form fresh and refetches.
   const entry = useTripEntry({
     pickedDate,
     homeTz,
-    onSubmitted: () => {
-      onAdded(pickedDate);
-      onDone();
-    },
+    onSubmitted: () => onSubmitted(),
   });
 
   useEffect(() => {
@@ -277,7 +238,6 @@ function AddTripContent({
           </p>
         )}
         </form>
-
       </div>
     );
   }
@@ -376,88 +336,5 @@ function AddTripContent({
         </p>
       )}
     </form>
-  );
-}
-
-/** Bottom sheet: tap any calendar day to view its trip (edit/delete) or add one on an empty
- * day. Fixed, portal-rendered, dismissible via scrim tap or Escape. Focus moves into the
- * sheet on open and returns to the previously focused element on close. */
-export default function DaySheet({ isoDate, trips, homeTz, onClose, onChanged, onAdded }: Props) {
-  const sheetRef = useRef<HTMLDivElement>(null);
-  // Captured lazily on the initial render (before any effects run) so it reflects whatever
-  // had focus BEFORE the sheet opened, not a child's own autofocus effect (e.g. the add
-  // flow's flight-no input) — child effects fire before a parent's, so capturing this in a
-  // useEffect would already see the child's autofocus result instead of the true prior focus.
-  const previouslyFocused = useRef<HTMLElement | null>(null);
-  if (previouslyFocused.current === null) {
-    previouslyFocused.current = document.activeElement as HTMLElement | null;
-  }
-
-  // Single dismiss path for scrim/close-button/Escape/"Done for now" - fires exactly one
-  // refetch (onChanged) regardless of how many adds happened during rapid entry, then closes.
-  function handleDismiss() {
-    onChanged();
-    onClose();
-  }
-
-  useEffect(() => {
-    sheetRef.current?.focus();
-    return () => {
-      previouslyFocused.current?.focus?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") handleDismiss();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose, onChanged]);
-
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
-      <button
-        type="button"
-        data-testid="sheet-scrim"
-        aria-label="Close"
-        onClick={handleDismiss}
-        className="absolute inset-0 bg-black/40"
-      />
-      <div
-        ref={sheetRef}
-        data-testid="day-sheet"
-        role="dialog"
-        aria-modal="true"
-        tabIndex={-1}
-        className="entrance relative flex max-h-[85vh] flex-col gap-4 overflow-y-auto rounded-t-[22px] border-t border-edge bg-card p-4 outline-none"
-        style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
-      >
-        <div className="mx-auto h-1.5 w-10 shrink-0 rounded-full bg-edge" aria-hidden="true" />
-
-        <div className="flex items-center justify-between">
-          <p className="font-semibold text-ink">{dayTitle(isoDate, homeTz)}</p>
-          <button
-            type="button"
-            data-testid="sheet-close"
-            aria-label="Close"
-            onClick={handleDismiss}
-            className="min-h-[44px] rounded border border-edge px-3 py-1 text-sm text-ink-muted transition-colors duration-[120ms] hover:border-ink-muted"
-          >
-            Close
-          </button>
-        </div>
-
-        <AddTripContent
-          isoDate={isoDate}
-          homeTz={homeTz}
-          trips={trips}
-          onDone={handleDismiss}
-          onAdded={onAdded}
-        />
-      </div>
-    </div>,
-    document.body,
   );
 }

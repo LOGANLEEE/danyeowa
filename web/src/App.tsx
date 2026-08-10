@@ -142,9 +142,9 @@ function SignedInApp() {
             now={now}
           />
         ) : (
-          // Calendar tab: month grid + next-duty card. Day taps and the next-duty card open
-          // the DaySheet directly (CalendarHome owns it) to view/edit/delete an existing trip
-          // or add one on an empty day.
+          // Calendar tab: month grid + next-duty card. Day taps select a day, showing its
+          // detail card (CalendarHome owns it) — view/edit/delete an existing trip inline, or
+          // add one on an empty day via the inline add-trip form. No bottom sheet.
           <CalendarHome key={tripsVersion} now={now} openTodayToken={openTodayToken} />
         )}
       </main>

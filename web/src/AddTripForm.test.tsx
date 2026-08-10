@@ -1,20 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import DaySheet, { humanDateLabel } from "./DaySheet";
+import AddTripForm from "./AddTripForm";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
-
-describe("humanDateLabel", () => {
-  it("formats a local ISO date as weekday short + day + month short", () => {
-    expect(humanDateLabel("2026-08-20", "Asia/Dubai")).toBe("Thu 20 Aug");
-  });
-
-  it("uses the given home tz's own calendar, not UTC's", () => {
-    // 2026-08-20 noon UTC is already 2026-08-21 early morning in Pacific/Auckland
-    // (UTC+12), proving the tz argument actually shifts the rendered calendar date.
-    expect(humanDateLabel("2026-08-20", "Pacific/Auckland")).toBe("Fri 21 Aug");
-  });
-});
 
 vi.mock("./api", () => ({
   createTrip: vi.fn(),
@@ -23,7 +11,7 @@ vi.mock("./api", () => ({
   confirmSchedule: vi.fn(),
 }));
 
-describe("DaySheet", () => {
+describe("AddTripForm", () => {
   beforeEach(() => {
     vi.mocked(createTrip).mockReset();
     vi.mocked(getAirport).mockReset();
@@ -37,76 +25,7 @@ describe("DaySheet", () => {
     vi.useRealTimers();
   });
 
-  it("renders a dialog with a day title reflecting the empty-day add flow", () => {
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
-    );
-    expect(screen.getByTestId("day-sheet")).toBeInTheDocument();
-    expect(screen.getByText(/add trip/i)).toBeInTheDocument();
-  });
-
-  it("dismisses when the scrim is clicked", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const onClose = vi.fn();
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={onClose} onChanged={vi.fn()} onAdded={vi.fn()} />,
-    );
-
-    await user.click(screen.getByTestId("sheet-scrim"));
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("dismisses when the close button is clicked", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const onClose = vi.fn();
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={onClose} onChanged={vi.fn()} onAdded={vi.fn()} />,
-    );
-
-    await user.click(screen.getByTestId("sheet-close"));
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("dismisses on Escape", () => {
-    const onClose = vi.fn();
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={onClose} onChanged={vi.fn()} onAdded={vi.fn()} />,
-    );
-
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("refetches exactly once when dismissed (scrim, close button, or Escape all route through the same dismiss)", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    const onChanged = vi.fn();
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={onChanged} onAdded={vi.fn()} />,
-    );
-
-    await user.click(screen.getByTestId("sheet-close"));
-    expect(onChanged).toHaveBeenCalledTimes(1);
-  });
-
-  it("moves focus into the sheet on open and restores it on close", () => {
-    const outsideButton = document.createElement("button");
-    outsideButton.textContent = "outside";
-    document.body.appendChild(outsideButton);
-    outsideButton.focus();
-    expect(document.activeElement).toBe(outsideButton);
-
-    const { unmount } = render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
-    );
-
-    expect(document.activeElement).toBe(screen.getByTestId("day-sheet"));
-
-    unmount();
-    expect(document.activeElement).toBe(outsideButton);
-    outsideButton.remove();
-  });
-
-  it("add flow: happy path posts the same UTC payload as the original stepper, then fires confirmSchedule", async () => {
+  it("add flow: happy path posts the same UTC payload as the original stepper, then fires confirmSchedule and onSubmitted", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     vi.mocked(lookupSchedule).mockResolvedValue({
       legs: [
@@ -147,11 +66,9 @@ describe("DaySheet", () => {
         },
       ],
     });
-    const onAdded = vi.fn();
+    const onSubmitted = vi.fn();
 
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={onAdded} />,
-    );
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={onSubmitted} />);
 
     // The airline code ("EK") is a fixed adornment, not typed - only the digits go into the input.
     await user.type(screen.getByTestId("flightno-input"), "412");
@@ -176,48 +93,7 @@ describe("DaySheet", () => {
     expect(payload!.legs[0]).not.toHaveProperty("reportUtc");
 
     await waitFor(() => expect(confirmSchedule).toHaveBeenCalled());
-    await waitFor(() => expect(onAdded).toHaveBeenCalledWith("2026-08-20"));
-  });
-
-  it("closes the sheet after a successful add", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    vi.mocked(lookupSchedule).mockResolvedValue({
-      legs: [
-        {
-          legSeq: 0,
-          origin: "DXB",
-          dest: "LHR",
-          depLocal: "09:15",
-          arrLocal: "13:35",
-          dayOffset: 0,
-          originTz: "Asia/Dubai",
-          destTz: "Europe/London",
-          confirmCount: 3,
-        },
-      ],
-    });
-    vi.mocked(createTrip).mockResolvedValue({
-      id: "trip-1",
-      userId: "u1",
-      label: null,
-      createdAt: Date.now(),
-      flights: [],
-    });
-    const onClose = vi.fn();
-    const onAdded = vi.fn();
-
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={onClose} onChanged={vi.fn()} onAdded={onAdded} />,
-    );
-
-    await user.type(screen.getByTestId("flightno-input"), "412");
-    await vi.advanceTimersByTimeAsync(400);
-    await screen.findByTestId("autofill-card");
-    await user.click(screen.getByRole("button", { name: /add to roster/i }));
-
-    // No more rapid-entry chaining - a successful add marks the day (onAdded) then closes.
-    await waitFor(() => expect(onAdded).toHaveBeenCalledWith("2026-08-20"));
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledTimes(1));
   });
 
   it("add flow: renders no report input or chip anywhere in the autofill card (flight-code-only entry)", async () => {
@@ -238,9 +114,7 @@ describe("DaySheet", () => {
       ],
     });
 
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
-    );
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
 
     await user.type(screen.getByTestId("flightno-input"), "412");
     await vi.advanceTimersByTimeAsync(400);
@@ -251,7 +125,7 @@ describe("DaySheet", () => {
     expect(screen.queryByLabelText(/report/i)).not.toBeInTheDocument();
   });
 
-  it("add flow: shows a muted 'checking schedule…' line and disables Add while the lookup is in flight", async () => {
+  it("shows a muted 'checking schedule…' line and disables Add while the lookup is in flight", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     let resolveLookup!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
     vi.mocked(lookupSchedule).mockReturnValue(
@@ -260,9 +134,7 @@ describe("DaySheet", () => {
       }),
     );
 
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
-    );
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
 
     expect(screen.queryByTestId("schedule-loading")).not.toBeInTheDocument();
 
@@ -295,14 +167,12 @@ describe("DaySheet", () => {
     expect(screen.queryByTestId("schedule-loading")).not.toBeInTheDocument();
   });
 
-  it("does not render manual-expand until a lookup actually misses (not on a fresh sheet)", async () => {
+  it("does not render manual-expand until a lookup actually misses (not on a fresh form)", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
-    );
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
 
-    // Fresh sheet, no input yet - manual-expand doesn't exist at all.
+    // Fresh form, no input yet - manual-expand doesn't exist at all.
     expect(screen.queryByTestId("manual-expand")).not.toBeInTheDocument();
 
     vi.mocked(lookupSchedule).mockResolvedValue(null);
@@ -316,9 +186,7 @@ describe("DaySheet", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     vi.mocked(lookupSchedule).mockResolvedValue(null);
 
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
-    );
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
 
     await user.type(screen.getByTestId("flightno-input"), "999");
     await vi.advanceTimersByTimeAsync(400);
@@ -334,7 +202,7 @@ describe("DaySheet", () => {
     expect(screen.queryByText(/report \(local\)/i)).not.toBeInTheDocument();
   });
 
-  it("manual entry: after a successful save, closes the sheet the same as the autofill path", async () => {
+  it("manual entry: after a successful save, fires onSubmitted the same as the autofill path", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     vi.mocked(lookupSchedule).mockResolvedValue(null);
     vi.mocked(getAirport).mockImplementation(async (iata: string) => {
@@ -349,12 +217,9 @@ describe("DaySheet", () => {
       createdAt: Date.now(),
       flights: [],
     });
-    const onClose = vi.fn();
-    const onAdded = vi.fn();
+    const onSubmitted = vi.fn();
 
-    render(
-      <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={onClose} onChanged={vi.fn()} onAdded={onAdded} />,
-    );
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={onSubmitted} />);
 
     await user.type(screen.getByTestId("flightno-input"), "999");
     await vi.advanceTimersByTimeAsync(400);
@@ -375,8 +240,7 @@ describe("DaySheet", () => {
     await user.click(screen.getByRole("button", { name: /add to roster/i }));
 
     await waitFor(() => expect(createTrip).toHaveBeenCalled());
-    await waitFor(() => expect(onAdded).toHaveBeenCalledWith("2026-08-20"));
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledTimes(1));
   });
 
   describe("turnaround chaining (+ add flight)", () => {
@@ -411,9 +275,7 @@ describe("DaySheet", () => {
 
     async function previewEk097(user: ReturnType<typeof userEvent.setup>) {
       vi.mocked(lookupSchedule).mockResolvedValueOnce({ legs: EK097_LEGS });
-      render(
-        <DaySheet isoDate="2026-08-20" trips={[]} homeTz="Asia/Dubai" onClose={vi.fn()} onChanged={vi.fn()} onAdded={vi.fn()} />,
-      );
+      render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
       await user.type(screen.getByTestId("flightno-input"), "097");
       await vi.advanceTimersByTimeAsync(400);
       await screen.findByTestId("autofill-card");
