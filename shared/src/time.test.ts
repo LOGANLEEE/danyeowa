@@ -10,6 +10,7 @@ import {
   relativeUntil,
   reportDefault,
   tripDaysInMonth,
+  formatDuration,
   tripProgress,
   wallToUtc,
 } from "./time";
@@ -515,5 +516,28 @@ describe("localDateKey", () => {
 
   it("matches the UTC calendar date when tz offset keeps the same local day", () => {
     expect(localDateKey("2026-08-10T12:00:00Z", "Asia/Dubai")).toBe("2026-08-10");
+  });
+});
+
+describe("formatDuration", () => {
+  it("keeps the minutes for a sector under a day", () => {
+    expect(formatDuration("2026-08-18T05:40:00.000Z", "2026-08-18T12:25:00.000Z")).toBe("6h 45m");
+  });
+
+  it("drops the minutes when they are zero", () => {
+    expect(formatDuration("2026-08-18T05:00:00.000Z", "2026-08-18T11:00:00.000Z")).toBe("6h");
+  });
+
+  it("reads in minutes under the hour", () => {
+    expect(formatDuration("2026-08-18T05:00:00.000Z", "2026-08-18T05:45:00.000Z")).toBe("45m");
+  });
+
+  it("switches to days once a trip spans one, where minutes stop mattering", () => {
+    expect(formatDuration("2026-08-15T06:00:00.000Z", "2026-08-18T02:20:00.000Z")).toBe("2d 20h");
+  });
+
+  it("returns empty for a non-positive or unparseable span rather than a bogus figure", () => {
+    expect(formatDuration("2026-08-18T12:00:00.000Z", "2026-08-18T12:00:00.000Z")).toBe("");
+    expect(formatDuration("not-a-date", "2026-08-18T12:00:00.000Z")).toBe("");
   });
 });

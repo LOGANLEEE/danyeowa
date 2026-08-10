@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CalendarHome from "./CalendarHome";
-import { getTrips } from "./api";
+import { deleteTrip, getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 
 vi.mock("./api", () => ({
@@ -117,17 +117,18 @@ describe("CalendarHome", () => {
     expect(await screen.findByTestId("calendar-next")).toBeInTheDocument();
     expect(screen.getByText("Mon")).toBeInTheDocument();
 
-    // Next-duty card: FULL route chain (every stop, not just endpoints) + dates line,
-    // flight/trip-length muted line, report line.
+    // Next-duty card: FULL route chain (every stop, not just endpoints) + flight/trip-length
+    // muted line, date line, times line. Report/leave-home no longer render on this card.
     const card = screen.getByTestId("next-duty-card");
     expect(card).toHaveTextContent("DXB → SIN → AKL");
-    expect(card).toHaveTextContent("EK448");
-    expect(card).toHaveTextContent(/trip 2 days/i);
-
-    const reportTime = await screen.findByText("04:45");
-    expect(reportTime.className).toContain("num");
-    expect(reportTime.className).toContain("text-report");
-    expect(card).toHaveTextContent(/leave home/i);
+    expect(card).toHaveTextContent("EK448 · Tue 11 Aug · 2 days");
+    // The sector rail carries elapsed time between the two figures.
+    expect(card).toHaveTextContent("1d 2h");
+    expect(card).toHaveTextContent("Tue 11 Aug");
+    expect(card).toHaveTextContent("06:15");
+    expect(card).toHaveTextContent("16:20");
+    expect(card).not.toHaveTextContent(/leave home/i);
+    expect(card).not.toHaveTextContent(/report/i);
   });
 
   it("marks a trip day on the grid", async () => {
@@ -198,7 +199,8 @@ describe("CalendarHome", () => {
     const detail = await screen.findByTestId("day-detail-card");
     expect(detail).toHaveTextContent("DXB → SIN → AKL");
     expect(detail).toHaveTextContent("EK448");
-    expect(screen.getByTestId("day-detail-action")).toHaveTextContent(/edit trip/i);
+    // Icon-only button now - identify by its aria-label, not text content.
+    expect(screen.getByTestId("day-detail-action")).toHaveAttribute("aria-label", "Edit trip");
     expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
   });
 
@@ -215,7 +217,7 @@ describe("CalendarHome", () => {
     expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
     const detail = await screen.findByTestId("day-detail-card");
     expect(detail).toHaveTextContent("EK448");
-    expect(screen.getByTestId("day-detail-action")).toHaveTextContent(/edit trip/i);
+    expect(screen.getByTestId("day-detail-action")).toHaveAttribute("aria-label", "Edit trip");
   });
 
   it("second tap on the already-selected trip day does not open the day sheet (trip days expand in place)", async () => {
@@ -249,7 +251,7 @@ describe("CalendarHome", () => {
 
     expect(await screen.findByTestId("trip-legs-panel")).toBeInTheDocument();
     expect(action).toHaveAttribute("aria-expanded", "true");
-    expect(action).toHaveTextContent(/hide details/i);
+    expect(action).toHaveAttribute("aria-label", "Hide flight details");
     expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
   });
 
@@ -337,5 +339,44 @@ describe("CalendarHome", () => {
     expect(sheet).toHaveTextContent(/add trip/i);
     expect(screen.getByTestId("flightno-input")).toBeInTheDocument();
     expect(screen.queryByTestId("delete-trip")).not.toBeInTheDocument();
+  });
+
+  it("delete-trip -> confirm-delete on the day card deletes the trip and refetches", async () => {
+    vi.mocked(getTrips).mockResolvedValueOnce([aklTrip]);
+    vi.mocked(deleteTrip).mockResolvedValue(undefined);
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+
+    // Delete lives on the card header itself - no need to expand first.
+    await user.click(screen.getByTestId("delete-trip"));
+    expect(screen.getByText(/can't be undone/i)).toBeInTheDocument();
+
+    vi.mocked(getTrips).mockResolvedValueOnce([]);
+    await user.click(screen.getByTestId("confirm-delete"));
+
+    await waitFor(() => expect(deleteTrip).toHaveBeenCalledWith("trip-1"));
+    // onChanged -> refetch: a second getTrips call beyond the initial render.
+    await waitFor(() => expect(getTrips).toHaveBeenCalledTimes(2));
+  });
+
+  it("a delete failure from the day card shows an alert and keeps the confirm row open", async () => {
+    vi.mocked(getTrips).mockResolvedValueOnce([aklTrip]);
+    vi.mocked(deleteTrip).mockRejectedValue(new Error("network error"));
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+
+    await user.click(screen.getByTestId("delete-trip"));
+    await user.click(screen.getByTestId("confirm-delete"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/network error/i);
+    expect(screen.getByTestId("confirm-delete")).toBeInTheDocument();
   });
 });

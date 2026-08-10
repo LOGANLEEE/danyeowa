@@ -68,6 +68,23 @@ export function formatHours(hours: number): string {
   return `${days}d ${remainingHours}h`;
 }
 
+/**
+ * Elapsed time between two instants, for the calendar card's sector rail: "6h 45m" under a
+ * day, "2d 20h" over it (minutes stop mattering once a trip spans days), "45m" under an hour.
+ * Unlike formatHours this keeps the minutes — a sector's duration is the number a crew reads,
+ * and rounding 6h45m to "7h" throws away the point of showing it.
+ */
+export function formatDuration(fromUtcIso: string, toUtcIso: string): string {
+  const ms = Date.parse(toUtcIso) - Date.parse(fromUtcIso);
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  const totalMinutes = Math.round(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours >= 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+  if (hours === 0) return `${minutes}m`;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+}
+
 /** Local calendar date for `utcIso` in `tz`, as an ISO date string ("YYYY-MM-DD"). */
 export function localDateKey(utcIso: string, tz: string): string {
   const fmt = new Intl.DateTimeFormat("en-CA", {
