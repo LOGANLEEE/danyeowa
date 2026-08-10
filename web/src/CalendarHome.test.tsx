@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CalendarHome from "./CalendarHome";
-import { confirmSchedule, createTrip, getTrips, lookupSchedule } from "./api";
+import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 
 vi.mock("./api", () => ({
@@ -153,19 +153,6 @@ describe("CalendarHome", () => {
     expect(await screen.findByTestId("day-sheet")).toBeInTheDocument();
   });
 
-  it("clicking the next-duty card opens the day sheet showing that trip", async () => {
-    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
-    const user = userEvent.setup();
-
-    render(<CalendarHome now={now} />);
-
-    await user.click(await screen.findByTestId("next-duty-card"));
-
-    const sheet = await screen.findByTestId("day-sheet");
-    expect(sheet).toHaveTextContent("EK448");
-    expect(sheet).toHaveTextContent("EK449");
-  });
-
   it("single tap on an empty calendar day selects it and shows a no-duty detail card with an Add trip button", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
     const user = userEvent.setup();
@@ -215,7 +202,23 @@ describe("CalendarHome", () => {
     expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
   });
 
-  it("second tap on the already-selected trip day opens the day sheet showing that trip", async () => {
+  it("tapping the next-duty card selects that duty's day instead of opening the add sheet", async () => {
+    // Regression: this used to call setSheetIsoDate, which now opens an ADD sheet — for a day
+    // that already holds this very trip. The card is the way into a trip, so select the day.
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("next-duty-card"));
+
+    expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
+    const detail = await screen.findByTestId("day-detail-card");
+    expect(detail).toHaveTextContent("EK448");
+    expect(screen.getByTestId("day-detail-action")).toHaveTextContent(/edit trip/i);
+  });
+
+  it("second tap on the already-selected trip day does not open the day sheet (trip days expand in place)", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
     const user = userEvent.setup();
 
@@ -225,11 +228,11 @@ describe("CalendarHome", () => {
     await screen.findByTestId("day-detail-card");
     await user.click(screen.getByTestId("calendar-day-2026-08-11"));
 
-    const sheet = await screen.findByTestId("day-sheet");
-    expect(sheet).toHaveTextContent("EK448");
+    expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
+    expect(screen.getByTestId("day-detail-card")).toHaveTextContent("EK448");
   });
 
-  it("the detail card's action button also opens the day sheet directly", async () => {
+  it("the detail card's action button expands a trip day in place (trip-legs-panel), without opening the day sheet", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
     const user = userEvent.setup();
 
@@ -237,10 +240,17 @@ describe("CalendarHome", () => {
 
     await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
     await screen.findByTestId("day-detail-card");
-    await user.click(screen.getByTestId("day-detail-action"));
 
-    const sheet = await screen.findByTestId("day-sheet");
-    expect(sheet).toHaveTextContent("EK448");
+    expect(screen.queryByTestId("trip-legs-panel")).not.toBeInTheDocument();
+    const action = screen.getByTestId("day-detail-action");
+    expect(action).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(action);
+
+    expect(await screen.findByTestId("trip-legs-panel")).toBeInTheDocument();
+    expect(action).toHaveAttribute("aria-expanded", "true");
+    expect(action).toHaveTextContent(/hide details/i);
+    expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
   });
 
   it("tapping a different day switches the selection instead of opening the sheet", async () => {
@@ -308,127 +318,6 @@ describe("CalendarHome", () => {
 
     const sheet = await screen.findByTestId("day-sheet");
     expect(sheet).toHaveTextContent(/add trip/i);
-  });
-
-  it("marks a day optimistically after an add, without refetching, then refetches once on Done", async () => {
-    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
-    vi.mocked(lookupSchedule).mockResolvedValue({
-      legs: [
-        {
-          legSeq: 0,
-          origin: "DXB",
-          dest: "LHR",
-          depLocal: "09:15",
-          arrLocal: "13:35",
-          dayOffset: 0,
-          originTz: "Asia/Dubai",
-          destTz: "Europe/London",
-          confirmCount: 3,
-        },
-      ],
-    });
-    vi.mocked(createTrip).mockImplementation(async () => ({
-      id: "trip-added",
-      userId: "u1",
-      label: null,
-      createdAt: Date.now(),
-      flights: [],
-    }));
-    vi.mocked(confirmSchedule).mockResolvedValue(undefined);
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-
-    render(<CalendarHome now={now} />);
-    await screen.findByTestId("calendar-next");
-
-    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
-    await screen.findByTestId("day-detail-card");
-    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
-    await screen.findByTestId("day-sheet");
-
-    expect(getTrips).toHaveBeenCalledTimes(1);
-
-    await user.type(screen.getByTestId("flightno-input"), "ek001");
-    await vi.advanceTimersByTimeAsync(400);
-    await screen.findByTestId("autofill-card");
-    await user.click(screen.getByRole("button", { name: /add to roster/i }));
-    await waitFor(() => expect(createTrip).toHaveBeenCalled());
-    await screen.findByTestId("rapid-banner");
-
-    // No refetch fired by the add itself.
-    expect(getTrips).toHaveBeenCalledTimes(1);
-
-    await user.click(screen.getByTestId("done-button"));
-    await waitFor(() => expect(getTrips).toHaveBeenCalledTimes(2));
-
-    vi.useRealTimers();
-  });
-
-  it("hides the stale 'No trips yet' empty state and its CTA once a day is marked optimistically (fresh account, first add)", async () => {
-    vi.mocked(getTrips).mockResolvedValue([]);
-    vi.mocked(confirmSchedule).mockResolvedValue(undefined);
-    vi.mocked(lookupSchedule).mockResolvedValue({
-      legs: [
-        {
-          legSeq: 0,
-          origin: "DXB",
-          dest: "LHR",
-          depLocal: "09:15",
-          arrLocal: "13:35",
-          dayOffset: 0,
-          originTz: "Asia/Dubai",
-          destTz: "Europe/London",
-          confirmCount: 3,
-        },
-      ],
-    });
-    vi.mocked(createTrip).mockResolvedValue({
-      id: "trip-fresh",
-      userId: "u1",
-      label: null,
-      createdAt: Date.now(),
-      flights: [
-        {
-          id: "fresh-f1",
-          tripId: "trip-fresh",
-          userId: "u1",
-          flightNo: "EK001",
-          origin: "DXB",
-          dest: "LHR",
-          depUtc: "2026-08-20T05:15:00.000Z",
-          arrUtc: "2026-08-20T12:35:00.000Z",
-          reportUtc: "2026-08-20T03:45:00.000Z",
-          depTz: "Asia/Dubai",
-          arrTz: "Europe/London",
-          source: "manual",
-          notes: null,
-          legSeq: 0,
-        },
-      ],
-    });
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-
-    render(<CalendarHome now={now} />);
-    expect(await screen.findByText(/no trips yet/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /add your first/i })).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
-    await screen.findByTestId("day-detail-card");
-    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
-    await user.type(screen.getByTestId("flightno-input"), "ek001");
-    await vi.advanceTimersByTimeAsync(400);
-    await screen.findByTestId("autofill-card");
-    await user.click(screen.getByRole("button", { name: /add to roster/i }));
-    await screen.findByTestId("rapid-banner");
-
-    // The sheet is still open (rapid-entry chaining), but the empty-state text/CTA behind
-    // it must be gone now that a day has been marked optimistically - trips is still []
-    // (no refetch until Done), so without this fix the stale empty state would still show.
-    expect(screen.queryByText(/no trips yet/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /add your first/i })).not.toBeInTheDocument();
-
-    vi.useRealTimers();
   });
 
   it("skips to the next trip-free day when today already has a trip", async () => {

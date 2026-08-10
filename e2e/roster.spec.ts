@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, EK412, humanDateLabel, openDaySheet } from "./helpers";
+import { E2E_EMAIL, EK412, openDaySheet } from "./helpers";
 
 /**
  * Full e2e coverage of the Plan 6 tabbed, calendar-first UX against a real `wrangler dev`
@@ -13,9 +13,10 @@ import { E2E_EMAIL, EK412, humanDateLabel, openDaySheet } from "./helpers";
  * share.spec.ts's storageState-backed context relies on (it runs after this file). Real
  * sign-out UI coverage lives in share.spec.ts, the last file in the suite to run.
  *
- * Full flow covered: calendar home, day sheet, autofill add, rapid-entry chaining (banner +
- * recent-chip re-add on the suggested next date), Done's single refetch, both days marked on
- * the calendar, the Trips tab listing both, a detail edit, and both deletes.
+ * Full flow covered: calendar home, day sheet, autofill add (the sheet auto-closes and
+ * refetches on save - rapid-entry chaining is gone), a second EK412 pairing added the same
+ * way via a fresh day-sheet open on a later free day, both days marked on the calendar, the
+ * Trips tab listing both, a detail edit, and both deletes.
  *
  * Idempotent by construction: any trip left over from a prior failed run is deleted by the
  * cleanup loop below before assertions begin, so re-running never accumulates state.
@@ -25,7 +26,7 @@ import { E2E_EMAIL, EK412, humanDateLabel, openDaySheet } from "./helpers";
  * with Google" button through Playwright. That path is covered by unit tests (Login.test.tsx)
  * that assert authClient.signIn.social is called correctly, plus manual verification.
  */
-test("calendar home -> day sheet -> autofill add -> rapid chain -> Trips tab -> edit -> delete both", async ({
+test("calendar home -> day sheet -> autofill add -> sequential add -> Trips tab -> edit -> delete both", async ({
   page,
 }) => {
   // Already signed in via the shared storageState (auth.setup.ts) — go straight to the app.
@@ -61,11 +62,10 @@ test("calendar home -> day sheet -> autofill add -> rapid chain -> Trips tab -> 
 
   // EK412 autofill: real seeded DXB->SYD->CHC schedule row (scripts/ek-schedules.json), a
   // genuinely multi-day pairing — its away-span (home-base local dates) runs firstIso
-  // through EK412.spanEndDate, TWO calendar days, not one. This is the shape that exposed
-  // the rapid-entry "next date" bug (fixed: DaySheet.tsx's nextFreeDate/justAdded now track
-  // the full saved span, not just the tapped date) — using it here, rather than a same-day
-  // single-leg flight, is the point of this scenario, not incidental.
-  await page.getByTestId("flightno-input").fill(EK412.flightNo);
+  // through EK412.spanEndDate, TWO calendar days, not one. Exercising the calendar's
+  // whole-span marking (both days get bg-accent-soft, not just the tapped one) is the point
+  // of this scenario, not incidental — a same-day single-leg flight couldn't cover it.
+  await page.getByTestId("flightno-input").fill(EK412.flightNo.slice(2));
   const autofillCard = page.getByTestId("autofill-card");
   await expect(autofillCard).toBeVisible();
   await expect(autofillCard).toContainText(`${EK412.origin} → ${EK412.dest}`);
@@ -73,51 +73,30 @@ test("calendar home -> day sheet -> autofill add -> rapid chain -> Trips tab -> 
   await expect(page.getByTestId("autofill-arr").first()).toHaveValue(EK412.arrTime);
   await page.getByRole("button", { name: /add to roster/i }).click();
 
-  // --- Rapid state: banner asserts the added date and the computed next-suggested date -
-  // the day AFTER the trip's full away-span ends, not the day after the tapped date (which
-  // would still be inside this same trip's own span, the bug this scenario guards against). ---
-  const suggestedNext = EK412.nextFreeDate;
-
-  const banner = page.getByTestId("rapid-banner");
-  await expect(banner).toBeVisible();
-  await expect(banner).toContainText(`Added ${humanDateLabel(firstIso)}`);
-  await expect(page.getByTestId("rapid-next-date")).toHaveText(humanDateLabel(suggestedNext));
-
-  // Flight-no field cleared + refocused. Recent-flight chips derive from the trips already
-  // fetched when the sheet opened (no live update mid-session — see useRecentFlights),
-  // so the just-saved flight isn't offered as a chip yet on this same open sheet; it will
-  // be after Done's refetch + reopening the sheet, exercised below.
-  await expect(page.getByTestId("flightno-input")).toHaveValue("");
-
-  // --- Done for now: single refetch, back to the calendar, BOTH span days marked. The
-  // tapped day (firstIso) stays selected through the sheet closing, so its detail card -
+  // --- Save closes the sheet immediately (rapid-entry chaining is gone) and fires a single
+  // refetch. The tapped day (firstIso) stays selected through the close, so its detail card -
   // not the next-duty card - is what's showing now. ---
-  await page.getByTestId("done-button").click();
   await expect(sheet).not.toBeVisible();
   await expect(page.getByTestId("day-detail-card")).toBeVisible();
   await expect(page.getByTestId(`calendar-day-${firstIso}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${EK412.spanEndDate}`)).toHaveClass(/bg-accent-soft/);
-  // The day between firstIso and spanEndDate (there isn't one here - span is exactly 2
-  // days) and the suggested next date itself must NOT be marked - it's genuinely free.
-  await expect(page.getByTestId(`calendar-day-${suggestedNext}`)).not.toHaveClass(/bg-accent-soft/);
+  // A free day after the span ends must NOT be marked.
+  const secondPickedDate = EK412.nextFreeDate;
+  await expect(page.getByTestId(`calendar-day-${secondPickedDate}`)).not.toHaveClass(/bg-accent-soft/);
 
-  // --- Reopen the sheet on the suggested next date: now that trips have been refetched,
-  // the flight is offered as a recent-flight chip. Tap it to re-add the same flight there. ---
-  await openDaySheet(page, suggestedNext);
+  // --- Second pairing: tap the next free day and add the SAME flight again the normal way -
+  // no recent-flight chip anymore, just type it. ---
+  await openDaySheet(page, secondPickedDate);
   await expect(sheet).toBeVisible();
-  const recentChip = page.getByTestId(`recent-chip-${EK412.flightNo}`);
-  await expect(recentChip).toBeVisible();
-  await recentChip.click();
+  await page.getByTestId("flightno-input").fill(EK412.flightNo.slice(2));
   await expect(autofillCard).toBeVisible();
   await page.getByRole("button", { name: /add to roster/i }).click();
-  await expect(banner).toContainText(`Added ${humanDateLabel(suggestedNext)}`);
-
-  // Done again -> the first pairing's span AND the second pairing's span are all marked.
-  await page.getByTestId("done-button").click();
   await expect(sheet).not.toBeVisible();
+
+  // The first pairing's span AND the second pairing's span are all marked.
   await expect(page.getByTestId(`calendar-day-${firstIso}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${EK412.spanEndDate}`)).toHaveClass(/bg-accent-soft/);
-  await expect(page.getByTestId(`calendar-day-${suggestedNext}`)).toHaveClass(/bg-accent-soft/);
+  await expect(page.getByTestId(`calendar-day-${secondPickedDate}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${EK412.secondPairingSpanEndDate}`)).toHaveClass(/bg-accent-soft/);
 
   // --- Trips tab lists both pairings - one row PER LEG (TripsView.tsx renders a row per

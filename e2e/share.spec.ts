@@ -58,11 +58,10 @@ test("crew shares a link, family views it cookie-less, crew revokes, family sees
   await openDaySheet(page, EK412.pickedDate);
   const sheet = page.getByTestId("day-sheet");
   await expect(sheet).toBeVisible();
-  await page.getByTestId("flightno-input").fill(EK412.flightNo);
+  await page.getByTestId("flightno-input").fill(EK412.flightNo.slice(2));
   await expect(page.getByTestId("autofill-card")).toBeVisible();
   await page.getByRole("button", { name: /add to roster/i }).click();
-  await expect(page.getByTestId("rapid-banner")).toBeVisible();
-  await page.getByTestId("done-button").click();
+  // Save closes the sheet immediately - no rapid-entry banner/Done step anymore.
   await expect(sheet).not.toBeVisible();
 
   // The fixture trip is in September while this suite runs in real time well before that
