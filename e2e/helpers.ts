@@ -27,9 +27,9 @@ export const FIXTURE = {
 };
 
 /** Unknown-to-schedule flight number used to exercise the manual-entry fallback path. Shares
- * the app's fixed "EK" airline-code prefix — DaySheet.tsx's flightno-input only accepts typed
- * digits, the prefix itself isn't user-typeable — so it can be composed by filling just its
- * digit suffix, the same way every other fixture flight number in this suite is. */
+ * the app's fixed "EK" airline-code prefix — AddTripForm.tsx's flightno-input only accepts
+ * typed digits, the prefix itself isn't user-typeable — so it can be composed by filling just
+ * its digit suffix, the same way every other fixture flight number in this suite is. */
 export const UNKNOWN_FLIGHT_NO = "EK999";
 
 /**
@@ -52,9 +52,8 @@ export const EK412 = {
   reportLocal: "08:45",
   pickedDate: "2026-09-10",
   spanEndDate: "2026-09-11",
-  // A free day after the span ends - the day sheet no longer suggests it (rapid-entry
-  // chaining is gone), so this is just the picked date for the suite's own second sequential
-  // add of the same flight.
+  // A free day after the span ends - nothing suggests it (rapid-entry chaining is gone), so
+  // this is just the picked date for the suite's own second sequential add of the same flight.
   nextFreeDate: "2026-09-12",
   // A second EK412 pairing re-added (by typing the same flight number again) on
   // `nextFreeDate` spans 2026-09-12 through 2026-09-13 (same 2-day shape, one day later) -
@@ -66,8 +65,9 @@ export const EK412 = {
  * Clicks a calendar day cell identified by `iso` ("YYYY-MM-DD") ONCE, advancing the visible
  * month via the "next month" chevron first if the cell isn't rendered yet (the day-picker
  * and trip calendars both default to the current month view and only render 6 weeks of
- * the active month/adjacent-month spillover). A single tap only SELECTS the day (shows its
- * detail card) on the calendar-home grid — use `openDaySheet` to land on the day sheet.
+ * the active month/adjacent-month spillover). A single tap SELECTS the day, showing its
+ * detail card on the calendar-home grid — for an empty day that card IS the add-trip form
+ * (no second tap, no sheet); use `openAddForm` to also wait for that form to be ready.
  */
 export async function pickCalendarDay(page: Page, iso: string): Promise<void> {
   for (let i = 0; i < 24; i++) {
@@ -82,14 +82,13 @@ export async function pickCalendarDay(page: Page, iso: string): Promise<void> {
 }
 
 /**
- * Opens the day sheet for `iso` on the calendar-home grid: taps the day (selecting it, per
- * `pickCalendarDay`), then taps it again (the day-detail-tap contract's second-tap-opens-sheet
- * rule) and waits for the sheet to appear.
+ * Selects `iso` on the calendar-home grid (via `pickCalendarDay`) and waits for its inline
+ * add-trip form to be ready — the empty-day detail card renders the form directly, one tap,
+ * no bottom sheet.
  */
-export async function openDaySheet(page: Page, iso: string): Promise<void> {
+export async function openAddForm(page: Page, iso: string): Promise<void> {
   await pickCalendarDay(page, iso);
-  await page.getByTestId(`calendar-day-${iso}`).click();
-  await page.getByTestId("day-sheet").waitFor();
+  await page.getByTestId("flightno-input").waitFor();
 }
 
 /** Fetches the most recently captured dev-fallback OTP via the E2E_TEST_MODE-gated route. */

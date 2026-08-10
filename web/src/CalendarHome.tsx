@@ -10,16 +10,17 @@ import {
 } from "@roaster/shared";
 import { deleteTrip, getTrips } from "./api";
 import type { TripWithFlights } from "./api";
-import DaySheet, { humanDateLabel } from "./DaySheet";
+import AddTripForm from "./AddTripForm";
 import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
+import { humanDateLabel } from "./lib/dateLabel";
 import TripLegsPanel from "./TripLegsPanel";
 import TripsCalendar from "./TripsCalendar";
 import { useTripEntry } from "./useTripEntry";
 
 type Props = {
   now: Date;
-  /** Bumped by the parent (e.g. the tab bar's center + button) to open the day sheet for
-   * today, or the next trip-free day if today already has a trip. */
+  /** Bumped by the parent (e.g. the tab bar's center + button) to select today on the
+   * calendar, or the next trip-free day if today already has a trip. */
   openTodayToken?: number;
 };
 
@@ -117,19 +118,21 @@ function TripSummaryLines({
 
 /** The card shown below the calendar grid while a day is selected (tap-to-detail), replacing
  * the next-duty card for the duration of the selection. A trip day expands IN PLACE to its
- * legs and a delete control — viewing or removing a trip never opens a sheet, which is
- * reserved for adding one. Empty day: a muted no-duty line plus "Add trip". */
+ * legs and a delete control. An empty day shows the add-trip form (AddTripForm) directly —
+ * no "Add trip" button and no bottom sheet — remounted (via a key bump) after each successful
+ * add so it comes back blank while the parent's refetch flips the card to the trip view. */
 function DayDetailCard({
   isoDate,
   trip,
   homeTz,
-  onOpenSheet,
+  onAdded,
   onChanged,
 }: {
   isoDate: string;
   trip: TripWithFlights | null;
   homeTz: string;
-  onOpenSheet: () => void;
+  /** Marks the day optimistically on the calendar grid ahead of the parent's refetch. */
+  onAdded: (isoDate: string) => void;
   onChanged: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -137,6 +140,10 @@ function DayDetailCard({
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
+  // Bumped after every successful inline add so AddTripForm below remounts fresh (blank
+  // flight-no field) instead of sitting on its just-submitted preview while the parent's
+  // refetch is still in flight.
+  const [addFormKey, setAddFormKey] = useState(0);
   const legs = trip ? [...trip.flights].sort((a, b) => a.legSeq - b.legSeq) : [];
   const firstLeg = legs[0] ?? null;
   const [airlinePrefix] = useState(getAirlinePrefix);
@@ -195,16 +202,18 @@ function DayDetailCard({
 
   if (!trip || !firstLeg) {
     return (
-      <div data-testid="day-detail-card" className="hairline flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
+      <div data-testid="day-detail-card" className="hairline flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
         <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
-        <button
-          type="button"
-          data-testid="day-detail-action"
-          onClick={onOpenSheet}
-          className="mt-2 min-h-[48px] self-start rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
-        >
-          Add trip
-        </button>
+        <AddTripForm
+          key={`${isoDate}-${addFormKey}`}
+          isoDate={isoDate}
+          homeTz={homeTz}
+          onSubmitted={() => {
+            onAdded(isoDate);
+            onChanged();
+            setAddFormKey((k) => k + 1);
+          }}
+        />
       </div>
     );
   }
@@ -348,16 +357,14 @@ function DayDetailCard({
 
 /** Calendar tab: month grid (trip days marked) + an active-pairing progress card (when a
  * trip spans `now`) + a compact next-duty card. Single tap on any day SELECTS it, showing its
- * detail (trip summary + Edit, or "no duty" + Add) in place of the next-duty card; a second
- * tap on the already-selected day opens the DaySheet (view+edit an existing trip, or add one
- * on an empty day) — state-based, so rapid double-tap works naturally on mobile without a
- * dblclick hack. The upcoming list lives on the Trips tab (see TripsView.tsx). */
+ * detail in place of the next-duty card: a trip day expands to its legs + Edit/Delete, an
+ * empty day shows the add-trip form (AddTripForm) inline — no "Add trip" button, no bottom
+ * sheet, one tap fewer. The upcoming list lives on the Trips tab (see TripsView.tsx). */
 export default function CalendarHome({ now, openTodayToken }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
-  const [sheetIsoDate, setSheetIsoDate] = useState<string | null>(null);
   const [selectedIso, setSelectedIso] = useState<string | null>(null);
-  // Days added this rapid-entry session, marked on the grid immediately without a refetch -
-  // cleared whenever the sheet dismisses and actually refetches (its own data now covers them).
+  // Days added inline, marked on the grid immediately ahead of the refetch each add triggers
+  // (cleared once that refetch's own data covers them).
   const [optimisticDays, setOptimisticDays] = useState<Set<string>>(new Set());
   const nowMs = now.getTime();
 
@@ -375,7 +382,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
 
   // Finds the trip (if any) covering a given local calendar date, by checking every trip's
   // away-day span for that date's month against tripDaysInMonth (mirrors TripsCalendar's own
-  // per-day lookup so the sheet always matches what the grid renders).
+  // per-day lookup so the day card always matches what the grid renders).
   function tripForDay(iso: string): TripWithFlights | null {
     if (!trips) return null;
     const [yearStr, monthStr] = iso.split("-");
@@ -392,11 +399,10 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
     return null;
   }
 
-  // Opens the sheet for today, or the next trip-free day after today when today already has
-  // a trip — used by the tab bar's center + button. Tracks the LAST SEEN token (initialized
-  // to the current value, not 0) so a remount with an already-bumped token (e.g. `key` change
-  // from an unrelated trip edit) doesn't spuriously reopen the sheet — only an actual change
-  // does.
+  // Selects today, or the next trip-free day after today when today already has a trip — used
+  // by the tab bar's center + button. Tracks the LAST SEEN token (initialized to the current
+  // value, not 0) so a remount with an already-bumped token (e.g. `key` change from an
+  // unrelated trip edit) doesn't spuriously reselect — only an actual change does.
   const lastSeenToken = useRef(openTodayToken);
   useEffect(() => {
     if (openTodayToken === lastSeenToken.current || trips === null) return;
@@ -405,7 +411,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
     let candidate = today;
     for (let i = 0; i < 366; i++) {
       if (!tripForDay(candidate)) {
-        setSheetIsoDate(candidate);
+        setSelectedIso(candidate);
         return;
       }
       const [y, m, d] = candidate.split("-").map(Number) as [number, number, number];
@@ -413,18 +419,6 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTodayToken, trips]);
-
-  // Single tap: select (or switch selection to) the tapped day. Second tap on the day
-  // that's already selected: open the sheet instead (trip-edit or add mode).
-  function handleDayTap(iso: string) {
-    if (iso === selectedIso && !tripForDay(iso)) {
-      // Second tap on an already-selected EMPTY day opens the add sheet. A day that already
-      // has a trip stays with its card, which expands in place instead.
-      setSheetIsoDate(iso);
-    } else {
-      setSelectedIso(iso);
-    }
-  }
 
   if (trips === null) {
     return <p className="text-ink-muted">loading…</p>;
@@ -444,7 +438,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           now={now}
           trips={trips}
           homeTz={homeTz}
-          onPickDay={handleDayTap}
+          onPickDay={setSelectedIso}
           optimisticIsoDates={optimisticDays}
           selectedIso={selectedIso}
         />
@@ -454,37 +448,28 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
               isoDate={selectedIso}
               trip={tripForDay(selectedIso)}
               homeTz={homeTz}
-              onOpenSheet={() => setSheetIsoDate(selectedIso)}
+              onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
               onChanged={refetch}
             />
           </div>
         ) : (
-          // trips stays [] during rapid entry (no refetch until dismiss) - once a day has
-          // been marked optimistically, this "no trips yet" empty state + its CTA would
-          // otherwise stay stale, visible behind the open sheet, contradicting what the
-          // grid above already shows.
+          // trips stays [] until the first add's own refetch resolves - once a day has been
+          // marked optimistically, this "no trips yet" empty state + its CTA would otherwise
+          // stay stale, contradicting what the grid above already shows. In practice the day
+          // is always selected by the time an add happens (the form lives on its detail card),
+          // so this branch never actually races the optimistic mark - kept as a guard anyway.
           optimisticDays.size === 0 && (
             <>
               <p className="text-ink-muted">No trips yet — add your first</p>
               <button
                 type="button"
-                onClick={() => setSheetIsoDate(localDateKey(now.toISOString(), homeTz))}
+                onClick={() => setSelectedIso(localDateKey(now.toISOString(), homeTz))}
                 className="rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
               >
                 Add your first trip
               </button>
             </>
           )
-        )}
-        {sheetIsoDate && (
-          <DaySheet
-            isoDate={sheetIsoDate}
-            trips={trips}
-            homeTz={homeTz}
-            onClose={() => setSheetIsoDate(null)}
-            onChanged={refetch}
-            onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
-          />
         )}
       </div>
     );
@@ -515,7 +500,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
         now={now}
         trips={trips}
         homeTz={nextDuty.depTz}
-        onPickDay={handleDayTap}
+        onPickDay={setSelectedIso}
         optimisticIsoDates={optimisticDays}
         selectedIso={selectedIso}
       />
@@ -564,32 +549,21 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
             isoDate={selectedIso}
             trip={tripForDay(selectedIso)}
             homeTz={homeTz}
-            onOpenSheet={() => setSheetIsoDate(selectedIso)}
-              onChanged={refetch}
+            onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
+            onChanged={refetch}
           />
         </div>
       ) : (
         <button
           type="button"
           data-testid="next-duty-card"
-          // Selects the duty's day rather than opening the sheet: the sheet is add-only now,
-          // and this day already has a trip — the day card is what shows and edits it.
+          // Selects the duty's day — this day already has a trip, so its own detail card
+          // (not an add form) is what shows and edits it.
           onClick={() => setSelectedIso(localDateKey(firstLeg.depUtc, firstLeg.depTz))}
           className="hairline stagger-2 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
         >
           <TripSummaryLines legs={legs} />
         </button>
-      )}
-
-      {sheetIsoDate && (
-        <DaySheet
-          isoDate={sheetIsoDate}
-          trips={trips}
-          homeTz={homeTz}
-          onClose={() => setSheetIsoDate(null)}
-          onChanged={refetch}
-          onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
-        />
       )}
     </div>
   );

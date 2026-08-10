@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, EK412, openDaySheet } from "./helpers";
+import { E2E_EMAIL, EK412, openAddForm } from "./helpers";
 
 /**
  * Full e2e coverage of the Plan 6 tabbed, calendar-first UX against a real `wrangler dev`
@@ -13,10 +13,10 @@ import { E2E_EMAIL, EK412, openDaySheet } from "./helpers";
  * share.spec.ts's storageState-backed context relies on (it runs after this file). Real
  * sign-out UI coverage lives in share.spec.ts, the last file in the suite to run.
  *
- * Full flow covered: calendar home, day sheet, autofill add (the sheet auto-closes and
- * refetches on save - rapid-entry chaining is gone), a second EK412 pairing added the same
- * way via a fresh day-sheet open on a later free day, both days marked on the calendar, the
- * Trips tab listing both, a detail edit, and both deletes.
+ * Full flow covered: calendar home, the inline add-trip form on an empty day's detail card,
+ * autofill add (a save clears the form and refetches, flipping the card to the trip view - no
+ * bottom sheet), a second EK412 pairing added the same way on a later free day, both days
+ * marked on the calendar, the Trips tab listing both, a detail edit, and both deletes.
  *
  * Idempotent by construction: any trip left over from a prior failed run is deleted by the
  * cleanup loop below before assertions begin, so re-running never accumulates state.
@@ -26,7 +26,7 @@ import { E2E_EMAIL, EK412, openDaySheet } from "./helpers";
  * with Google" button through Playwright. That path is covered by unit tests (Landing.test.tsx)
  * that assert authClient.signIn.social is called correctly, plus manual verification.
  */
-test("calendar home -> day sheet -> autofill add -> sequential add -> Trips tab -> edit -> delete both", async ({
+test("calendar home -> inline add-trip form -> autofill add -> sequential add -> Trips tab -> edit -> delete both", async ({
   page,
 }) => {
   // Already signed in via the shared storageState (auth.setup.ts) — go straight to the app.
@@ -52,13 +52,11 @@ test("calendar home -> day sheet -> autofill add -> sequential add -> Trips tab 
   }
   await expect(emptyState).toBeVisible();
 
-  // --- Tap a day on the calendar home to open the sheet's add flow. Single tap selects the
-  // day (shows its detail card); a second tap opens the sheet (openDaySheet does both). ---
+  // --- Tap a day on the calendar home: single tap selects it and, since it's empty, its
+  // detail card IS the add-trip form (openAddForm selects + waits for the form). ---
   await page.getByTestId("tab-calendar").click();
   const firstIso = EK412.pickedDate;
-  await openDaySheet(page, firstIso);
-  const sheet = page.getByTestId("day-sheet");
-  await expect(sheet).toBeVisible();
+  await openAddForm(page, firstIso);
 
   // EK412 autofill: real seeded DXB->SYD->CHC schedule row (scripts/ek-schedules.json), a
   // genuinely multi-day pairing — its away-span (home-base local dates) runs firstIso
@@ -73,11 +71,10 @@ test("calendar home -> day sheet -> autofill add -> sequential add -> Trips tab 
   await expect(page.getByTestId("autofill-arr").first()).toHaveValue(EK412.arrTime);
   await page.getByRole("button", { name: /add to roster/i }).click();
 
-  // --- Save closes the sheet immediately (rapid-entry chaining is gone) and fires a single
-  // refetch. The tapped day (firstIso) stays selected through the close, so its detail card -
-  // not the next-duty card - is what's showing now. ---
-  await expect(sheet).not.toBeVisible();
-  await expect(page.getByTestId("day-detail-card")).toBeVisible();
+  // --- Save clears the form and the parent's refetch flips the tapped day's own detail card
+  // (it stays selected throughout) from the add form over to the trip view. ---
+  await expect(page.getByTestId("delete-trip")).toBeVisible();
+  await expect(page.getByTestId("flightno-input")).not.toBeVisible();
   await expect(page.getByTestId(`calendar-day-${firstIso}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${EK412.spanEndDate}`)).toHaveClass(/bg-accent-soft/);
   // A free day after the span ends must NOT be marked.
@@ -86,12 +83,11 @@ test("calendar home -> day sheet -> autofill add -> sequential add -> Trips tab 
 
   // --- Second pairing: tap the next free day and add the SAME flight again the normal way -
   // no recent-flight chip anymore, just type it. ---
-  await openDaySheet(page, secondPickedDate);
-  await expect(sheet).toBeVisible();
+  await openAddForm(page, secondPickedDate);
   await page.getByTestId("flightno-input").fill(EK412.flightNo.slice(2));
   await expect(autofillCard).toBeVisible();
   await page.getByRole("button", { name: /add to roster/i }).click();
-  await expect(sheet).not.toBeVisible();
+  await expect(page.getByTestId("delete-trip")).toBeVisible();
 
   // The first pairing's span AND the second pairing's span are all marked.
   await expect(page.getByTestId(`calendar-day-${firstIso}`)).toHaveClass(/bg-accent-soft/);
