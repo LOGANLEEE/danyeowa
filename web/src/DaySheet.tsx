@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatLocal } from "@roaster/shared";
-import { getAirlinePrefix } from "./lib/airlinePrefix";
+import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
 import type { TripWithFlights } from "./api";
 import { useTripEntry } from "./useTripEntry";
 import type { UseTripEntryReturn } from "./useTripEntry";
@@ -29,13 +29,6 @@ type Props = {
  * drops the time portion. */
 export function humanDateLabel(isoDate: string, homeTz: string): string {
   return formatLocal(`${isoDate}T12:00:00.000Z`, homeTz, { withDate: true }).split(" ").slice(0, 3).join(" ");
-}
-
-/** The typed part of a flight number: everything after the configured airline code. A value
- * that doesn't carry the prefix (e.g. after the setting changed) is shown as-is rather than
- * silently truncated. */
-function digitsOf(flightNo: string, prefix: string): string {
-  return flightNo.startsWith(prefix) ? flightNo.slice(prefix.length) : flightNo;
 }
 
 function dayTitle(isoDate: string, homeTz: string): string {

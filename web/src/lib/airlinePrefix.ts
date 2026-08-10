@@ -26,3 +26,10 @@ export function setAirlinePrefix(prefix: string): void {
     // ignore
   }
 }
+
+/** The typed part of a flight number: everything after the configured airline code. A value
+ * that doesn't carry the prefix (e.g. after the setting changed) is shown as-is rather than
+ * silently truncated. */
+export function digitsOf(flightNo: string, prefix: string): string {
+  return flightNo.startsWith(prefix) ? flightNo.slice(prefix.length) : flightNo;
+}

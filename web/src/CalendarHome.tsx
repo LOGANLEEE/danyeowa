@@ -11,8 +11,10 @@ import {
 import { deleteTrip, getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 import DaySheet, { humanDateLabel } from "./DaySheet";
+import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
 import TripLegsPanel from "./TripLegsPanel";
 import TripsCalendar from "./TripsCalendar";
+import { useTripEntry } from "./useTripEntry";
 
 type Props = {
   now: Date;
@@ -130,8 +132,50 @@ function DayDetailCard({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const legs = trip ? [...trip.flights].sort((a, b) => a.legSeq - b.legSeq) : [];
   const firstLeg = legs[0] ?? null;
+  const [airlinePrefix] = useState(getAirlinePrefix);
+
+  // Drives the pencil's edit mode with the SAME debounced-lookup + autofill + save pipeline
+  // as the add sheet (useTripEntry), not a second implementation of it. Called unconditionally
+  // (hook rules) even on a trip-free day, where it's simply inert - the edit UI that would
+  // drive it never mounts there, so `pickedDate` falling back to the bare day is never read.
+  const entry = useTripEntry({
+    pickedDate: firstLeg ? localDateKey(firstLeg.depUtc, firstLeg.depTz) : isoDate,
+    homeTz,
+    onSubmitted: async () => {
+      // Trip-free days never expose the edit UI, so `trip` is always set by the time this
+      // actually fires - this guard exists only so the type checker (and any future caller)
+      // doesn't have to assume it.
+      if (!trip) return;
+      // Create-then-delete: the hook has already created the replacement trip by the time
+      // this callback runs. Only now is the original removed - a failed create above leaves
+      // the old trip untouched instead of destroying a roster entry for nothing.
+      try {
+        await deleteTrip(trip.id);
+      } catch (err) {
+        setEditError(
+          `Saved the new flight, but the old one may still be on your roster: ${
+            err instanceof Error ? err.message : "failed to remove it"
+          }`,
+        );
+      }
+      setExpanded(false);
+      onChanged();
+    },
+  });
+
+  // Pencil click primes the field with the trip's CURRENT flight number (not blank) so edit
+  // mode opens showing what's already on the roster - and clears any stale error from a
+  // previous attempt.
+  useEffect(() => {
+    if (expanded && firstLeg) {
+      entry.setFlightNo(firstLeg.flightNo);
+      setEditError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
 
   async function confirmDelete() {
     if (!trip) return;
@@ -225,8 +269,73 @@ function DayDetailCard({
       )}
 
       {expanded && (
-        <div className="mt-3">
-          <TripLegsPanel trip={trip} />
+        <div className="mt-3 flex flex-col gap-3">
+          {/* Same flight-number field as the add sheet: airline code as static text, digits
+              typed. Editing it re-runs the schedule lookup below - the legs panel underneath
+              still shows what's ON the roster right now, so Save's replacement is never a
+              surprise. */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void entry.handleAutofillSubmit();
+            }}
+            className="flex flex-col gap-3"
+          >
+            <div>
+              <label htmlFor="card-edit-flightno" className="text-sm text-ink-muted">
+                Flight number
+              </label>
+              <div className="mt-1 flex items-center gap-2 rounded border border-edge bg-raised px-3 py-2 transition-colors duration-[120ms] focus-within:border-accent focus-within:ring-2 focus-within:ring-accent">
+                <span className="num text-lg text-ink-muted">{airlinePrefix}</span>
+                <input
+                  id="card-edit-flightno"
+                  data-testid="card-edit-flightno"
+                  inputMode="numeric"
+                  value={digitsOf(entry.flightNo, airlinePrefix)}
+                  onChange={(e) => entry.setFlightNo(airlinePrefix + e.target.value.replace(/\D/g, ""))}
+                  className="num w-full bg-transparent text-lg text-ink outline-none focus-visible:outline-none"
+                />
+              </div>
+            </div>
+
+            {entry.resolving && <p className="text-sm text-ink-muted">checking schedule…</p>}
+            {entry.lookupMiss && (
+              <p role="alert" className="text-sm text-danger">
+                unknown flight — try another number
+              </p>
+            )}
+            {entry.error && (
+              <p role="alert" className="text-sm text-danger">
+                {entry.error}
+              </p>
+            )}
+            {editError && (
+              <p role="alert" className="text-sm text-danger">
+                {editError}
+              </p>
+            )}
+
+            <TripLegsPanel trip={trip} />
+
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                data-testid="card-edit-save"
+                disabled={!entry.autofillLegs || entry.submitting || entry.resolving}
+                className="min-h-[44px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                data-testid="card-edit-cancel"
+                onClick={() => setExpanded(false)}
+                className="min-h-[44px] rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
