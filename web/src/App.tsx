@@ -3,6 +3,7 @@ import type { HealthResponse, Me } from "@roaster/shared";
 import type { TripWithFlights } from "./api";
 import { authClient } from "./auth-client";
 import CalendarHome from "./CalendarHome";
+import InstallBanner from "./InstallBanner";
 import Landing from "./Landing";
 import Login from "./Login";
 import SettingsView from "./SettingsView";
@@ -109,6 +110,8 @@ function SignedInApp() {
         className={`flex flex-1 flex-col items-center px-4 py-6 ${isSignedIn ? "pb-24" : ""}`}
         style={isSignedIn ? { paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" } : undefined}
       >
+        {isSignedIn && <InstallBanner />}
+
         {me === "loading" ? (
           <p className="text-ink-muted">loading…</p>
         ) : me === null ? (

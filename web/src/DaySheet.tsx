@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { Flight, LegPatch, ScheduleSuggestion } from "@roaster/shared";
-import { addDaysIso, formatHours, formatLocal, localDateKey, wallToUtc } from "@roaster/shared";
-import { deleteTrip, patchFlight, suggestReturns } from "./api";
+import type { ScheduleSuggestion } from "@roaster/shared";
+import { addDaysIso, formatHours, formatLocal, localDateKey } from "@roaster/shared";
+import { deleteTrip, suggestReturns } from "./api";
 import type { TripWithFlights } from "./api";
+// Crew's home base IATA — return suggestions are hidden once a trip already ends here.
+import { HOME_BASE_IATA } from "./lib/homeBase";
 import { useRecentFlights } from "./useRecentFlights";
 import { useTripEntry } from "./useTripEntry";
 import type { UseTripEntryReturn } from "./useTripEntry";
-
-/** Crew's home base IATA — return suggestions are hidden once a trip already ends here. */
-const HOME_BASE_IATA = "DXB";
 
 /** Max return-suggestion chips rendered (server may return up to 8; client caps display at 3
  * per the plan's chip-row density budget). */
@@ -65,36 +64,6 @@ type Props = {
   onAdded: (isoDate: string) => void;
 };
 
-type LegEdits = { dep: string; arr: string };
-
-/** Converts a UTC ISO instant to a local wall `YYYY-MM-DDTHH:mm` string in the given tz. */
-function utcToDatetimeLocal(utcIso: string, tz: string): string {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const parts = fmt.formatToParts(new Date(utcIso));
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
-}
-
-/** Converts a `YYYY-MM-DDTHH:mm` datetime-local value to the wall-ISO seconds format wallToUtc expects. */
-function toWallIso(datetimeLocal: string): string {
-  return datetimeLocal.length === 16 ? `${datetimeLocal}:00` : datetimeLocal;
-}
-
-function legEditsFrom(flight: Flight): LegEdits {
-  return {
-    dep: utcToDatetimeLocal(flight.depUtc, flight.depTz),
-    arr: utcToDatetimeLocal(flight.arrUtc, flight.arrTz),
-  };
-}
-
 /** Humanizes a local ISO calendar date ("YYYY-MM-DD") as "Wed 20 Aug" (weekday short + day
  * + month short) using the home tz's own calendar — reuses formatLocal's withDate branch
  * (weekday/day/month/hour/minute) by feeding it a synthetic noon-UTC instant for that
@@ -109,87 +78,27 @@ function dayTitle(isoDate: string, homeTz: string, hasTrip: boolean): string {
   return hasTrip ? label : `${label} — add trip`;
 }
 
-/** Inline leg editor for an existing trip's flight — the edit essentials from TripDetail. */
-function LegEditor({
-  flight,
-  onSaved,
-}: {
-  flight: Flight;
-  onSaved: (updated: Flight) => void;
-}) {
-  const [edits, setEdits] = useState<LegEdits>(() => legEditsFrom(flight));
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  async function save() {
-    setError(null);
-    const patch: LegPatch = {};
-    const depUtc = wallToUtc(toWallIso(edits.dep), flight.depTz);
-    const arrUtc = wallToUtc(toWallIso(edits.arr), flight.arrTz);
-    // reportUtc is intentionally never patched from this form — omitting depUtc's own report
-    // recompute means the server's PATCH handler will still fall through to recomputing
-    // report_utc from the new dep_utc (worker/src/trips.ts), matching the product behavior:
-    // moving the departure keeps the report time consistent (dep - 90min) automatically.
-    if (depUtc !== flight.depUtc) patch.depUtc = depUtc;
-    if (arrUtc !== flight.arrUtc) patch.arrUtc = arrUtc;
-
-    if (Object.keys(patch).length === 0) return;
-
-    setSaving(true);
-    try {
-      const updated = await patchFlight(flight.id, patch);
-      onSaved(updated);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update flight");
-    } finally {
-      setSaving(false);
-    }
-  }
-
+/** Same stroke-icon vocabulary as the tab bar (see TabBar.tsx's ICON_PROPS). */
+function TrashIcon() {
   return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={`dep-${flight.id}`} className="text-sm text-ink-muted">
-        Departure (local)
-      </label>
-      <input
-        id={`dep-${flight.id}`}
-        type="datetime-local"
-        value={edits.dep}
-        onChange={(e) => setEdits({ ...edits, dep: e.target.value })}
-        className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
-      />
-
-      <label htmlFor={`arr-${flight.id}`} className="text-sm text-ink-muted">
-        Arrival (local)
-      </label>
-      <input
-        id={`arr-${flight.id}`}
-        type="datetime-local"
-        value={edits.arr}
-        onChange={(e) => setEdits({ ...edits, arr: e.target.value })}
-        className="num rounded border border-edge bg-raised px-3 py-2 text-ink outline-none transition-colors duration-[120ms] focus:border-accent"
-      />
-
-      {error && (
-        <p role="alert" className="text-sm text-ink-muted">
-          {error}
-        </p>
-      )}
-
-      <button
-        type="button"
-        data-testid="save-leg"
-        disabled={saving}
-        onClick={save}
-        className="min-h-[48px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
-      >
-        Save
-      </button>
-    </div>
+    <svg
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13M9 7V4h6v3" />
+    </svg>
   );
 }
 
-/** Existing-trip content: route summary per leg, inline edit, delete-with-confirm. */
+/** Existing-trip content: route summary per leg (times come from the schedule provider, so
+ * they are read-only here) plus delete-with-confirm. */
 function ExistingTripContent({
   trip,
   onChanged,
@@ -199,8 +108,6 @@ function ExistingTripContent({
   onChanged: () => void;
   onClose: () => void;
 }) {
-  const [flights, setFlights] = useState<Flight[]>(trip.flights);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,48 +126,19 @@ function ExistingTripContent({
 
   return (
     <div className="flex flex-col gap-3">
-      {[...flights]
+      {[...trip.flights]
         .sort((a, b) => a.legSeq - b.legSeq)
-        .map((flight) => {
-          const isEditing = editingId === flight.id;
-          return (
-            <div key={flight.id} className="flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-ink">
-                  {flight.origin} → {flight.dest} <span className="text-ink-muted">{flight.flightNo}</span>
-                </p>
-                {!isEditing && (
-                  <button
-                    type="button"
-                    data-testid="edit-leg"
-                    onClick={() => setEditingId(flight.id)}
-                    className="min-h-[44px] rounded border border-edge px-3 py-1 text-sm text-ink transition-colors duration-[120ms] hover:border-ink-muted"
-                  >
-                    Edit
-                  </button>
-                )}
-              </div>
-
-              {isEditing ? (
-                <LegEditor
-                  flight={flight}
-                  onSaved={(updated) => {
-                    setFlights((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
-                    setEditingId(null);
-                    onChanged();
-                  }}
-                />
-              ) : (
-                <>
-                  <p className="num text-sm text-ink-muted">
-                    dep {formatLocal(flight.depUtc, flight.depTz)} → arr {formatLocal(flight.arrUtc, flight.arrTz)}
-                  </p>
-                  <p className="num text-sm text-report">Report {formatLocal(flight.reportUtc, flight.depTz)}</p>
-                </>
-              )}
-            </div>
-          );
-        })}
+        .map((flight) => (
+          <div key={flight.id} className="hairline flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
+            <p className="text-ink">
+              {flight.origin} → {flight.dest} <span className="text-ink-muted">{flight.flightNo}</span>
+            </p>
+            <p className="num text-sm text-ink-muted">
+              dep {formatLocal(flight.depUtc, flight.depTz)} → arr {formatLocal(flight.arrUtc, flight.arrTz)}
+            </p>
+            <p className="num text-sm text-report">Report {formatLocal(flight.reportUtc, flight.depTz)}</p>
+          </div>
+        ))}
 
       {error && (
         <p role="alert" className="text-sm text-ink-muted">
@@ -294,10 +172,12 @@ function ExistingTripContent({
         <button
           type="button"
           data-testid="delete-trip"
+          aria-label="Delete trip"
+          title="Delete trip"
           onClick={() => setConfirmingDelete(true)}
-          className="min-h-[48px] self-start rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+          className="flex min-h-[44px] min-w-[44px] self-start items-center justify-center rounded text-ink-muted transition-colors duration-[120ms] hover:text-danger"
         >
-          Delete trip
+          <TrashIcon />
         </button>
       )}
     </div>
