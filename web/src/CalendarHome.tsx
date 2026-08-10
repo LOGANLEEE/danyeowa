@@ -51,14 +51,14 @@ function TrashIcon() {
 }
 
 /** The trip's identity at a glance: route as the headline, flight and date beneath it, then the
- * sector drawn as a rail — departure, elapsed time, arrival. Report/leave-home no longer live
- * here; they belong to the leg detail behind the pencil. */
+ * sector as departure-board rows — REPORT, DEP, ARR, each a label/value pair on a hairline rule,
+ * closed out by the elapsed-time figure. */
 function TripSummaryLines({
   legs,
   actions,
 }: {
   legs: TripWithFlights["flights"];
-  /** Corner controls, rendered in the header row so they never steal width from the rail. */
+  /** Corner controls, rendered in the header row so they never steal width from the board. */
   actions?: React.ReactNode;
 }) {
   const firstLeg = legs[0]!;
@@ -88,25 +88,29 @@ function TripSummaryLines({
         {actions}
       </div>
 
-      {/* Sector rail: the two times are the figures, the line between them carries how long it
-          actually takes. It spans the whole card — sharing the row with the corner controls
-          squeezed the track until the duration label collided with the times at 390px. */}
-      <div className="mt-4 flex items-center gap-3">
-        <span className="num text-lg text-ink">{formatLocal(firstLeg.depUtc, firstLeg.depTz)}</span>
-        <span className="relative h-px min-w-[64px] flex-1 bg-edge" aria-hidden="true">
-          <span className="absolute left-0 top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full bg-accent" />
-          <span className="absolute right-0 top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full border-[1.5px] border-accent bg-card" />
-          {duration && (
-            <span className="num absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap bg-card px-2 text-xs text-ink-muted">
-              {duration}
-            </span>
-          )}
-        </span>
-        <span className="num text-lg text-ink">
-          {formatLocal(lastLeg.arrUtc, lastLeg.arrTz)}
-          {arrOffset > 0 && <sup className="text-xs text-ink-muted">+{arrOffset}</sup>}
-        </span>
+      {/* Board rows: label left (small, uppercase, tracked, muted — amber for REPORT since
+          that's the one time worth flagging), value right (tabular). Dashed hairlines between
+          rows read as the split-flap rule this direction is named for; a justify-between row
+          never collides at 390px the way the old rail's centered duration badge did. */}
+      <div className="mt-4 flex flex-col divide-y divide-dashed divide-edge">
+        <div className="flex items-baseline justify-between py-1.5">
+          <span className="text-xs font-medium uppercase tracking-wide text-report">Report</span>
+          <span className="num text-base text-report">{formatLocal(firstLeg.reportUtc, firstLeg.depTz)}</span>
+        </div>
+        <div className="flex items-baseline justify-between py-1.5">
+          <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">Dep</span>
+          <span className="num text-base text-ink">{formatLocal(firstLeg.depUtc, firstLeg.depTz)}</span>
+        </div>
+        <div className="flex items-baseline justify-between py-1.5">
+          <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">Arr</span>
+          <span className="num text-base text-ink">
+            {formatLocal(lastLeg.arrUtc, lastLeg.arrTz)}
+            {arrOffset > 0 && <sup className="text-xs text-ink-muted">+{arrOffset}</sup>}
+          </span>
+        </div>
       </div>
+
+      {duration && <p className="num mt-1.5 text-right text-sm text-ink-muted">{duration}</p>}
     </>
   );
 }

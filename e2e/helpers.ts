@@ -102,10 +102,10 @@ async function fetchLastOtp(page: Page, email: string): Promise<string> {
   return body.otp;
 }
 
-/** Drives the full landing -> CTA -> email OTP sign-in flow via the real UI. */
+/** Drives the full landing -> email OTP sign-in flow via the real UI. The email field is on
+ * the landing surface itself (no separate login screen/CTA to navigate through first). */
 export async function signInThroughUi(page: Page, email = E2E_EMAIL): Promise<void> {
   await page.goto("/");
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByLabel(/email/i).fill(email);
   await page.getByRole("button", { name: /send code/i }).click();
 
@@ -113,7 +113,7 @@ export async function signInThroughUi(page: Page, email = E2E_EMAIL): Promise<vo
   await codeInput.waitFor();
   const otp = await fetchLastOtp(page, email);
   await codeInput.fill(otp);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
 }
 
 /** Signs out via the Settings tab (Plan6 T2 moved the sign-out control off the header). */

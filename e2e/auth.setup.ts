@@ -10,9 +10,9 @@ import { AUTH_FILE } from "./playwright.config";
  * project's `use.storageState` — so autofill.spec.ts, roster.spec.ts, and share.spec.ts all
  * start already signed in, with zero further OTP sends between them.
  *
- * This is where the suite's ONLY assertion of the real sign-in UI walk (landing page in its
- * signed-out state -> "Sign in" CTA -> email OTP -> verified) now lives; it used to be
- * duplicated at the top of roster.spec.ts's test, which called `signInThroughUi` itself.
+ * This is where the suite's ONLY assertion of the real sign-in UI walk (landing page's inline
+ * email OTP form -> verified, no separate login screen) now lives; it used to be duplicated at
+ * the top of roster.spec.ts's test, which called `signInThroughUi` itself.
  *
  * Unlike storageState (a client-side snapshot Playwright re-reads fresh per test file),
  * better-auth's session is server-backed: calling sign-out from ANY spec deletes the shared

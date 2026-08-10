@@ -118,17 +118,17 @@ describe("CalendarHome", () => {
     expect(screen.getByText("Mon")).toBeInTheDocument();
 
     // Next-duty card: FULL route chain (every stop, not just endpoints) + flight/trip-length
-    // muted line, date line, times line. Report/leave-home no longer render on this card.
+    // muted line, then the departure-board rows (REPORT/DEP/ARR) and the duration.
     const card = screen.getByTestId("next-duty-card");
     expect(card).toHaveTextContent("DXB → SIN → AKL");
     expect(card).toHaveTextContent("EK448 · Tue 11 Aug · 2 days");
-    // The sector rail carries elapsed time between the two figures.
-    expect(card).toHaveTextContent("1d 2h");
-    expect(card).toHaveTextContent("Tue 11 Aug");
-    expect(card).toHaveTextContent("06:15");
-    expect(card).toHaveTextContent("16:20");
+    expect(card).toHaveTextContent(/report/i);
+    expect(card).toHaveTextContent("04:45"); // report: firstLeg.reportUtc in Asia/Dubai
+    expect(card).toHaveTextContent("06:15"); // dep: firstLeg.depUtc in Asia/Dubai
+    expect(card).toHaveTextContent("16:20"); // arr: lastLeg.arrUtc in Pacific/Auckland
+    expect(card).toHaveTextContent("+1"); // arrival lands a calendar day later
+    expect(card).toHaveTextContent("1d 2h"); // elapsed time, kept from the old sector rail
     expect(card).not.toHaveTextContent(/leave home/i);
-    expect(card).not.toHaveTextContent(/report/i);
   });
 
   it("marks a trip day on the grid", async () => {
