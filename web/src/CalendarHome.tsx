@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import {
   dayOffset,
+  formatDuration,
   formatLocal,
   layoverHours,
   localDateKey,
-  relativeUntil,
   tripProgress,
   tripDaysInMonth,
 } from "@roaster/shared";
-import { getTrips } from "./api";
+import { deleteTrip, getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 import DaySheet, { humanDateLabel } from "./DaySheet";
 import TripLegsPanel from "./TripLegsPanel";
@@ -21,49 +21,90 @@ type Props = {
   openTodayToken?: number;
 };
 
-const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
+const ICON_PROPS = {
+  width: 20,
+  height: 20,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.75,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
 
-/** Route chain + times + report line for a trip, shared by the next-duty card and the
- * selected-day detail card so both read the same info vocabulary. */
+function PencilIcon() {
+  return (
+    <svg {...ICON_PROPS} aria-hidden="true">
+      <path d="M4 20h4L19 9a2.5 2.5 0 0 0-3.5-3.5L4 16.5V20zM14.5 6.5l3 3" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg {...ICON_PROPS} aria-hidden="true">
+      <path d="M4 7h16M10 11v6M14 11v6M5 7l1 13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-13M9 7V4h6v3" />
+    </svg>
+  );
+}
+
+/** The trip's identity at a glance: route as the headline, flight and date beneath it, then the
+ * sector drawn as a rail — departure, elapsed time, arrival. Report/leave-home no longer live
+ * here; they belong to the leg detail behind the pencil. */
 function TripSummaryLines({
   legs,
-  nextDuty,
-  leaveHomeUtc,
-  nowMs,
+  actions,
 }: {
   legs: TripWithFlights["flights"];
-  nextDuty: TripWithFlights["flights"][number];
-  leaveHomeUtc: string;
-  nowMs: number;
+  /** Corner controls, rendered in the header row so they never steal width from the rail. */
+  actions?: React.ReactNode;
 }) {
   const firstLeg = legs[0]!;
   const lastLeg = legs[legs.length - 1]!;
-  const tripDays = new Set(legs.map((leg) => formatLocal(leg.depUtc, leg.depTz, { withDate: true }).slice(0, 6)))
-    .size;
   const routeChain = [legs[0]!.origin, ...legs.map((leg) => leg.dest)].filter(
     (stop, index, all) => index === 0 || stop !== all[index - 1],
   );
   const arrOffset = dayOffset(firstLeg.depUtc, lastLeg.arrUtc, firstLeg.depTz, lastLeg.arrTz);
+  // Length only earns a place on a pairing that actually spans days — "1 day" is noise.
+  const tripDays = new Set(legs.map((leg) => formatLocal(leg.depUtc, leg.depTz, { withDate: true }).slice(0, 6)))
+    .size;
+  // Weekday + day + month only: the year is never in question on a roster, and the +N on the
+  // arrival already says when a red-eye actually lands.
+  const depDate = formatLocal(firstLeg.depUtc, firstLeg.depTz, { withDate: true }).split(" ").slice(0, 3).join(" ");
+  const duration = formatDuration(firstLeg.depUtc, lastLeg.arrUtc);
 
   return (
     <>
-      <p className="font-semibold text-ink">
-        {routeChain.join(" → ")}
-        {arrOffset > 0 && <sup>+{arrOffset}</sup>} ·{" "}
-        <span className="num">
-          {formatLocal(firstLeg.depUtc, firstLeg.depTz, { withDate: true })} –{" "}
-          {formatLocal(lastLeg.arrUtc, lastLeg.arrTz, { withDate: true })}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xl font-semibold tracking-tight text-ink">{routeChain.join(" → ")}</p>
+          <p className="text-sm text-ink-muted">
+            {firstLeg.flightNo} · {depDate}
+            {tripDays > 1 && ` · ${tripDays} days`}
+          </p>
+        </div>
+        {actions}
+      </div>
+
+      {/* Sector rail: the two times are the figures, the line between them carries how long it
+          actually takes. It spans the whole card — sharing the row with the corner controls
+          squeezed the track until the duration label collided with the times at 390px. */}
+      <div className="mt-4 flex items-center gap-3">
+        <span className="num text-lg text-ink">{formatLocal(firstLeg.depUtc, firstLeg.depTz)}</span>
+        <span className="relative h-px min-w-[64px] flex-1 bg-edge" aria-hidden="true">
+          <span className="absolute left-0 top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full bg-accent" />
+          <span className="absolute right-0 top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full border-[1.5px] border-accent bg-card" />
+          {duration && (
+            <span className="num absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap bg-card px-2 text-xs text-ink-muted">
+              {duration}
+            </span>
+          )}
         </span>
-      </p>
-      <p className="text-sm text-ink-muted">
-        {nextDuty.flightNo} · trip {tripDays} {tripDays === 1 ? "day" : "days"}
-      </p>
-      <p className="text-sm text-ink-muted">
-        Report{" "}
-        <span className="num text-report font-semibold">{formatLocal(nextDuty.reportUtc, nextDuty.depTz)}</span>{" "}
-        · leave home <span className="num">{formatLocal(leaveHomeUtc, nextDuty.depTz)}</span> ·{" "}
-        <span className="num">{relativeUntil(nextDuty.reportUtc, nowMs)}</span>
-      </p>
+        <span className="num text-lg text-ink">
+          {formatLocal(lastLeg.arrUtc, lastLeg.arrTz)}
+          {arrOffset > 0 && <sup className="text-xs text-ink-muted">+{arrOffset}</sup>}
+        </span>
+      </div>
     </>
   );
 }
@@ -76,54 +117,38 @@ function DayDetailCard({
   isoDate,
   trip,
   homeTz,
-  nowMs,
   onOpenSheet,
   onChanged,
 }: {
   isoDate: string;
   trip: TripWithFlights | null;
   homeTz: string;
-  nowMs: number;
   onOpenSheet: () => void;
   onChanged: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const legs = trip ? [...trip.flights].sort((a, b) => a.legSeq - b.legSeq) : [];
   const firstLeg = legs[0] ?? null;
 
-  return (
-    <div data-testid="day-detail-card" className="hairline flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
-      <div className="flex flex-col gap-1">
-        {firstLeg ? (
-          <TripSummaryLines
-            legs={legs}
-            nextDuty={firstLeg}
-            leaveHomeUtc={new Date(Date.parse(firstLeg.reportUtc) - LEAVE_HOME_LEAD_MS).toISOString()}
-            nowMs={nowMs}
-          />
-        ) : (
-          <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
-        )}
-      </div>
+  async function confirmDelete() {
+    if (!trip) return;
+    setDeleting(true);
+    try {
+      await deleteTrip(trip.id);
+      onChanged();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete trip");
+      setDeleting(false);
+    }
+  }
 
-      {trip && firstLeg ? (
-        <>
-          <button
-            type="button"
-            data-testid="day-detail-action"
-            aria-expanded={expanded}
-            onClick={() => setExpanded((v) => !v)}
-            className="mt-2 min-h-[48px] self-start rounded border border-accent px-3 py-2 font-medium text-accent transition-colors duration-[120ms] hover:bg-accent-soft"
-          >
-            {expanded ? "Hide details" : "Edit trip"}
-          </button>
-          {expanded && (
-            <div className="mt-3">
-              <TripLegsPanel trip={trip} onChanged={onChanged} />
-            </div>
-          )}
-        </>
-      ) : (
+  if (!trip || !firstLeg) {
+    return (
+      <div data-testid="day-detail-card" className="hairline flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
+        <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
         <button
           type="button"
           data-testid="day-detail-action"
@@ -132,6 +157,77 @@ function DayDetailCard({
         >
           Add trip
         </button>
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="day-detail-card" className="hairline flex flex-col rounded-lg border border-edge bg-card p-4">
+      <TripSummaryLines
+        legs={legs}
+        actions={
+          // Out of the reading path: the card is read far more often than it is edited.
+          <div className="flex shrink-0 gap-1">
+            <button
+              type="button"
+              data-testid="day-detail-action"
+              aria-label={expanded ? "Hide flight details" : "Edit trip"}
+              aria-expanded={expanded}
+              onClick={() => setExpanded((v) => !v)}
+              className={[
+                "flex min-h-[44px] min-w-[44px] items-center justify-center rounded transition-colors duration-[120ms]",
+                expanded ? "bg-accent-soft text-accent" : "text-ink-muted hover:text-accent",
+              ].join(" ")}
+            >
+              <PencilIcon />
+            </button>
+            <button
+              type="button"
+              data-testid="delete-trip"
+              aria-label="Delete trip"
+              onClick={() => setConfirmingDelete(true)}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-ink-muted transition-colors duration-[120ms] hover:text-danger"
+            >
+              <TrashIcon />
+            </button>
+          </div>
+        }
+      />
+
+      {deleteError && (
+        <p role="alert" className="mt-2 text-sm text-danger">
+          {deleteError}
+        </p>
+      )}
+
+      {confirmingDelete && (
+        <div className="mt-3 flex flex-col gap-2 rounded-lg border border-edge bg-raised p-3">
+          <p className="text-ink">Delete trip? This can't be undone.</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              data-testid="confirm-delete"
+              disabled={deleting}
+              onClick={confirmDelete}
+              className="min-h-[48px] rounded border border-danger px-3 py-2 font-medium text-danger transition-colors duration-[120ms] hover:bg-danger/10 disabled:opacity-50"
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              className="min-h-[48px] rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {expanded && (
+        <div className="mt-3">
+          <TripLegsPanel trip={trip} />
+        </div>
       )}
     </div>
   );
@@ -245,7 +341,6 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
               isoDate={selectedIso}
               trip={tripForDay(selectedIso)}
               homeTz={homeTz}
-              nowMs={nowMs}
               onOpenSheet={() => setSheetIsoDate(selectedIso)}
               onChanged={refetch}
             />
@@ -286,7 +381,6 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
   const legs = nextDutyTrip ? [...nextDutyTrip.flights].sort((a, b) => a.legSeq - b.legSeq) : [nextDuty];
   const firstLeg = legs[0]!;
 
-  const leaveHomeUtc = new Date(Date.parse(nextDuty.reportUtc) - LEAVE_HOME_LEAD_MS).toISOString();
 
   // Active pairing: a trip whose first departure has passed and last arrival hasn't (spans
   // `now`). Home base tz = origin tz of the trip's first leg. Ported from the old CrewHome -
@@ -357,7 +451,6 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
             isoDate={selectedIso}
             trip={tripForDay(selectedIso)}
             homeTz={homeTz}
-            nowMs={nowMs}
             onOpenSheet={() => setSheetIsoDate(selectedIso)}
               onChanged={refetch}
           />
@@ -371,7 +464,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           onClick={() => setSelectedIso(localDateKey(firstLeg.depUtc, firstLeg.depTz))}
           className="hairline stagger-2 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
         >
-          <TripSummaryLines legs={legs} nextDuty={nextDuty} leaveHomeUtc={leaveHomeUtc} nowMs={nowMs} />
+          <TripSummaryLines legs={legs} />
         </button>
       )}
 

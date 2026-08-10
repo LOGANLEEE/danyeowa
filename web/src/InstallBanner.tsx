@@ -9,6 +9,27 @@ import {
 
 const DISMISS_KEY = "roster-install-dismissed";
 
+/** iOS Share glyph, drawn to match the tab bar's stroke vocabulary. */
+function ShareIcon() {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-label="Share"
+      role="img"
+      className="inline-block text-ink"
+    >
+      <path d="M12 15V3m0 0L8 7m4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7" />
+    </svg>
+  );
+}
+
 function storedDismissed(): boolean {
   try {
     return localStorage.getItem(DISMISS_KEY) === "1";
@@ -57,11 +78,19 @@ export default function InstallBanner() {
     >
       <div className="flex flex-1 flex-col gap-0.5 text-left">
         <p className="text-sm font-medium text-ink">Add roaster·me to your home screen</p>
-        <p className="text-xs text-ink-muted">
-          {available
-            ? "Full screen, opens instantly, report-time alerts."
-            : "Share → Add to Home Screen. Full screen, opens instantly, report-time alerts."}
-        </p>
+        {available ? (
+          <p className="text-xs text-ink-muted">Full screen, opens instantly, report-time alerts.</p>
+        ) : (
+          // iOS has no install API — Safari never fires `beforeinstallprompt` and offers no
+          // equivalent — so the Share sheet is the only route. Naming the steps with the actual
+          // Share glyph beats a sentence the user has to decode.
+          <p className="flex flex-wrap items-center gap-1 text-xs text-ink-muted">
+            <span>Tap</span>
+            <ShareIcon />
+            <span>below, then</span>
+            <span className="font-medium text-ink">Add to Home Screen</span>
+          </p>
+        )}
       </div>
 
       {available && (
