@@ -34,3 +34,9 @@ GOOGLE_CLIENT_SECRET=<your-google-oauth-client-secret>
 # written to any file). Never commit real values here.
 VAPID_PUBLIC_KEY=<your-local-dev-vapid-public-key>
 VAPID_PRIVATE_KEY=<your-local-dev-vapid-private-key>
+
+# Local convenience: this address always receives the fixed code 123123 instead of a random
+# one, so signing in during development doesn't mean reading the OTP out of the server log.
+# Only takes effect when DEV_OTP_FALLBACK=true, which is never set on a deployed Worker.
+# Leave unset to give every address a random code.
+DEV_FIXED_OTP_EMAIL=logan@example.com
