@@ -26,20 +26,21 @@ export const FIXTURE = {
   reportAfter: "08:45",
 };
 
-/** Unknown-to-schedule flight number used to exercise the manual-entry fallback path. */
-export const UNKNOWN_FLIGHT_NO = "XX999";
+/** Unknown-to-schedule flight number used to exercise the manual-entry fallback path. Shares
+ * the app's fixed "EK" airline-code prefix — DaySheet.tsx's flightno-input only accepts typed
+ * digits, the prefix itself isn't user-typeable — so it can be composed by filling just its
+ * digit suffix, the same way every other fixture flight number in this suite is. */
+export const UNKNOWN_FLIGHT_NO = "EK999";
 
 /**
  * DXB -> SYD -> CHC, EK412 (scripts/ek-schedules.json, real seeded 2-leg schedule): a
  * multi-day trip whose away-span (first-leg departure's to last-leg arrival's LOCAL
- * calendar date, in the home base tz Asia/Dubai) covers TWO calendar days, not one -
- * the shape the rapid-entry "next date" bug needed (a single-leg, same-day flight like
- * FIXTURE/EK001 can't exercise the multi-day-span skip at all). Picked date 2026-09-10:
- * leg 0 departs 10:15 Asia/Dubai the picked day, arrives Sydney the next day; leg 1
- * departs Sydney the same day it arrives and lands in Christchurch a bit later - the
- * whole pairing's away-span in Asia/Dubai local dates is 2026-09-10 through 2026-09-11
- * (verified against shared/src/time.ts's wallToUtc/localDateKey, the same helpers
- * DaySheet.tsx's nextFreeDate uses).
+ * calendar date, in the home base tz Asia/Dubai) covers TWO calendar days, not one - useful
+ * fixture shape since a single-leg, same-day flight like FIXTURE/EK001 can't exercise a
+ * multi-day span at all. Picked date 2026-09-10: leg 0 departs 10:15 Asia/Dubai the picked
+ * day, arrives Sydney the next day; leg 1 departs Sydney the same day it arrives and lands
+ * in Christchurch a bit later - the whole pairing's away-span in Asia/Dubai local dates is
+ * 2026-09-10 through 2026-09-11 (verified against shared/src/time.ts's wallToUtc/localDateKey).
  */
 export const EK412 = {
   flightNo: "EK412",
@@ -51,29 +52,15 @@ export const EK412 = {
   reportLocal: "08:45",
   pickedDate: "2026-09-10",
   spanEndDate: "2026-09-11",
+  // A free day after the span ends - the day sheet no longer suggests it (rapid-entry
+  // chaining is gone), so this is just the picked date for the suite's own second sequential
+  // add of the same flight.
   nextFreeDate: "2026-09-12",
-  // A second EK412 pairing re-added (via its recent-flight chip) on `nextFreeDate` spans
-  // 2026-09-12 through 2026-09-13 (same 2-day shape, one day later) - also verified against
-  // shared/src/time.ts.
+  // A second EK412 pairing re-added (by typing the same flight number again) on
+  // `nextFreeDate` spans 2026-09-12 through 2026-09-13 (same 2-day shape, one day later) -
+  // also verified against shared/src/time.ts.
   secondPairingSpanEndDate: "2026-09-13",
 };
-
-/**
- * Humanizes a local ISO calendar date ("YYYY-MM-DD") as "Thu 10 Sep" (weekday short + day
- * + month short), matching DaySheet.tsx's humanDateLabel — the rapid-entry banner renders
- * dates this way, not as raw ISO. All the ISO dates this suite feeds in (EK412.pickedDate
- * etc.) are already home-base (Asia/Dubai) local calendar dates, so formatting in UTC here
- * (rather than re-deriving Asia/Dubai) reads the same calendar day back out.
- */
-export function humanDateLabel(iso: string): string {
-  const fmt = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "UTC",
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-  return fmt.format(new Date(`${iso}T00:00:00.000Z`));
-}
 
 /**
  * Clicks a calendar day cell identified by `iso` ("YYYY-MM-DD") ONCE, advancing the visible

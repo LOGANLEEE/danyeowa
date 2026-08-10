@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getPushConfig, subscribePush, unsubscribePush, updateNotificationPrefs } from "./api";
+import { getAirlinePrefix, setAirlinePrefix } from "./lib/airlinePrefix";
 import {
   isInstallPromptAvailable,
   isIos,
@@ -35,6 +36,7 @@ function pushSupported(): boolean {
 
 export default function SettingsView({ email, onSignOut }: Props) {
   const [theme, setThemeState] = useState<Theme>(getStoredTheme);
+  const [airlinePrefix, setAirlinePrefixState] = useState<string>(getAirlinePrefix);
 
   const [supported] = useState(pushSupported);
   const [permission, setPermission] = useState<NotificationPermission | null>(() =>
@@ -72,6 +74,12 @@ export default function SettingsView({ email, onSignOut }: Props) {
   function selectTheme(next: Theme) {
     setThemeState(next);
     setTheme(next);
+  }
+
+  function changeAirlinePrefix(next: string) {
+    const upper = next.toUpperCase();
+    setAirlinePrefixState(upper);
+    setAirlinePrefix(upper);
   }
 
   async function handleToggleOn() {
@@ -200,6 +208,21 @@ export default function SettingsView({ email, onSignOut }: Props) {
 
       <div className="flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
         <p className="px-1 text-xs uppercase text-ink-muted">App</p>
+
+        <label className="flex items-center justify-between gap-2 text-ink">
+          <span>Airline</span>
+          <input
+            type="text"
+            maxLength={2}
+            data-testid="airline-prefix-input"
+            value={airlinePrefix}
+            onChange={(e) => changeAirlinePrefix(e.target.value)}
+            className="num w-16 rounded border border-edge bg-ground px-2 py-1 uppercase"
+          />
+        </label>
+        <p className="text-sm text-ink-muted">
+          Flight numbers are entered as {airlinePrefix}···
+        </p>
 
         {standalone ? (
           <p className="text-sm text-ink-muted" data-testid="installed-badge">

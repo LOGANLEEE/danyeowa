@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SettingsView from "./SettingsView";
 import * as api from "./api";
+import { getAirlinePrefix } from "./lib/airlinePrefix";
 import * as theme from "./theme";
 
 vi.mock("./api", () => ({
@@ -257,6 +258,35 @@ describe("SettingsView", () => {
 
       expect(prompt).toHaveBeenCalledTimes(1);
       await waitFor(() => expect(screen.queryByTestId("install-button")).not.toBeInTheDocument());
+    });
+  });
+
+  describe("Airline prefix", () => {
+    it("renders the current prefix, defaulting to EK", () => {
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+      expect(screen.getByTestId("airline-prefix-input")).toHaveValue("EK");
+    });
+
+    it("persists a typed prefix", async () => {
+      const user = userEvent.setup();
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      const input = screen.getByTestId("airline-prefix-input");
+      await user.clear(input);
+      await user.type(input, "qf");
+
+      expect(getAirlinePrefix()).toBe("QF");
+    });
+
+    it("renders lowercase input uppercased", async () => {
+      const user = userEvent.setup();
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      const input = screen.getByTestId("airline-prefix-input");
+      await user.clear(input);
+      await user.type(input, "qf");
+
+      expect(input).toHaveValue("QF");
     });
   });
 });

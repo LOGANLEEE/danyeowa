@@ -11,6 +11,7 @@ import {
 import { getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 import DaySheet, { humanDateLabel } from "./DaySheet";
+import TripLegsPanel from "./TripLegsPanel";
 import TripsCalendar from "./TripsCalendar";
 
 type Props = {
@@ -68,21 +69,25 @@ function TripSummaryLines({
 }
 
 /** The card shown below the calendar grid while a day is selected (tap-to-detail), replacing
- * the next-duty card for the duration of the selection. Trip day: same info vocabulary as the
- * next-duty card plus an "Edit trip" button. Empty day: a muted no-duty line plus "Add trip". */
+ * the next-duty card for the duration of the selection. A trip day expands IN PLACE to its
+ * legs and a delete control — viewing or removing a trip never opens a sheet, which is
+ * reserved for adding one. Empty day: a muted no-duty line plus "Add trip". */
 function DayDetailCard({
   isoDate,
   trip,
   homeTz,
   nowMs,
   onOpenSheet,
+  onChanged,
 }: {
   isoDate: string;
   trip: TripWithFlights | null;
   homeTz: string;
   nowMs: number;
   onOpenSheet: () => void;
+  onChanged: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const legs = trip ? [...trip.flights].sort((a, b) => a.legSeq - b.legSeq) : [];
   const firstLeg = legs[0] ?? null;
 
@@ -100,19 +105,34 @@ function DayDetailCard({
           <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
         )}
       </div>
-      <button
-        type="button"
-        data-testid="day-detail-action"
-        onClick={onOpenSheet}
-        className={
-          firstLeg
-            ? "mt-2 self-start rounded border border-accent px-3 py-2 font-medium text-accent transition-colors duration-[120ms] hover:bg-accent-soft"
-            : "mt-2 self-start rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
-        }
-        style={{ minHeight: "48px" }}
-      >
-        {firstLeg ? "Edit trip" : "Add trip"}
-      </button>
+
+      {trip && firstLeg ? (
+        <>
+          <button
+            type="button"
+            data-testid="day-detail-action"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+            className="mt-2 min-h-[48px] self-start rounded border border-accent px-3 py-2 font-medium text-accent transition-colors duration-[120ms] hover:bg-accent-soft"
+          >
+            {expanded ? "Hide details" : "Edit trip"}
+          </button>
+          {expanded && (
+            <div className="mt-3">
+              <TripLegsPanel trip={trip} onChanged={onChanged} />
+            </div>
+          )}
+        </>
+      ) : (
+        <button
+          type="button"
+          data-testid="day-detail-action"
+          onClick={onOpenSheet}
+          className="mt-2 min-h-[48px] self-start rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+        >
+          Add trip
+        </button>
+      )}
     </div>
   );
 }
@@ -188,7 +208,9 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
   // Single tap: select (or switch selection to) the tapped day. Second tap on the day
   // that's already selected: open the sheet instead (trip-edit or add mode).
   function handleDayTap(iso: string) {
-    if (iso === selectedIso) {
+    if (iso === selectedIso && !tripForDay(iso)) {
+      // Second tap on an already-selected EMPTY day opens the add sheet. A day that already
+      // has a trip stays with its card, which expands in place instead.
       setSheetIsoDate(iso);
     } else {
       setSelectedIso(iso);
@@ -225,6 +247,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
               homeTz={homeTz}
               nowMs={nowMs}
               onOpenSheet={() => setSheetIsoDate(selectedIso)}
+              onChanged={refetch}
             />
           </div>
         ) : (
@@ -248,7 +271,6 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
         {sheetIsoDate && (
           <DaySheet
             isoDate={sheetIsoDate}
-            trip={tripForDay(sheetIsoDate)}
             trips={trips}
             homeTz={homeTz}
             onClose={() => setSheetIsoDate(null)}
@@ -337,13 +359,16 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
             homeTz={homeTz}
             nowMs={nowMs}
             onOpenSheet={() => setSheetIsoDate(selectedIso)}
+              onChanged={refetch}
           />
         </div>
       ) : (
         <button
           type="button"
           data-testid="next-duty-card"
-          onClick={() => setSheetIsoDate(localDateKey(firstLeg.depUtc, firstLeg.depTz))}
+          // Selects the duty's day rather than opening the sheet: the sheet is add-only now,
+          // and this day already has a trip — the day card is what shows and edits it.
+          onClick={() => setSelectedIso(localDateKey(firstLeg.depUtc, firstLeg.depTz))}
           className="hairline stagger-2 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
         >
           <TripSummaryLines legs={legs} nextDuty={nextDuty} leaveHomeUtc={leaveHomeUtc} nowMs={nowMs} />
@@ -353,7 +378,6 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
       {sheetIsoDate && (
         <DaySheet
           isoDate={sheetIsoDate}
-          trip={tripForDay(sheetIsoDate)}
           trips={trips}
           homeTz={homeTz}
           onClose={() => setSheetIsoDate(null)}
