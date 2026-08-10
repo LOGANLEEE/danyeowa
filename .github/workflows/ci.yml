@@ -54,6 +54,55 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # Every PR gets its own throwaway URL, so a change can be looked at on a real phone —
+  # over HTTPS, so installing to the home screen and Google sign-in both behave — without
+  # anyone running a dev server. `versions upload` publishes a version WITHOUT promoting it:
+  # production keeps serving whatever `deploy` last shipped.
+  #
+  # The preview binds the SAME D1 as production (a version carries the Worker's real
+  # bindings), so anything added or deleted through a preview URL is real roster data.
+  preview:
+    needs: check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @roaster/web build
+      - name: Upload preview version
+        id: upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          npx wrangler versions upload 2>&1 | tee upload.log
+          # Wrangler prints the version preview URL on its own line; take the first
+          # workers.dev URL it emits. Empty output means the URL format moved — fail loudly
+          # rather than comment a broken link.
+          url=$(grep -oE 'https://[A-Za-z0-9._-]+\.workers\.dev' upload.log | head -1)
+          if [ -z "$url" ]; then
+            echo "::error::no preview URL found in wrangler output — see upload.log above"
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Comment the preview URL
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          URL: ${{ steps.upload.outputs.url }}
+          PR: ${{ github.event.number }}
+        run: |
+          body=$(printf '**Preview:** %s\n\nBuilt from %s. Uses the production D1, so trips added or deleted here are real.' "$URL" "${GITHUB_SHA::7}")
+          # Edit this job's own previous comment when there is one, so a busy PR keeps a
+          # single up-to-date link instead of a column of stale ones.
+          gh pr comment "$PR" --edit-last --body "$body" || gh pr comment "$PR" --body "$body"
+
   deploy:
     needs: check
     if: github.ref == 'refs/heads/main'
