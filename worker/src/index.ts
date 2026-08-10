@@ -13,6 +13,8 @@ export type Env = {
   ASSETS: Fetcher;
   RESEND_API_KEY?: string;
   DEV_OTP_FALLBACK?: string;
+  /** Local-only: address that always gets the fixed dev OTP (see worker/src/auth.ts). */
+  DEV_FIXED_OTP_EMAIL?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
   GOOGLE_CLIENT_ID?: string;
