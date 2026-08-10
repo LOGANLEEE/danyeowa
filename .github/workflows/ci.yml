@@ -33,12 +33,18 @@ jobs:
       - name: Write .dev.vars for wrangler dev
         # wrangler dev reads local secrets/vars from .dev.vars (not process env) — see
         # .dev.vars.example for what each of these does.
+        # The GOOGLE_* pair is dummy on purpose: createAuth (worker/src/auth.ts) throws if
+        # either is absent, which 500s every request and makes Playwright time out waiting
+        # for its webServer. The suite signs in over email OTP and never touches the Google
+        # flow, so no real credential is needed — only a non-empty one.
         run: |
           cat > .dev.vars <<'EOF'
           BETTER_AUTH_SECRET=ci-test-secret-not-for-production-0000000
           DEV_OTP_FALLBACK=true
           BETTER_AUTH_URL=http://localhost:8787
           E2E_TEST_MODE=true
+          GOOGLE_CLIENT_ID=ci-test-client-id-not-for-production
+          GOOGLE_CLIENT_SECRET=ci-test-client-secret-not-for-production
           EOF
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@v4
