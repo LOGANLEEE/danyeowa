@@ -11,8 +11,10 @@ import {
 import { deleteTrip, getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 import DaySheet, { humanDateLabel } from "./DaySheet";
+import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
 import TripLegsPanel from "./TripLegsPanel";
 import TripsCalendar from "./TripsCalendar";
+import { useTripEntry } from "./useTripEntry";
 
 type Props = {
   now: Date;
@@ -49,14 +51,14 @@ function TrashIcon() {
 }
 
 /** The trip's identity at a glance: route as the headline, flight and date beneath it, then the
- * sector drawn as a rail — departure, elapsed time, arrival. Report/leave-home no longer live
- * here; they belong to the leg detail behind the pencil. */
+ * sector as departure-board rows — REPORT, DEP, ARR, each a label/value pair on a hairline rule,
+ * closed out by the elapsed-time figure. */
 function TripSummaryLines({
   legs,
   actions,
 }: {
   legs: TripWithFlights["flights"];
-  /** Corner controls, rendered in the header row so they never steal width from the rail. */
+  /** Corner controls, rendered in the header row so they never steal width from the board. */
   actions?: React.ReactNode;
 }) {
   const firstLeg = legs[0]!;
@@ -86,25 +88,29 @@ function TripSummaryLines({
         {actions}
       </div>
 
-      {/* Sector rail: the two times are the figures, the line between them carries how long it
-          actually takes. It spans the whole card — sharing the row with the corner controls
-          squeezed the track until the duration label collided with the times at 390px. */}
-      <div className="mt-4 flex items-center gap-3">
-        <span className="num text-lg text-ink">{formatLocal(firstLeg.depUtc, firstLeg.depTz)}</span>
-        <span className="relative h-px min-w-[64px] flex-1 bg-edge" aria-hidden="true">
-          <span className="absolute left-0 top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full bg-accent" />
-          <span className="absolute right-0 top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full border-[1.5px] border-accent bg-card" />
-          {duration && (
-            <span className="num absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap bg-card px-2 text-xs text-ink-muted">
-              {duration}
-            </span>
-          )}
-        </span>
-        <span className="num text-lg text-ink">
-          {formatLocal(lastLeg.arrUtc, lastLeg.arrTz)}
-          {arrOffset > 0 && <sup className="text-xs text-ink-muted">+{arrOffset}</sup>}
-        </span>
+      {/* Board rows: label left (small, uppercase, tracked, muted — amber for REPORT since
+          that's the one time worth flagging), value right (tabular). Dashed hairlines between
+          rows read as the split-flap rule this direction is named for; a justify-between row
+          never collides at 390px the way the old rail's centered duration badge did. */}
+      <div className="mt-4 flex flex-col divide-y divide-dashed divide-edge">
+        <div className="flex items-baseline justify-between py-1.5">
+          <span className="text-xs font-medium uppercase tracking-wide text-report">Report</span>
+          <span className="num text-base text-report">{formatLocal(firstLeg.reportUtc, firstLeg.depTz)}</span>
+        </div>
+        <div className="flex items-baseline justify-between py-1.5">
+          <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">Dep</span>
+          <span className="num text-base text-ink">{formatLocal(firstLeg.depUtc, firstLeg.depTz)}</span>
+        </div>
+        <div className="flex items-baseline justify-between py-1.5">
+          <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">Arr</span>
+          <span className="num text-base text-ink">
+            {formatLocal(lastLeg.arrUtc, lastLeg.arrTz)}
+            {arrOffset > 0 && <sup className="text-xs text-ink-muted">+{arrOffset}</sup>}
+          </span>
+        </div>
       </div>
+
+      {duration && <p className="num mt-1.5 text-right text-sm text-ink-muted">{duration}</p>}
     </>
   );
 }
@@ -130,8 +136,50 @@ function DayDetailCard({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
   const legs = trip ? [...trip.flights].sort((a, b) => a.legSeq - b.legSeq) : [];
   const firstLeg = legs[0] ?? null;
+  const [airlinePrefix] = useState(getAirlinePrefix);
+
+  // Drives the pencil's edit mode with the SAME debounced-lookup + autofill + save pipeline
+  // as the add sheet (useTripEntry), not a second implementation of it. Called unconditionally
+  // (hook rules) even on a trip-free day, where it's simply inert - the edit UI that would
+  // drive it never mounts there, so `pickedDate` falling back to the bare day is never read.
+  const entry = useTripEntry({
+    pickedDate: firstLeg ? localDateKey(firstLeg.depUtc, firstLeg.depTz) : isoDate,
+    homeTz,
+    onSubmitted: async () => {
+      // Trip-free days never expose the edit UI, so `trip` is always set by the time this
+      // actually fires - this guard exists only so the type checker (and any future caller)
+      // doesn't have to assume it.
+      if (!trip) return;
+      // Create-then-delete: the hook has already created the replacement trip by the time
+      // this callback runs. Only now is the original removed - a failed create above leaves
+      // the old trip untouched instead of destroying a roster entry for nothing.
+      try {
+        await deleteTrip(trip.id);
+      } catch (err) {
+        setEditError(
+          `Saved the new flight, but the old one may still be on your roster: ${
+            err instanceof Error ? err.message : "failed to remove it"
+          }`,
+        );
+      }
+      setExpanded(false);
+      onChanged();
+    },
+  });
+
+  // Pencil click primes the field with the trip's CURRENT flight number (not blank) so edit
+  // mode opens showing what's already on the roster - and clears any stale error from a
+  // previous attempt.
+  useEffect(() => {
+    if (expanded && firstLeg) {
+      entry.setFlightNo(firstLeg.flightNo);
+      setEditError(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded]);
 
   async function confirmDelete() {
     if (!trip) return;
@@ -225,8 +273,73 @@ function DayDetailCard({
       )}
 
       {expanded && (
-        <div className="mt-3">
-          <TripLegsPanel trip={trip} />
+        <div className="mt-3 flex flex-col gap-3">
+          {/* Same flight-number field as the add sheet: airline code as static text, digits
+              typed. Editing it re-runs the schedule lookup below - the legs panel underneath
+              still shows what's ON the roster right now, so Save's replacement is never a
+              surprise. */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void entry.handleAutofillSubmit();
+            }}
+            className="flex flex-col gap-3"
+          >
+            <div>
+              <label htmlFor="card-edit-flightno" className="text-sm text-ink-muted">
+                Flight number
+              </label>
+              <div className="mt-1 flex items-center gap-2 rounded border border-edge bg-raised px-3 py-2 transition-colors duration-[120ms] focus-within:border-accent focus-within:ring-2 focus-within:ring-accent">
+                <span className="num text-lg text-ink-muted">{airlinePrefix}</span>
+                <input
+                  id="card-edit-flightno"
+                  data-testid="card-edit-flightno"
+                  inputMode="numeric"
+                  value={digitsOf(entry.flightNo, airlinePrefix)}
+                  onChange={(e) => entry.setFlightNo(airlinePrefix + e.target.value.replace(/\D/g, ""))}
+                  className="num w-full bg-transparent text-lg text-ink outline-none focus-visible:outline-none"
+                />
+              </div>
+            </div>
+
+            {entry.resolving && <p className="text-sm text-ink-muted">checking schedule…</p>}
+            {entry.lookupMiss && (
+              <p role="alert" className="text-sm text-danger">
+                unknown flight — try another number
+              </p>
+            )}
+            {entry.error && (
+              <p role="alert" className="text-sm text-danger">
+                {entry.error}
+              </p>
+            )}
+            {editError && (
+              <p role="alert" className="text-sm text-danger">
+                {editError}
+              </p>
+            )}
+
+            <TripLegsPanel trip={trip} />
+
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                data-testid="card-edit-save"
+                disabled={!entry.autofillLegs || entry.submitting || entry.resolving}
+                className="min-h-[44px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                data-testid="card-edit-cancel"
+                onClick={() => setExpanded(false)}
+                className="min-h-[44px] rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

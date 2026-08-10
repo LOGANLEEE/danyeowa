@@ -5,7 +5,6 @@ import { authClient } from "./auth-client";
 import CalendarHome from "./CalendarHome";
 import InstallBanner from "./InstallBanner";
 import Landing from "./Landing";
-import Login from "./Login";
 import SettingsView from "./SettingsView";
 import ShareView from "./ShareView";
 import SharedViewer from "./SharedViewer";
@@ -14,8 +13,6 @@ import type { TabName } from "./TabBar";
 import TripDetail from "./TripDetail";
 import TripForm from "./TripForm";
 import TripsView from "./TripsView";
-
-type SignedOutView = "landing" | "login";
 
 const SHARE_PATH_PREFIX = "/share/";
 
@@ -51,7 +48,6 @@ export default function App() {
 function SignedInApp() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
-  const [signedOutView, setSignedOutView] = useState<SignedOutView>("landing");
   const [activeTab, setActiveTab] = useState<TabName>("calendar");
   const [showTripForm, setShowTripForm] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState<TripWithFlights | null>(null);
@@ -87,13 +83,13 @@ function SignedInApp() {
   async function handleSignOut() {
     await authClient.signOut();
     setMe(null);
-    setSignedOutView("landing");
   }
 
-  // The Landing view renders its own hero h1 ("roaster·me") as the page heading, and has
-  // no sign-out control to show — skip rendering the header band entirely there so it
-  // doesn't leave an empty, bordered strip above the hero (a11y bonus: no duplicate h1s).
-  const isLanding = me === null && signedOutView === "landing";
+  // Landing is the only signed-out screen (sign-in form inline, no separate login view) and
+  // renders its own hero h1 ("roaster·me") as the page heading, with no sign-out control to
+  // show — skip rendering the header band entirely there so it doesn't leave an empty,
+  // bordered strip above the hero (a11y bonus: no duplicate h1s).
+  const isLanding = me === null;
   const isSignedIn = me !== "loading" && me !== null;
 
   return (
@@ -115,11 +111,7 @@ function SignedInApp() {
         {me === "loading" ? (
           <p className="text-ink-muted">loading…</p>
         ) : me === null ? (
-          signedOutView === "landing" ? (
-            <Landing onSignIn={() => setSignedOutView("login")} />
-          ) : (
-            <Login onSignedIn={loadMe} onBack={() => setSignedOutView("landing")} />
-          )
+          <Landing onSignedIn={loadMe} />
         ) : showTripForm ? (
           <TripForm
             now={now}

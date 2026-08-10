@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import CalendarHome from "./CalendarHome";
-import { deleteTrip, getTrips } from "./api";
+import { confirmSchedule, createTrip, deleteTrip, getTrips, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";
 
 vi.mock("./api", () => ({
@@ -118,17 +118,17 @@ describe("CalendarHome", () => {
     expect(screen.getByText("Mon")).toBeInTheDocument();
 
     // Next-duty card: FULL route chain (every stop, not just endpoints) + flight/trip-length
-    // muted line, date line, times line. Report/leave-home no longer render on this card.
+    // muted line, then the departure-board rows (REPORT/DEP/ARR) and the duration.
     const card = screen.getByTestId("next-duty-card");
     expect(card).toHaveTextContent("DXB → SIN → AKL");
     expect(card).toHaveTextContent("EK448 · Tue 11 Aug · 2 days");
-    // The sector rail carries elapsed time between the two figures.
-    expect(card).toHaveTextContent("1d 2h");
-    expect(card).toHaveTextContent("Tue 11 Aug");
-    expect(card).toHaveTextContent("06:15");
-    expect(card).toHaveTextContent("16:20");
+    expect(card).toHaveTextContent(/report/i);
+    expect(card).toHaveTextContent("04:45"); // report: firstLeg.reportUtc in Asia/Dubai
+    expect(card).toHaveTextContent("06:15"); // dep: firstLeg.depUtc in Asia/Dubai
+    expect(card).toHaveTextContent("16:20"); // arr: lastLeg.arrUtc in Pacific/Auckland
+    expect(card).toHaveTextContent("+1"); // arrival lands a calendar day later
+    expect(card).toHaveTextContent("1d 2h"); // elapsed time, kept from the old sector rail
     expect(card).not.toHaveTextContent(/leave home/i);
-    expect(card).not.toHaveTextContent(/report/i);
   });
 
   it("marks a trip day on the grid", async () => {
@@ -378,5 +378,128 @@ describe("CalendarHome", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/network error/i);
     expect(screen.getByTestId("confirm-delete")).toBeInTheDocument();
+  });
+
+  // The lookup response shape a successful flight-code edit re-runs against.
+  const EK449_LEGS = [
+    {
+      legSeq: 0,
+      origin: "DXB",
+      dest: "SIN",
+      depLocal: "06:15",
+      arrLocal: "17:35",
+      dayOffset: 0,
+      originTz: "Asia/Dubai",
+      destTz: "Asia/Singapore",
+      confirmCount: 1,
+    },
+  ];
+
+  it("pencil enters edit mode with the flight-number field prefilled with the current flight number", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("day-detail-action"));
+
+    expect(await screen.findByTestId("card-edit-flightno")).toHaveValue("448");
+  });
+
+  it("a successful edit save creates the replacement trip, deletes the original in that order, then refetches", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(getTrips).mockResolvedValueOnce([aklTrip]);
+    vi.mocked(getTrips).mockResolvedValueOnce([]);
+    vi.mocked(lookupSchedule).mockReset();
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: EK449_LEGS });
+    vi.mocked(createTrip).mockReset();
+    vi.mocked(deleteTrip).mockReset();
+    // The save fires a fire-and-forget confirmSchedule() per leg, chained with .catch() -
+    // it must resolve to an actual promise or that chain throws before onSubmitted runs.
+    vi.mocked(confirmSchedule).mockReset();
+    vi.mocked(confirmSchedule).mockResolvedValue(undefined);
+    const callOrder: string[] = [];
+    vi.mocked(createTrip).mockImplementation(async () => {
+      callOrder.push("create");
+      return { ...aklTrip, id: "trip-new" };
+    });
+    vi.mocked(deleteTrip).mockImplementation(async () => {
+      callOrder.push("delete");
+    });
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("day-detail-action"));
+
+    const input = await screen.findByTestId("card-edit-flightno");
+    await user.clear(input);
+    await user.type(input, "449");
+    await vi.advanceTimersByTimeAsync(400);
+
+    await waitFor(() => expect(screen.getByTestId("card-edit-save")).not.toBeDisabled());
+    await user.click(screen.getByTestId("card-edit-save"));
+
+    await waitFor(() => expect(deleteTrip).toHaveBeenCalledWith("trip-1"));
+    expect(callOrder).toEqual(["create", "delete"]);
+    // onSubmitted's own refetch (onChanged), on top of the initial mount fetch.
+    await waitFor(() => expect(getTrips).toHaveBeenCalledTimes(2));
+  });
+
+  it("a failed create during an edit does not delete the original trip", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    vi.mocked(lookupSchedule).mockReset();
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: EK449_LEGS });
+    vi.mocked(createTrip).mockReset();
+    vi.mocked(createTrip).mockRejectedValue(new Error("network error"));
+    vi.mocked(deleteTrip).mockReset();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("day-detail-action"));
+
+    const input = await screen.findByTestId("card-edit-flightno");
+    await user.clear(input);
+    await user.type(input, "449");
+    await vi.advanceTimersByTimeAsync(400);
+
+    await waitFor(() => expect(screen.getByTestId("card-edit-save")).not.toBeDisabled());
+    await user.click(screen.getByTestId("card-edit-save"));
+
+    await waitFor(() => expect(createTrip).toHaveBeenCalled());
+    expect(deleteTrip).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/network error/i);
+    // A failed create keeps edit mode open rather than discarding the in-progress edit.
+    expect(screen.getByTestId("card-edit-flightno")).toBeInTheDocument();
+  });
+
+  it("cancel from edit mode leaves the trip untouched", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    vi.mocked(createTrip).mockReset();
+    vi.mocked(deleteTrip).mockReset();
+    const user = userEvent.setup();
+
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("day-detail-action"));
+    await screen.findByTestId("card-edit-flightno");
+
+    await user.click(screen.getByTestId("card-edit-cancel"));
+
+    expect(screen.queryByTestId("card-edit-flightno")).not.toBeInTheDocument();
+    expect(createTrip).not.toHaveBeenCalled();
+    expect(deleteTrip).not.toHaveBeenCalled();
+    expect(screen.getByTestId("day-detail-card")).toHaveTextContent("EK448");
+    expect(getTrips).toHaveBeenCalledTimes(1);
   });
 });

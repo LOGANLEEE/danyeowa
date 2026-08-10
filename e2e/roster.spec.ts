@@ -5,8 +5,8 @@ import { E2E_EMAIL, EK412, openDaySheet } from "./helpers";
  * Full e2e coverage of the Plan 6 tabbed, calendar-first UX against a real `wrangler dev`
  * (local D1). Starts already signed in — the `chromium` project's storageState, written once
  * by auth.setup.ts, is loaded fresh for this test's own context, so this file sends zero OTPs
- * of its own. (The real sign-in UI walk — landing page in its signed-out state, "Sign in" CTA,
- * email OTP, verified — is asserted once in auth.setup.ts instead of being duplicated here.)
+ * of its own. (The real sign-in UI walk — landing page's inline email OTP form, verified — is
+ * asserted once in auth.setup.ts instead of being duplicated here.)
  *
  * This file does NOT sign out: better-auth's sign-out deletes the session server-side, not
  * just the local cookie, so calling it here would invalidate the SAME session
@@ -23,7 +23,7 @@ import { E2E_EMAIL, EK412, openDaySheet } from "./helpers";
  *
  * Auth coverage stays on the email OTP path only: Google's real OAuth consent screen
  * actively blocks automated sign-in, so there's no reliable way to drive the "Continue
- * with Google" button through Playwright. That path is covered by unit tests (Login.test.tsx)
+ * with Google" button through Playwright. That path is covered by unit tests (Landing.test.tsx)
  * that assert authClient.signIn.social is called correctly, plus manual verification.
  */
 test("calendar home -> day sheet -> autofill add -> sequential add -> Trips tab -> edit -> delete both", async ({
