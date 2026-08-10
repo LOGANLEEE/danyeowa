@@ -8,7 +8,6 @@ import {
   deleteTrip,
   getAirport,
   lookupSchedule,
-  patchFlight,
   suggestReturns,
 } from "./api";
 import type { TripWithFlights } from "./api";
@@ -31,7 +30,6 @@ vi.mock("./api", () => ({
   lookupSchedule: vi.fn(),
   confirmSchedule: vi.fn(),
   deleteTrip: vi.fn(),
-  patchFlight: vi.fn(),
   suggestReturns: vi.fn(),
 }));
 
@@ -68,7 +66,6 @@ describe("DaySheet", () => {
     vi.mocked(confirmSchedule).mockReset();
     vi.mocked(confirmSchedule).mockResolvedValue(undefined);
     vi.mocked(deleteTrip).mockReset();
-    vi.mocked(patchFlight).mockReset();
     vi.mocked(suggestReturns).mockReset();
     vi.mocked(suggestReturns).mockResolvedValue({ suggestions: [] });
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -663,9 +660,8 @@ describe("DaySheet", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("existing-trip day shows the route summary, and supports edit and delete", async () => {
+  it("existing-trip day shows the route summary read-only, and deletes via the bin icon", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    vi.mocked(patchFlight).mockResolvedValue({ ...trip.flights[0]!, depUtc: "2026-08-11T03:15:00.000Z" });
     vi.mocked(deleteTrip).mockResolvedValue(undefined);
     const onChanged = vi.fn();
     const onClose = vi.fn();
@@ -688,22 +684,12 @@ describe("DaySheet", () => {
     // Report still displays (view mode) - only the entry/edit FORMS lose it.
     expect(screen.getByText(/report/i)).toBeInTheDocument();
 
-    // Edit.
-    await user.click(screen.getByTestId("edit-leg"));
-    // No report input in the edit form (Plan 10 Task 3).
-    expect(screen.queryByLabelText(/report/i)).not.toBeInTheDocument();
-    const depInput = screen.getByLabelText(/departure/i) as HTMLInputElement;
-    await user.clear(depInput);
-    await user.type(depInput, "2026-08-11T07:15");
-    await user.click(screen.getByTestId("save-leg"));
+    // Times come from the schedule provider — no per-leg edit affordance here.
+    expect(screen.queryByTestId("edit-leg")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/departure/i)).not.toBeInTheDocument();
 
-    await waitFor(() => expect(patchFlight).toHaveBeenCalledWith("f1", { depUtc: "2026-08-11T03:15:00.000Z" }));
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    // Back to display mode - report still shown.
-    expect(screen.getByText(/report/i)).toBeInTheDocument();
-
-    // Delete with confirm.
-    await user.click(screen.getByTestId("delete-trip"));
+    // Delete with confirm — the trigger is an icon, so it's reachable only by its label.
+    await user.click(screen.getByRole("button", { name: /delete trip/i }));
     expect(screen.getByText(/can't be undone/i)).toBeInTheDocument();
     await user.click(screen.getByTestId("confirm-delete"));
 

@@ -258,7 +258,7 @@ describe("CalendarHome", () => {
     expect(screen.queryByTestId("day-sheet")).not.toBeInTheDocument();
   });
 
-  it("the detail card's clear (✕) button deselects and restores the next-duty card", async () => {
+  it("keeps the detail card up with no dismiss button, switching it as other days are tapped", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
     const user = userEvent.setup();
 
@@ -266,10 +266,10 @@ describe("CalendarHome", () => {
 
     await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
     await screen.findByTestId("day-detail-card");
-    await user.click(screen.getByTestId("day-detail-clear"));
+    expect(screen.queryByTestId("day-detail-clear")).not.toBeInTheDocument();
 
-    expect(await screen.findByTestId("next-duty-card")).toBeInTheDocument();
-    expect(screen.queryByTestId("day-detail-card")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+    expect(await screen.findByTestId("day-detail-card")).toHaveTextContent(/no duty/i);
   });
 
   it("shows the active pairing progress card when a trip spans now, with correct day X of N", async () => {

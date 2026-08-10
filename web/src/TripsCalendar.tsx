@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { localDateKey, monthGrid, tripDaysInMonth } from "@roaster/shared";
 import type { TripWithFlights } from "./api";
+import { dutyDayMarks, type DayKind } from "./lib/dayMarks";
+import { HOME_BASE_IATA } from "./lib/homeBase";
 
 type Props = {
   now: Date;
@@ -23,6 +25,35 @@ type Props = {
 };
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+/** Direction at a glance: away from base, back to base, out-and-back, outstation hop, slip. */
+const DAY_GLYPH: Record<DayKind, string> = {
+  outbound: "↗",
+  return: "↙",
+  turnaround: "⇄",
+  sector: "→",
+  layover: "·",
+};
+
+/** Colour rides on the GLYPH, not the station code: `accent` on `accent-soft` measures 3.97:1
+ * in light mode, under the 4.5:1 text minimum, while a glyph is a non-text graphic held to
+ * 3:1. The code itself stays `text-ink` (14.7:1 light / 11.1 dark), so the pair is legible and
+ * direction is still carried by shape as well as colour. */
+const DAY_TONE: Record<DayKind, string> = {
+  outbound: "text-accent",
+  return: "text-ink",
+  turnaround: "text-accent",
+  sector: "text-ink-muted",
+  layover: "text-ink-muted",
+};
+
+const DAY_LABEL: Record<DayKind, string> = {
+  outbound: "outbound to",
+  return: "return from",
+  turnaround: "turnaround via",
+  sector: "sector to",
+  layover: "layover at",
+};
 const MONTH_LABELS = [
   "January",
   "February",
@@ -77,6 +108,15 @@ export default function TripsCalendar({
     viewMonth,
     homeTz,
   );
+  // Direction glyphs come from the real trip days only: an optimistic day has no legs yet, and
+  // the layover fallback would otherwise label it with a station from some earlier trip.
+  const dutyMarks = dutyDayMarks(
+    tripSpans.map(({ trip }) => trip),
+    homeTz,
+    HOME_BASE_IATA,
+    dayMarks.keys(),
+  );
+
   const monthPrefix = `${viewYear}-${String(viewMonth).padStart(2, "0")}`;
   for (const iso of optimisticIsoDates ?? []) {
     if (iso.startsWith(monthPrefix) && !dayMarks.has(iso)) dayMarks.set(iso, "away");
@@ -121,7 +161,9 @@ export default function TripsCalendar({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    // w-full, not shrink-to-fit: the grid is dropped into both a stretched column (trips) and
+    // an `items-center` one (empty state), and without it the two render at different widths.
+    <div className="flex w-full flex-col gap-2">
       <div className="flex items-center justify-between">
         <button
           type="button"
@@ -152,13 +194,16 @@ export default function TripsCalendar({
         ))}
       </div>
 
-      <div className="grid grid-cols-7 gap-1">
+      {/* gap-2 (8px), not gap-1: adjacent tap targets need 8px of separation, and 7 cells plus
+          six 8px gaps still leaves 44px cells at a 390px viewport. */}
+      <div className="grid grid-cols-7 gap-2">
         {grid.flat().map((cell) => {
           const isToday = cell.iso === today;
           const isSelected = cell.iso === selectedIso;
           const isPast = cell.iso < today;
           const mark = dayMarks.get(cell.iso);
           const hasTrip = mark !== undefined;
+          const duty = dutyMarks.get(cell.iso);
           const disabled = !hasTrip && isPast;
 
           return (
@@ -167,20 +212,37 @@ export default function TripsCalendar({
               type="button"
               data-testid={`calendar-day-${cell.iso}`}
               disabled={disabled}
+              aria-label={duty ? `${cell.day} ${DAY_LABEL[duty.kind]} ${duty.code}` : undefined}
+              aria-current={isToday ? "date" : undefined}
+              aria-pressed={isSelected}
               onClick={() => handleDayClick(cell.iso)}
               className={[
-                "flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg border py-2 transition-colors duration-[120ms]",
+                "flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-lg border py-2 transition-[background-color,border-color,transform] duration-[120ms]",
                 hasTrip ? "border-transparent bg-accent-soft" : "border-edge",
                 // Selected (tap-to-detail) gets a stronger, filled ring - visually distinct
                 // from today's plain outline ring so both can be told apart when they coincide.
                 isSelected ? "ring-2 ring-accent ring-offset-1 ring-offset-ground" : isToday ? "ring-2 ring-accent" : "",
                 !cell.inMonth ? "opacity-40" : "",
                 isPast && !hasTrip ? "opacity-60" : "",
-                disabled ? "cursor-default" : "hover:bg-raised",
+                // Press feedback: transform only, so a pressed cell never nudges its neighbours.
+                disabled ? "cursor-default" : "hover:bg-raised active:scale-[0.96]",
               ].join(" ")}
             >
               <span className="num text-sm text-ink">{cell.day}</span>
-              {hasTrip && <span className="h-1 w-3 rounded-full bg-accent" aria-hidden="true" />}
+              {duty ? (
+                <span
+                  data-testid={`day-mark-${cell.iso}`}
+                  className="num flex items-center gap-px text-xs leading-none text-ink"
+                >
+                  <span aria-hidden="true" className={DAY_TONE[duty.kind]}>
+                    {DAY_GLYPH[duty.kind]}
+                  </span>
+                  {duty.code}
+                </span>
+              ) : (
+                // Optimistically added day: marked, but the legs haven't been refetched yet.
+                hasTrip && <span className="h-1 w-3 rounded-full bg-accent" aria-hidden="true" />
+              )}
             </button>
           );
         })}

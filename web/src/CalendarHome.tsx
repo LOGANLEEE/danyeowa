@@ -76,42 +76,29 @@ function DayDetailCard({
   homeTz,
   nowMs,
   onOpenSheet,
-  onClear,
 }: {
   isoDate: string;
   trip: TripWithFlights | null;
   homeTz: string;
   nowMs: number;
   onOpenSheet: () => void;
-  onClear: () => void;
 }) {
   const legs = trip ? [...trip.flights].sort((a, b) => a.legSeq - b.legSeq) : [];
   const firstLeg = legs[0] ?? null;
 
   return (
-    <div data-testid="day-detail-card" className="flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-1 flex-col gap-1">
-          {firstLeg ? (
-            <TripSummaryLines
-              legs={legs}
-              nextDuty={firstLeg}
-              leaveHomeUtc={new Date(Date.parse(firstLeg.reportUtc) - LEAVE_HOME_LEAD_MS).toISOString()}
-              nowMs={nowMs}
-            />
-          ) : (
-            <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
-          )}
-        </div>
-        <button
-          type="button"
-          data-testid="day-detail-clear"
-          aria-label="Clear selection"
-          onClick={onClear}
-          className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded text-ink-muted transition-colors duration-[120ms] hover:text-ink"
-        >
-          ✕
-        </button>
+    <div data-testid="day-detail-card" className="hairline flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
+      <div className="flex flex-col gap-1">
+        {firstLeg ? (
+          <TripSummaryLines
+            legs={legs}
+            nextDuty={firstLeg}
+            leaveHomeUtc={new Date(Date.parse(firstLeg.reportUtc) - LEAVE_HOME_LEAD_MS).toISOString()}
+            nowMs={nowMs}
+          />
+        ) : (
+          <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
+        )}
       </div>
       <button
         type="button"
@@ -238,7 +225,6 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
               homeTz={homeTz}
               nowMs={nowMs}
               onOpenSheet={() => setSheetIsoDate(selectedIso)}
-              onClear={() => setSelectedIso(null)}
             />
           </div>
         ) : (
@@ -308,7 +294,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
       {activePairing && (
         <div
           data-testid="pairing-progress-card"
-          className="stagger-1 flex flex-col gap-3 rounded-lg border border-edge bg-card p-4"
+          className="hairline stagger-1 flex flex-col gap-3 rounded-lg border border-edge bg-card p-4"
         >
           <div className="flex items-baseline justify-between">
             <p className="text-sm text-ink">Trip · {activePairing.progress.totalDays} days</p>
@@ -351,7 +337,6 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
             homeTz={homeTz}
             nowMs={nowMs}
             onOpenSheet={() => setSheetIsoDate(selectedIso)}
-            onClear={() => setSelectedIso(null)}
           />
         </div>
       ) : (
@@ -359,7 +344,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           type="button"
           data-testid="next-duty-card"
           onClick={() => setSheetIsoDate(localDateKey(firstLeg.depUtc, firstLeg.depTz))}
-          className="stagger-2 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
+          className="hairline stagger-2 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4 text-left transition-colors duration-[120ms] hover:bg-raised"
         >
           <TripSummaryLines legs={legs} nextDuty={nextDuty} leaveHomeUtc={leaveHomeUtc} nowMs={nowMs} />
         </button>

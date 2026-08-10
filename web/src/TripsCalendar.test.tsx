@@ -54,7 +54,74 @@ describe("TripsCalendar", () => {
 
     const day = screen.getByTestId("calendar-day-2026-08-15");
     expect(day.className).toContain("bg-accent-soft");
-    expect(day.querySelector(".bg-accent")).toBeTruthy();
+    expect(screen.getByTestId("day-mark-2026-08-15")).toBeInTheDocument();
+  });
+
+  it("shows direction and station on the grid without opening the day", () => {
+    // DXB -> AKL out on Aug 15, slip Aug 16-17, AKL -> DXB home on Aug 18.
+    const pairing: TripWithFlights = {
+      ...trip,
+      id: "trip-2",
+      flights: [
+        {
+          ...trip.flights[0]!,
+          id: "f-out",
+          dest: "AKL",
+          depUtc: "2026-08-15T05:00:00.000Z",
+          arrUtc: "2026-08-16T02:00:00.000Z",
+          arrTz: "Pacific/Auckland",
+        },
+        {
+          ...trip.flights[0]!,
+          id: "f-home",
+          origin: "AKL",
+          dest: "DXB",
+          depUtc: "2026-08-18T05:00:00.000Z",
+          arrUtc: "2026-08-18T18:00:00.000Z",
+          depTz: "Pacific/Auckland",
+          legSeq: 1,
+        },
+      ],
+    };
+
+    render(
+      <TripsCalendar now={now} trips={[pairing]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+    );
+
+    expect(screen.getByTestId("day-mark-2026-08-15")).toHaveTextContent("↗AKL");
+    expect(screen.getByTestId("day-mark-2026-08-16")).toHaveTextContent("·AKL");
+    expect(screen.getByTestId("day-mark-2026-08-18")).toHaveTextContent("↙AKL");
+  });
+
+  it("shows a turnaround glyph for an out-and-back day", () => {
+    const turnaround: TripWithFlights = {
+      ...trip,
+      id: "trip-3",
+      flights: [
+        {
+          ...trip.flights[0]!,
+          id: "f-out",
+          dest: "BKK",
+          depUtc: "2026-08-18T05:40:00.000Z",
+          arrUtc: "2026-08-18T11:25:00.000Z",
+        },
+        {
+          ...trip.flights[0]!,
+          id: "f-back",
+          origin: "BKK",
+          dest: "DXB",
+          depUtc: "2026-08-18T13:00:00.000Z",
+          arrUtc: "2026-08-18T17:00:00.000Z",
+          legSeq: 1,
+        },
+      ],
+    };
+
+    render(
+      <TripsCalendar now={now} trips={[turnaround]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+    );
+
+    expect(screen.getByTestId("day-mark-2026-08-18")).toHaveTextContent("⇄BKK");
   });
 
   it("calls onPickDay when tapping a day covered by a trip", async () => {
