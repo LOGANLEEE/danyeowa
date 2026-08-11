@@ -12,7 +12,7 @@ import { UNKNOWN_FLIGHT_NO, openAddForm } from "./helpers";
  *
  * Starts already signed in via the shared storageState (auth.setup.ts, one OTP for the
  * whole suite) - see playwright.config.ts's `chromium` project. This file no longer sends
- * an OTP of its own; TURNAROUND's EK097/EK098 legs are pre-warmed cache rows (see
+ * an OTP of its own; TURNAROUND's EK9997/EK9998 legs are pre-warmed cache rows (see
  * scripts/seed-e2e-fixtures.sql) so this scenario never depends on a live provider fetch.
  */
 
@@ -65,23 +65,23 @@ const EK412_RETURN = {
 };
 
 /**
- * DXB -> BCN, EK097, then BCN -> DXB, EK098 (scripts/ek-schedules.json): a same-day
+ * DXB -> BCN, EK9997, then BCN -> DXB, EK9998 (scripts/ek-schedules.json): a same-day
  * turnaround (round trip). Picked date 2026-09-15 - free, and outside the EK412_RETURN
  * chain's span (2026-09-10 through 2026-09-12/13) so the two scenarios' calendar marks
  * never overlap.
  *
- * EK097 leg0: DXB dep 08:20 Asia/Dubai, dayOffset 0 -> arr BCN 12:35 Europe/Madrid, same
+ * EK9997 leg0: DXB dep 08:20 Asia/Dubai, dayOffset 0 -> arr BCN 12:35 Europe/Madrid, same
  * local date 2026-09-15 (both legs same calendar day at their own tz).
- * EK098's append anchor date = addDaysIso(EK097's depDate, EK097's dayOffset) = 2026-09-15
- * (dayOffset 0) - EK098 leg0 (BCN->DXB, dep 14:15 local, daily) operates that date.
- * EK098 arr DXB 00:05 Asia/Dubai, dayOffset 1 -> local date 2026-09-16.
+ * EK9998's append anchor date = addDaysIso(EK9997's depDate, EK9997's dayOffset) = 2026-09-15
+ * (dayOffset 0) - EK9998 leg0 (BCN->DXB, dep 14:15 local, daily) operates that date.
+ * EK9998 arr DXB 00:05 Asia/Dubai, dayOffset 1 -> local date 2026-09-16.
  *
- * One combined trip, 2 legs (leg_seq 0 = EK097, leg_seq 1 = EK098) - the whole round trip
+ * One combined trip, 2 legs (leg_seq 0 = EK9997, leg_seq 1 = EK9998) - the whole round trip
  * away-spans 2026-09-15 through 2026-09-16 in Asia/Dubai (home base) local dates.
  */
 const TURNAROUND = {
-  outbound: { flightNo: "EK097", origin: "DXB", dest: "BCN" },
-  appended: { flightNo: "EK098", origin: "BCN", dest: "DXB" },
+  outbound: { flightNo: "EK9997", origin: "DXB", dest: "BCN" },
+  appended: { flightNo: "EK9998", origin: "BCN", dest: "DXB" },
   pickedDate: "2026-09-15",
   spanEndDate: "2026-09-16",
 };
@@ -157,7 +157,7 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
   await page.getByTestId("tab-calendar").click();
 
-  // --- Scenario B: turnaround - "+ add flight" chains EK098 onto EK097's preview as ONE
+  // --- Scenario B: turnaround - "+ add flight" chains EK9998 onto EK9997's preview as ONE
   // combined trip (leg_seq continues), before any save. The appended card renders alongside
   // the outbound card; saving posts a single trip with both legs, which the Trips tab shows
   // as one round trip (DXB->BCN->DXB) worth of rows. The form clears immediately on save -
@@ -185,7 +185,7 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await expect(page.getByTestId(`calendar-day-${TURNAROUND.pickedDate}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${TURNAROUND.spanEndDate}`)).toHaveClass(/bg-accent-soft/);
 
-  // One combined trip (EK097 + EK098, 2 legs) -> 2 rows, not two separate trips.
+  // One combined trip (EK9997 + EK9998, 2 legs) -> 2 rows, not two separate trips.
   await page.getByTestId("tab-trips").click();
   await expect(page.getByTestId("upcoming-row")).toHaveCount(2);
 

@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import type { Airport, LegInput, ScheduleLeg } from "@roaster/shared";
-import { TripInputSchema, addDaysIso, legDatesFromPicked, wallToUtc } from "@roaster/shared";
+import {
+  TripInputSchema,
+  addDaysIso,
+  legDatesFromPicked,
+  normaliseFlightNo,
+  wallToUtc,
+} from "@roaster/shared";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";
 
@@ -123,7 +129,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   // Debounced schedule lookup on a valid flight-no pattern.
   useEffect(() => {
     if (mode !== "flightno") return;
-    const candidate = flightNo.toUpperCase();
+    const candidate = normaliseFlightNo(flightNo);
     if (!FLIGHT_NO_PATTERN.test(candidate)) {
       setAutofillLegs(null);
       setAutofillFlightNo(null);
@@ -176,7 +182,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   async function appendFlight(candidateFlightNo: string) {
     setAppendLookupMiss(false);
     if (!autofillLegs || autofillLegs.length === 0) return;
-    const candidate = candidateFlightNo.toUpperCase();
+    const candidate = normaliseFlightNo(candidateFlightNo);
     if (!FLIGHT_NO_PATTERN.test(candidate)) {
       setAppendLookupMiss(true);
       return;
@@ -213,7 +219,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   }
 
   function switchToManual() {
-    setLegs([{ ...emptyLeg(), flightNo: flightNo.toUpperCase(), dep: `${pickedDate}T00:00` }]);
+    setLegs([{ ...emptyLeg(), flightNo: normaliseFlightNo(flightNo), dep: `${pickedDate}T00:00` }]);
     setMode("manual");
   }
 
@@ -342,7 +348,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       const arrUtc = wallToUtc(toWallIso(leg.arr), destAirport.tz);
       // reportUtc intentionally omitted — the server derives it (dep - 90min) when absent.
       resolvedLegs.push({
-        flightNo: leg.flightNo,
+        flightNo: normaliseFlightNo(leg.flightNo),
         origin: leg.origin,
         dest: leg.dest,
         depUtc,

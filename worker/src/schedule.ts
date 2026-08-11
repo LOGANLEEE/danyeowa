@@ -7,6 +7,7 @@ import {
   isoWeekday,
   addDaysIso,
   wallToUtc,
+  normaliseFlightNo,
 } from "@roaster/shared";
 import type { ScheduleLookupResponse, ScheduleLeg, ScheduleSuggestion, ProviderLeg } from "@roaster/shared";
 import * as schema from "./db/schema";
@@ -204,7 +205,9 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
   if (!flightNoRaw || !date || !flightNoQuerySchema.test(flightNoRaw)) {
     return c.json({ error: "flight_no and date are required; flight_no must match [A-Z]{2}\\d{1,4}" }, 400);
   }
-  const flightNo = flightNoRaw.toUpperCase();
+  // Normalised (not just uppercased) so "EK049" keys the same cache row - and the same
+  // negative-cache miss - as "EK49" (see normaliseFlightNo).
+  const flightNo = normaliseFlightNo(flightNoRaw);
 
   const database = db(c.env);
 
@@ -331,7 +334,7 @@ scheduleRouter.post("/schedule/confirm", async (c) => {
   if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
   const input = parsed.data;
 
-  const flightNo = input.flightNo.toUpperCase();
+  const flightNo = normaliseFlightNo(input.flightNo);
   const origin = input.origin.toUpperCase();
   const dest = input.dest.toUpperCase();
   const now = Date.now();
