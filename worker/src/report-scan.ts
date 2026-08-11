@@ -37,6 +37,121 @@ async function claimFlightForNotification(
   return (result.meta.changes ?? 0) > 0;
 }
 
+/**
+ * Same claim-before-send trick as report alerts, on the arrival stamp.
+ */
+async function claimFlightForArrival(
+  database: ReturnType<typeof db>,
+  flightId: string,
+  stampMs: number,
+): Promise<boolean> {
+  const result = await database
+    .update(schema.flights)
+    .set({ arrivalNotifiedAt: stampMs })
+    .where(and(eq(schema.flights.id, flightId), isNull(schema.flights.arrivalNotifiedAt)))
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+/**
+ * "Her flight lands in an hour" — the alert for whoever is meeting a flight rather than working
+ * it, keyed on arrival instead of report time.
+ *
+ * It reuses the user's existing lead_minutes rather than adding a second preference: the
+ * question it answers ("how much warning do you want") is the same one, and one dial the user
+ * already understands beats two they have to reconcile.
+ */
+export async function runArrivalScan(env: Env, nowMs: number): Promise<ReportScanResult> {
+  const database = db(env);
+  const nowIso = new Date(nowMs).toISOString();
+  const windowEndIso = new Date(nowMs + MAX_WINDOW_MS).toISOString();
+
+  const candidates = await database
+    .select({
+      id: schema.flights.id,
+      userId: schema.flights.userId,
+      flightNo: schema.flights.flightNo,
+      origin: schema.flights.origin,
+      dest: schema.flights.dest,
+      arrUtc: schema.flights.arrUtc,
+    })
+    .from(schema.flights)
+    .where(
+      and(
+        gte(schema.flights.arrUtc, nowIso),
+        lte(schema.flights.arrUtc, windowEndIso),
+        isNull(schema.flights.arrivalNotifiedAt),
+      ),
+    );
+
+  const result: ReportScanResult = {
+    scanned: candidates.length,
+    notified: 0,
+    skippedOutsideLead: 0,
+    expiredSubscriptionsRemoved: 0,
+  };
+  if (candidates.length === 0) return result;
+
+  const userIds = [...new Set(candidates.map((f) => f.userId))];
+  const destCodes = [...new Set(candidates.map((f) => f.dest))];
+
+  const [prefsRows, airportRows] = await Promise.all([
+    database.select().from(schema.notificationPrefs).where(inArray(schema.notificationPrefs.userId, userIds)),
+    database.select().from(schema.airports).where(inArray(schema.airports.iata, destCodes)),
+  ]);
+  const prefsByUser = new Map(prefsRows.map((p) => [p.userId, p]));
+  const airportByIata = new Map(airportRows.map((a) => [a.iata, a]));
+
+  for (const flight of candidates) {
+    const prefs = prefsByUser.get(flight.userId) ?? { enabled: true, leadMinutes: 120 };
+    if (!prefs.enabled) {
+      result.skippedOutsideLead++;
+      continue;
+    }
+
+    const minutesUntilArrival = (Date.parse(flight.arrUtc) - nowMs) / 60_000;
+    if (minutesUntilArrival > prefs.leadMinutes) {
+      result.skippedOutsideLead++;
+      continue;
+    }
+
+    const claimed = await claimFlightForArrival(database, flight.id, nowMs);
+    if (!claimed) continue;
+
+    // Local time AT THE DESTINATION: the person waiting is standing in the arrivals hall.
+    const destTz = airportByIata.get(flight.dest)?.tz ?? "UTC";
+    const arrivalLocal = formatLocal(flight.arrUtc, destTz);
+
+    const payload = {
+      title: `${flight.flightNo} lands ${arrivalLocal}`,
+      body: `${flight.origin} → ${flight.dest}, in ${Math.max(0, Math.round(minutesUntilArrival))} min`,
+      tag: `arrival-${flight.id}`,
+    };
+
+    const subs = await database
+      .select()
+      .from(schema.pushSubscriptions)
+      .where(eq(schema.pushSubscriptions.userId, flight.userId));
+
+    let sentAny = false;
+    for (const sub of subs) {
+      const sendResult = await sendPush(
+        { endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
+        payload,
+        env,
+      );
+      if (sendResult.ok) sentAny = true;
+      else if (sendResult.expired) {
+        await database.delete(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.id, sub.id));
+        result.expiredSubscriptionsRemoved++;
+      }
+    }
+    if (sentAny) result.notified++;
+  }
+
+  return result;
+}
+
 export type ReportScanResult = {
   scanned: number;
   notified: number;

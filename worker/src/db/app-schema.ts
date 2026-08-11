@@ -37,6 +37,9 @@ export const flights = sqliteTable("flights", {
   notes: text("notes"),
   legSeq: integer("leg_seq").notNull().default(0),
   reportNotifiedAt: integer("report_notified_at", { mode: "number" }),
+  // Separate from reportNotifiedAt because the two alerts fire at different moments of the same
+  // flight: report time is for the person working it, arrival is for whoever is meeting it.
+  arrivalNotifiedAt: integer("arrival_notified_at", { mode: "number" }),
 });
 
 export const airports = sqliteTable("airports", {

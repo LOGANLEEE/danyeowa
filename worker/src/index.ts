@@ -3,7 +3,7 @@ import type { HealthResponse, Me } from "@roaster/shared";
 import { createAuth } from "./auth";
 import { getLastDevOtp } from "./email";
 import { pushRouter } from "./push";
-import { runReportScan } from "./report-scan";
+import { runArrivalScan, runReportScan } from "./report-scan";
 import { scheduleRouter } from "./schedule";
 import { shareRouter } from "./share";
 import { tripsRouter } from "./trips";
@@ -114,7 +114,8 @@ app.route("/api", shareRouter);
 app.route("/api", pushRouter);
 
 async function scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-  ctx.waitUntil(runReportScan(env, Date.now()));
+  const now = Date.now();
+  ctx.waitUntil(Promise.all([runReportScan(env, now), runArrivalScan(env, now)]));
 }
 
 export default {
