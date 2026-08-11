@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { Airport } from "@roaster/shared";
 import CalendarHome from "./CalendarHome";
-import { confirmSchedule, createTrip, deleteTrip, getTrips, lookupSchedule } from "./api";
+import { confirmSchedule, createTrip, deleteTrip, getAirport, getTrips, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";
 
 vi.mock("./api", () => ({
@@ -102,10 +103,52 @@ const inProgressTrip: TripWithFlights = {
   ],
 };
 
+// Single-leg fixture with IATA codes not touched by any other test in this file — the
+// (session-lived, module-scoped) airport lookup cache in lib/airports.ts persists across
+// `it` blocks, so a test asserting the PRE-resolution fallback needs codes no earlier test
+// has already resolved and cached.
+const citySampleTrip: TripWithFlights = {
+  id: "trip-city",
+  userId: "u1",
+  label: null,
+  createdAt: now.getTime(),
+  flights: [
+    {
+      id: "city-f1",
+      tripId: "trip-city",
+      userId: "u1",
+      flightNo: "QF1",
+      origin: "SYD",
+      dest: "NRT",
+      depUtc: "2026-08-11T02:15:00.000Z",
+      arrUtc: "2026-08-11T13:35:00.000Z",
+      reportUtc: "2026-08-11T00:45:00.000Z",
+      depTz: "Australia/Sydney",
+      arrTz: "Asia/Tokyo",
+      source: "manual",
+      notes: null,
+      legSeq: 0,
+    },
+  ],
+};
+
+/** Makes the rAF-batched scroll handler's callback run synchronously within the same tick as
+ * the `fireEvent.scroll` that triggers it — real rAF has no equivalent in jsdom/vitest's fake
+ * timers, so this is the only way to observe the collapse/expand state change in a test. */
+function stubSyncRaf() {
+  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+    cb(0);
+    return 0;
+  });
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
+}
+
 describe("CalendarHome", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     vi.mocked(getTrips).mockClear();
+    window.scrollY = 0;
   });
 
   it("renders the month calendar and a compact next-duty card", async () => {
@@ -545,5 +588,144 @@ describe("CalendarHome", () => {
     // Once the refetch resolves with the new trip, the card flips over to the trip view.
     resolveSecondFetch([addedTrip]);
     await waitFor(() => expect(screen.getByTestId("delete-trip")).toBeInTheDocument());
+  });
+
+  describe("scroll-to-expand duty detail", () => {
+    it("scrolling past the collapse threshold swaps the summary board for the duty timeline, leave-home at report minus 55m", async () => {
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+      vi.mocked(getAirport).mockResolvedValue(null);
+      stubSyncRaf();
+      const user = userEvent.setup();
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+      await screen.findByTestId("day-detail-card");
+      expect(screen.queryByTestId("duty-timeline")).not.toBeInTheDocument();
+
+      window.scrollY = 70;
+      fireEvent.scroll(window);
+
+      const timeline = await screen.findByTestId("duty-timeline");
+      expect(timeline).toHaveTextContent("Leave home");
+      expect(timeline).toHaveTextContent("03:50"); // report (04:45 Asia/Dubai) minus 55m
+      expect(timeline).toHaveTextContent("Report");
+      expect(timeline).toHaveTextContent("04:45"); // firstLeg.reportUtc in Asia/Dubai
+      expect(timeline).toHaveTextContent("Departs");
+      expect(timeline).toHaveTextContent("06:15"); // firstLeg.depUtc in Asia/Dubai
+      expect(timeline).toHaveTextContent("11h 20m airborne"); // leg 0: 02:15Z -> 13:35Z
+      expect(timeline).toHaveTextContent("Lands");
+      expect(timeline).toHaveTextContent("21:35"); // leg 0 arrUtc in Asia/Singapore
+    });
+
+    it("scrolling back above the restore threshold collapses the timeline back to the summary board", async () => {
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+      vi.mocked(getAirport).mockResolvedValue(null);
+      stubSyncRaf();
+      const user = userEvent.setup();
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+      await screen.findByTestId("day-detail-card");
+
+      window.scrollY = 70;
+      fireEvent.scroll(window);
+      await screen.findByTestId("duty-timeline");
+
+      window.scrollY = 10;
+      fireEvent.scroll(window);
+      await waitFor(() => expect(screen.queryByTestId("duty-timeline")).not.toBeInTheDocument());
+      // The summary board rows are back.
+      expect(screen.getByTestId("day-detail-card")).toHaveTextContent(/report/i);
+    });
+
+    it("shows a layover row between legs for a multi-leg trip, with a Departs/Lands pair per leg", async () => {
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+      vi.mocked(getAirport).mockResolvedValue(null);
+      stubSyncRaf();
+      const user = userEvent.setup();
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+      await screen.findByTestId("day-detail-card");
+
+      window.scrollY = 70;
+      fireEvent.scroll(window);
+
+      const timeline = await screen.findByTestId("duty-timeline");
+      // layoverHours(leg0.arrUtc 13:35Z, leg1.depUtc 16:00Z) = ~2.4h, rounded to 2h by formatHours.
+      expect(timeline).toHaveTextContent("Layover · SIN");
+      expect(timeline).toHaveTextContent("2h");
+      expect(screen.getAllByText("Departs")).toHaveLength(2);
+      expect(screen.getAllByText("Lands")).toHaveLength(2);
+    });
+
+    it("shows the bare IATA code until getAirport resolves, then the resolved city, without blocking the timeline's first paint", async () => {
+      vi.mocked(getTrips).mockResolvedValue([citySampleTrip]);
+      const resolvers = new Map<string, (airport: Airport | null) => void>();
+      vi.mocked(getAirport).mockImplementation(
+        (iata: string) =>
+          new Promise((resolve) => {
+            resolvers.set(iata, resolve);
+          }),
+      );
+      stubSyncRaf();
+      const user = userEvent.setup();
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+      await screen.findByTestId("day-detail-card");
+
+      window.scrollY = 70;
+      fireEvent.scroll(window);
+
+      // Renders immediately with the bare code - never blocks on the airport fetch.
+      const timeline = await screen.findByTestId("duty-timeline");
+      expect(timeline).toHaveTextContent("SYD");
+      expect(timeline).not.toHaveTextContent("Sydney");
+
+      resolvers.get("SYD")!({ iata: "SYD", city: "Sydney", name: "Sydney Kingsford Smith", tz: "Australia/Sydney" });
+      expect(await screen.findByText(/Sydney/)).toBeInTheDocument();
+      // NRT (the Lands row, further down) hasn't resolved yet - still the bare code, and a
+      // failed/pending lookup for it never breaks the rest of the card.
+      expect(timeline).toHaveTextContent("NRT");
+    });
+
+    it("renders the duty timeline's content under prefers-reduced-motion with no extra async gating", async () => {
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+      vi.mocked(getAirport).mockResolvedValue(null);
+      // jsdom doesn't implement matchMedia; the reduced-motion handling in this feature is
+      // CSS-only (tokens.css `.tl-enter` is scoped inside `@media (prefers-reduced-motion:
+      // no-preference)`, so under `reduce` it carries no animation at all) - that can't be
+      // observed from vitest/jsdom, which doesn't evaluate media queries for animation. This
+      // stub only proves the reveal isn't ALSO gated behind a JS/timer check that would delay
+      // or hide it under reduced motion for a different reason.
+      vi.stubGlobal(
+        "matchMedia",
+        (query: string) =>
+          ({
+            matches: query.includes("reduce"),
+            media: query,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            addListener: () => {},
+            removeListener: () => {},
+            dispatchEvent: () => false,
+          }) as unknown as MediaQueryList,
+      );
+      stubSyncRaf();
+      const user = userEvent.setup();
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+      await screen.findByTestId("day-detail-card");
+
+      window.scrollY = 70;
+      fireEvent.scroll(window);
+
+      const timeline = await screen.findByTestId("duty-timeline");
+      expect(timeline).toHaveTextContent("Leave home");
+      expect(timeline).toHaveTextContent("Report");
+      expect(timeline).toHaveTextContent("Lands");
+    });
   });
 });
