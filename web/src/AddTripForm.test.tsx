@@ -167,6 +167,160 @@ describe("AddTripForm", () => {
     expect(screen.queryByTestId("schedule-loading")).not.toBeInTheDocument();
   });
 
+  it("renders the Add button as soon as the flight number matches the pattern, before the lookup resolves", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(lookupSchedule).mockReturnValue(new Promise(() => {})); // never resolves in this test
+
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: /add to roster/i })).not.toBeInTheDocument();
+
+    await user.type(screen.getByTestId("flightno-input"), "412");
+    await vi.advanceTimersByTimeAsync(400);
+
+    const addButton = await screen.findByRole("button", { name: /^add to roster$/i });
+    expect(addButton).toBeEnabled();
+  });
+
+  it("pressing Add while the lookup is still resolving queues the submit and saves once it resolves", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    let resolveLookup!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    vi.mocked(lookupSchedule).mockReturnValue(
+      new Promise((resolve) => {
+        resolveLookup = resolve;
+      }),
+    );
+    vi.mocked(createTrip).mockResolvedValue({
+      id: "trip-1",
+      userId: "u1",
+      label: null,
+      createdAt: Date.now(),
+      flights: [],
+    });
+
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+
+    await user.type(screen.getByTestId("flightno-input"), "412");
+    await vi.advanceTimersByTimeAsync(400);
+
+    const addButton = await screen.findByRole("button", { name: /^add to roster$/i });
+    await user.click(addButton);
+
+    expect(screen.getByRole("button", { name: /adding/i })).toBeInTheDocument();
+    expect(createTrip).not.toHaveBeenCalled();
+
+    await waitFor(() =>
+      resolveLookup({
+        legs: [
+          {
+            legSeq: 0,
+            origin: "DXB",
+            dest: "LHR",
+            depLocal: "09:15",
+            arrLocal: "13:35",
+            dayOffset: 0,
+            originTz: "Asia/Dubai",
+            destTz: "Europe/London",
+            confirmCount: 3,
+          },
+        ],
+      }),
+    );
+
+    await waitFor(() => expect(createTrip).toHaveBeenCalledTimes(1));
+    const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
+    expect(payload!.legs[0]).toMatchObject({ flightNo: "EK412", origin: "DXB", dest: "LHR" });
+  });
+
+  it("pressing Add while resolving, then hitting a lookup miss, saves nothing and shows the manual-entry link", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    let resolveLookup!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    vi.mocked(lookupSchedule).mockReturnValue(
+      new Promise((resolve) => {
+        resolveLookup = resolve;
+      }),
+    );
+
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+
+    await user.type(screen.getByTestId("flightno-input"), "999");
+    await vi.advanceTimersByTimeAsync(400);
+
+    const addButton = await screen.findByRole("button", { name: /^add to roster$/i });
+    await user.click(addButton);
+    expect(screen.getByRole("button", { name: /adding/i })).toBeInTheDocument();
+
+    await waitFor(() => resolveLookup(null));
+
+    expect(await screen.findByTestId("manual-expand")).toBeInTheDocument();
+    expect(createTrip).not.toHaveBeenCalled();
+  });
+
+  it("editing the flight number after pressing Add cancels the queued submit - no auto-save, even once the stale lookup resolves", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    let resolveFirst!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    vi.mocked(lookupSchedule).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirst = resolve;
+      }),
+    );
+
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+
+    await user.type(screen.getByTestId("flightno-input"), "412");
+    await vi.advanceTimersByTimeAsync(400);
+
+    const addButton = await screen.findByRole("button", { name: /^add to roster$/i });
+    await user.click(addButton);
+    expect(screen.getByRole("button", { name: /adding/i })).toBeInTheDocument();
+
+    // Changed their mind before the queued lookup resolved - clear and enter a different number.
+    await user.clear(screen.getByTestId("flightno-input"));
+    vi.mocked(lookupSchedule).mockResolvedValueOnce({
+      legs: [
+        {
+          legSeq: 0,
+          origin: "DXB",
+          dest: "AUH",
+          depLocal: "10:00",
+          arrLocal: "11:00",
+          dayOffset: 0,
+          originTz: "Asia/Dubai",
+          destTz: "Asia/Dubai",
+          confirmCount: 1,
+        },
+      ],
+    });
+    await user.type(screen.getByTestId("flightno-input"), "500");
+    await vi.advanceTimersByTimeAsync(400);
+
+    // The new number's own preview arrives, but the button is back to non-busy - the earlier
+    // press was dropped, not carried over as an auto-submit on the edited number.
+    await screen.findByTestId("autofill-card");
+    expect(screen.getByRole("button", { name: /^add to roster$/i })).toBeInTheDocument();
+    expect(createTrip).not.toHaveBeenCalled();
+
+    // The stale first lookup finally resolving shouldn't retroactively trigger a save either.
+    await waitFor(() =>
+      resolveFirst({
+        legs: [
+          {
+            legSeq: 0,
+            origin: "DXB",
+            dest: "LHR",
+            depLocal: "09:15",
+            arrLocal: "13:35",
+            dayOffset: 0,
+            originTz: "Asia/Dubai",
+            destTz: "Europe/London",
+            confirmCount: 3,
+          },
+        ],
+      }),
+    );
+    expect(createTrip).not.toHaveBeenCalled();
+  });
+
   it("does not render manual-expand until a lookup actually misses (not on a fresh form)", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 

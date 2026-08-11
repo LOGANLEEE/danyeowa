@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
 import { useTripEntry } from "./useTripEntry";
-import type { UseTripEntryReturn } from "./useTripEntry";
+import type { AutofillLegDraft, UseTripEntryReturn } from "./useTripEntry";
 
 /** Muted "+ add flight" control shown under the preview card while previewing a single
  * flight (hidden once a flight is already appended — the ✕ on the appended card is the only
@@ -103,7 +103,7 @@ export default function AddTripForm({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            void entry.handleAutofillSubmit();
+            entry.requestSubmit();
           }}
           className="flex flex-col gap-4"
         >
@@ -128,12 +128,16 @@ export default function AddTripForm({
             />
           </div>
 
-          {entry.autofillLegs && entry.autofillFlightNo && (() => {
-            const outboundLegs = entry.autofillLegs.filter((leg) => leg.flightNo === entry.autofillFlightNo);
-            const appendedLegs = entry.appendedFlightNo
-              ? entry.autofillLegs.filter((leg) => leg.flightNo === entry.appendedFlightNo)
+          {/* Rendered as soon as the flight number matches the pattern - not gated on the
+              lookup having resolved, so the crew can press Add without waiting it out (the
+              preview card itself still only appears once autofillLegs arrives). */}
+          {entry.flightNoValid && (() => {
+            const preview = entry.autofillLegs && entry.autofillFlightNo ? entry.autofillLegs : null;
+            const outboundLegs = preview ? preview.filter((leg) => leg.flightNo === entry.autofillFlightNo) : [];
+            const appendedLegs = preview && entry.appendedFlightNo
+              ? preview.filter((leg) => leg.flightNo === entry.appendedFlightNo)
               : [];
-            const renderLegFields = (leg: (typeof entry.autofillLegs)[number], index: number) => {
+            const renderLegFields = (leg: AutofillLegDraft, index: number) => {
               return (
                 <div key={leg.legSeq} className="flex flex-col gap-2 border-t border-edge pt-3 first:border-t-0 first:pt-0">
                   <p className="text-ink">
@@ -172,10 +176,12 @@ export default function AddTripForm({
 
             return (
               <>
-                <div data-testid="autofill-card" className="flex flex-col gap-3 rounded border border-edge bg-raised p-4">
-                  {outboundLegs.map((leg, index) => renderLegFields(leg, index))}
-                  <p className="text-sm text-ink-muted">times from schedule — edit if your roster differs</p>
-                </div>
+                {preview && (
+                  <div data-testid="autofill-card" className="flex flex-col gap-3 rounded border border-edge bg-raised p-4">
+                    {outboundLegs.map((leg, index) => renderLegFields(leg, index))}
+                    <p className="text-sm text-ink-muted">times from schedule — edit if your roster differs</p>
+                  </div>
+                )}
 
                 {appendedLegs.length > 0 && (
                   <div data-testid="appended-card" className="flex flex-col gap-3 rounded border border-edge bg-raised p-4">
@@ -197,14 +203,16 @@ export default function AddTripForm({
                   </div>
                 )}
 
-                {!entry.appendedFlightNo && <AppendFlightControl entry={entry} airlinePrefix={airlinePrefix} />}
+                {preview && !entry.appendedFlightNo && (
+                  <AppendFlightControl entry={entry} airlinePrefix={airlinePrefix} />
+                )}
 
                 <button
                   type="submit"
-                  disabled={entry.submitting || entry.resolving}
+                  disabled={entry.submitting}
                   className="min-h-[48px] rounded bg-accent px-3 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
                 >
-                  Add to roster
+                  {entry.pendingSubmit ? "Adding…" : "Add to roster"}
                 </button>
               </>
             );

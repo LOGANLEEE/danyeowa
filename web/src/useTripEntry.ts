@@ -104,9 +104,12 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   const [autofillFlightNo, setAutofillFlightNo] = useState<string | null>(null);
   const [lookupMiss, setLookupMiss] = useState(false);
   // True while a debounced schedule lookup's fetch is in flight (not during the debounce
-  // delay itself) — drives the "checking schedule…" muted line and disables Add until the
-  // lookup resolves one way or the other (autofill card or manual fallback).
+  // delay itself) — drives the "checking schedule…" muted line.
   const [resolving, setResolving] = useState(false);
+  // True once the user presses Add before a lookup has resolved (requestSubmit) — the effect
+  // below consumes it as soon as autofillLegs arrives (submit) or the lookup misses (drop it).
+  // Cleared immediately if the flight number changes, so an edited-away number never saves.
+  const [pendingSubmit, setPendingSubmit] = useState(false);
 
   // Turnaround chaining (Task 2): an appended second flight's own flight number and legs,
   // tracked separately from the outbound so the "✕ remove appended" revert can drop exactly
@@ -122,6 +125,10 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
 
   // Debounced schedule lookup on a valid flight-no pattern.
   useEffect(() => {
+    // Any change that reaches here (a keystroke, a mode switch, a new picked date) means a
+    // submit queued by requestSubmit() while the previous lookup was still resolving no
+    // longer applies — don't save against a flight number the user has since edited away from.
+    setPendingSubmit(false);
     if (mode !== "flightno") return;
     const candidate = flightNo.toUpperCase();
     if (!FLIGHT_NO_PATTERN.test(candidate)) {
@@ -161,6 +168,19 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     }, LOOKUP_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [flightNo, mode, pickedDate]);
+
+  // Consumes a submit queued by requestSubmit(): fires the save the moment the lookup it was
+  // waiting on settles into a preview, or drops it silently on a miss (the existing lookupMiss
+  // UI already surfaces the manual-entry link — nothing else to do here).
+  useEffect(() => {
+    if (!pendingSubmit) return;
+    if (autofillLegs && autofillFlightNo) {
+      setPendingSubmit(false);
+      void handleAutofillSubmit();
+    } else if (lookupMiss) {
+      setPendingSubmit(false);
+    }
+  }, [pendingSubmit, autofillLegs, autofillFlightNo, lookupMiss]);
 
   /**
    * Chains a second, schedule-known flight onto the current autofill preview as one combined
@@ -327,6 +347,18 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     }
   }
 
+  /** Add-button handler: saves immediately if the schedule lookup for the current flight
+   * number has already resolved, otherwise queues the submit (see the pendingSubmit effect
+   * above) so the crew never has to wait out the debounce + fetch before acting. */
+  function requestSubmit() {
+    if (!FLIGHT_NO_PATTERN.test(flightNo.toUpperCase())) return;
+    if (!resolving && autofillLegs && autofillFlightNo) {
+      void handleAutofillSubmit();
+    } else {
+      setPendingSubmit(true);
+    }
+  }
+
   async function handleManualSubmit() {
     setError(null);
 
@@ -375,6 +407,9 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     autofillFlightNo,
     lookupMiss,
     resolving,
+    pendingSubmit,
+    requestSubmit,
+    flightNoValid: FLIGHT_NO_PATTERN.test(flightNo.toUpperCase()),
     updateAutofillLeg,
     switchToManual,
     switchToFlightNo,
