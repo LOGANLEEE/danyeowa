@@ -5,6 +5,8 @@ shows report time first, and (eventually) shares the roster with family.
 
 **Read `docs/DECISIONS.md` before proposing UI or data-model changes.** It records what was
 chosen, what was rejected, and why — including things deliberately not built.
+`docs/FEATURES.md` is the inventory of what exists and how far it actually works;
+`docs/RUNBOOK.md` has the commands (deploy, migrations, schedule harvest, push test).
 
 ## Stack
 
