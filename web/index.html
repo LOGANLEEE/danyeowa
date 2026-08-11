@@ -30,7 +30,57 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Pre-JS splash: React's createRoot().render() clears #root's children on first render,
+         so this markup is replaced automatically — nothing to remove by hand. Styles are inline
+         (not in styles.css) so this paints on the first frame, before any stylesheet round trip.
+         Colours are copied from tokens.css's --color-ground light/dark values rather than reading
+         the CSS variable, since tokens.css hasn't loaded yet either. -->
+    <div id="root">
+      <div
+        style="
+          position: fixed;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          background: #fafafa;
+          color: #1b1d22;
+        "
+      >
+        <span style="font-size: 20px; font-weight: 600; letter-spacing: -0.01em">roaster·me</span>
+        <span
+          style="
+            width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            opacity: 0.5;
+            animation: splash-spin 0.9s linear infinite;
+          "
+        ></span>
+      </div>
+    </div>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        #root > div {
+          background: #15171c !important;
+          color: #e8ebf1 !important;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #root > div span[style*="animation"] {
+          animation: none !important;
+        }
+      }
+      @keyframes splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

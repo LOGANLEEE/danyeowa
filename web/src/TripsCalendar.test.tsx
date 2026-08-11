@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import TripsCalendar from "./TripsCalendar";
@@ -247,6 +247,84 @@ describe("TripsCalendar", () => {
 
     expect(screen.getByTestId("calendar-day-2026-08-11").className).toContain("ring-accent");
     expect(screen.getByTestId("calendar-day-2026-08-10").className).not.toContain("ring-accent");
+  });
+
+  // jsdom (as pulled in by this project) has no PointerEvent constructor, so
+  // fireEvent.pointerDown/etc silently fall back to a bare Event with no clientX/clientY -
+  // testing-library resolves the constructor via `window[EventType] || window.Event`, and
+  // `window.PointerEvent` is undefined here. A MouseEvent carries the same clientX/clientY
+  // fields the component actually reads, so dispatching one typed as "pointerdown" et al is
+  // enough for React's synthetic pointer-event plugin to see real coordinates.
+  function firePointer(el: Element, type: "pointerdown" | "pointermove" | "pointerup", clientX: number, clientY: number) {
+    fireEvent(el, new MouseEvent(type, { clientX, clientY, bubbles: true, cancelable: true }));
+  }
+
+  // Fires the pointerdown/move/up sequence a real drag or trackpad gesture produces, ending at
+  // (dx, dy) relative to a (0, 0) start.
+  function swipe(el: Element, dx: number, dy: number) {
+    firePointer(el, "pointerdown", 0, 0);
+    firePointer(el, "pointermove", dx, dy);
+    firePointer(el, "pointerup", dx, dy);
+  }
+
+  it("changes to the next month on a horizontal swipe left past the threshold", () => {
+    render(
+      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+    );
+    expect(screen.getByText(/august 2026/i)).toBeInTheDocument();
+
+    swipe(screen.getByTestId("calendar-grid"), -60, 0);
+
+    expect(screen.getByText(/september 2026/i)).toBeInTheDocument();
+  });
+
+  it("changes to the previous month on a horizontal swipe right past the threshold", () => {
+    render(
+      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+    );
+
+    swipe(screen.getByTestId("calendar-grid"), 60, 0);
+
+    expect(screen.getByText(/july 2026/i)).toBeInTheDocument();
+  });
+
+  it("ignores a mostly-vertical drag, even past the horizontal distance threshold", () => {
+    render(
+      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+    );
+
+    // 60px horizontal, but 80px vertical - not clearly horizontal (ratio requires
+    // |dx| > |dy| * 1.5), so this is page-scroll intent, not a swipe.
+    swipe(screen.getByTestId("calendar-grid"), 60, 80);
+
+    expect(screen.getByText(/august 2026/i)).toBeInTheDocument();
+  });
+
+  it("does not call onPickDay when a swipe ends over a day cell", () => {
+    const onPickDay = vi.fn();
+    render(
+      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={onPickDay} />,
+    );
+    const day = screen.getByTestId("calendar-day-2026-08-20");
+
+    swipe(day, -60, 0);
+    fireEvent.click(day);
+
+    expect(onPickDay).not.toHaveBeenCalled();
+    expect(screen.getByText(/september 2026/i)).toBeInTheDocument();
+  });
+
+  it("still navigates via the ‹ › buttons after swipe support is added", async () => {
+    const user = userEvent.setup();
+    render(
+      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+    );
+
+    await user.click(screen.getByTestId("calendar-next"));
+    expect(screen.getByText(/september 2026/i)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("calendar-prev"));
+    expect(screen.getByText(/august 2026/i)).toBeInTheDocument();
   });
 
   it("puts today's ring on the home-base LOCAL date, not the UTC date, when tz is behind UTC", () => {
