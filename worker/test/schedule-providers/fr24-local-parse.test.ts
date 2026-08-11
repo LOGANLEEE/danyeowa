@@ -38,6 +38,13 @@ describe("looksBlocked", () => {
     expect(looksBlocked("<div id='cf-chl-widget'>Checking your browser</div>")).toBe(true);
   });
 
+  it("flags the challenge wordings that used to slip through as \"not found\"", () => {
+    // Both observed live on fr24. A zero-row page with no challenge marker is recorded as
+    // "this flight does not exist", so every missed wording is a false negative.
+    expect(looksBlocked("Verifying you are human. This may take a few seconds.")).toBe(true);
+    expect(looksBlocked("www.flightradar24.com Performing security verification")).toBe(true);
+  });
+
   it("does not flag an ordinary empty/not-found page", () => {
     expect(looksBlocked("<html><body>No results</body></html>")).toBe(false);
   });

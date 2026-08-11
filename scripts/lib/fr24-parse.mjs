@@ -82,8 +82,14 @@ export function parseFr24Rows(html) {
  * on hand) - expand the list, or switch to a real fixture + snapshot match, if fr24 changes its
  * challenge markup and a block starts silently reading as "not found" instead.
  */
+/**
+ * Cloudflare's interstitial has several wordings and the detector only knew two of them.
+ * "Verifying you are human" and "Performing security verification" were both observed on
+ * fr24 pages that then scored zero rows - and a zero-row page with no challenge marker gets
+ * recorded as "flight does not exist", so a missed variant silently becomes a false negative.
+ */
 export function looksBlocked(html) {
-  return /just a moment|attention required|checking your browser|cf-chl|access denied|cf-browser-verification/i.test(
+  return /just a moment|attention required|checking your browser|cf-chl|access denied|cf-browser-verification|verifying you are human|security verification|review the security of your connection/i.test(
     html
   );
 }
