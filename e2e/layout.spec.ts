@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openAddForm, pickCalendarDay } from "./helpers";
+import { openAddForm, signInThroughUi } from "./helpers";
 
 /**
  * Layout invariants that unit tests structurally cannot catch, because every one of them is a
@@ -13,22 +13,29 @@ import { openAddForm, pickCalendarDay } from "./helpers";
  * All of them passed the unit suite while broken, and the width regression was "fixed" twice by
  * patching the symptom. Measuring is the only thing that has ever caught them.
  */
+/** Far enough out that no other spec's fixture dates collide with it, and fixed rather than
+ * derived from today so a failure is reproducible on any day of the year. */
+const EMPTY_DAY = "2027-03-17";
+
 test.describe("layout invariants at phone width", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  // A FRESH account, not the shared e2e one: this spec asserts against the empty state, and the
+  // shared account carries whatever trips the other specs left behind. Signing in here also means
+  // the assertions don't depend on spec execution order.
+  test.use({ viewport: { width: 390, height: 844 }, storageState: { cookies: [], origins: [] } });
 
   test("calendar matches its container width, nothing overflows, no control is under 16px", async ({
     page,
   }) => {
-    await page.goto("/");
+    await signInThroughUi(page, `layout-${Date.now()}@local.test`);
 
     // --- The empty state: this is the no-upcoming-duty branch, the one that kept regressing.
     // It regressed precisely because it was the branch nobody screenshotted.
-    await expect(page.getByTestId("calendar-next")).toBeVisible();
+    await expect(page.getByText(/no trips yet/i)).toBeVisible({ timeout: 15_000 });
     await expectCalendarMatchesContainer(page, "empty state");
     await expectNoHorizontalOverflow(page, "empty state");
 
     // --- With the inline add form open on an empty day.
-    await openAddForm(page, futureIso(page));
+    await openAddForm(page, EMPTY_DAY);
     await expectCalendarMatchesContainer(page, "add form open");
     await expectNoHorizontalOverflow(page, "add form open");
 
@@ -53,13 +60,6 @@ test.describe("layout invariants at phone width", () => {
     await expectNoTinyControls(page, "timeline expanded");
   });
 });
-
-/** The next selectable free day, so the spec never depends on today's date. */
-function futureIso(_page: unknown): string {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + 3);
-  return d.toISOString().slice(0, 10);
-}
 
 /**
  * The calendar grid must be exactly as wide as the column it sits in. It has been narrower three
