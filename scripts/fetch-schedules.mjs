@@ -27,6 +27,14 @@
  *                            work fine when retried alone)
  *   --apply                 write to production D1 (default: dry-run - print SQL only)
  *   --force                 ignore .fetch-progress.json, reprocess already-done flights
+ *   --retry-missing         re-attempt flights fr24 returned empty for (see below)
+ *
+ * Progress records `done` (written to D1) and `missing` (fr24 returned no rows) separately.
+ * Empty is not proof of nonexistence - EK245 came back empty here yet exists as UAE245
+ * (OMDB-SBGL-SCEL) in vradarserver/standing-data - so `missing` is re-checkable with
+ * --retry-missing without --force throwing away the flights that did resolve.
+ *
+ * Only --apply records progress as done: a dry-run writes nothing, so it must not claim to.
  *
  * Resumable: every completed flight number is appended to scripts/.fetch-progress.json
  * (gitignored) and skipped on a re-run unless --force - a large sweep can be interrupted and
@@ -48,6 +56,9 @@ const UA =
 // ponytail: fixed context-refresh cadence, not measured against a real block threshold - lower
 // it (or make it adaptive on a blocked/empty response) if a long sweep still gets rate-limited.
 const CONTEXT_REFRESH_EVERY = 25;
+// How many resolved flights to batch into one D1 write. Bounds how much a kill can lose, at the
+// cost of one wrangler invocation per batch.
+const FLUSH_EVERY = 20;
 
 export function parseArgs(argv) {
   const args = { delay: 8000, limit: Infinity, apply: false, force: false };
@@ -58,6 +69,7 @@ export function parseArgs(argv) {
     else if (a === "--limit") args.limit = Number(argv[++i]);
     else if (a === "--delay") args.delay = Number(argv[++i]);
     else if (a === "--apply") args.apply = true;
+    else if (a === "--retry-missing") args.retryMissing = true;
     else if (a === "--force") args.force = true;
     else if (a === "--dry-run") void 0; // no-op: dry-run is already the default without --apply
   }
@@ -77,17 +89,29 @@ export function expandFlights(args) {
   return out;
 }
 
+/**
+ * Progress is {done, missing}. `missing` is separate because fr24 returning zero rows is NOT
+ * proof a flight doesn't exist: EK245 came back empty here, yet vradarserver/standing-data has
+ * it as UAE245 OMDB-SBGL-SCEL. Keeping those apart lets a later pass re-check them without
+ * --force, which would also throw away the flights that did resolve.
+ */
 function loadProgress() {
-  if (!existsSync(PROGRESS_FILE)) return new Set();
+  const empty = { done: new Set(), missing: new Set() };
+  if (!existsSync(PROGRESS_FILE)) return empty;
   try {
-    return new Set(JSON.parse(readFileSync(PROGRESS_FILE, "utf8")));
+    const raw = JSON.parse(readFileSync(PROGRESS_FILE, "utf8"));
+    if (Array.isArray(raw)) return { done: new Set(raw), missing: new Set() }; // pre-split format
+    return { done: new Set(raw.done ?? []), missing: new Set(raw.missing ?? []) };
   } catch {
-    return new Set();
+    return empty;
   }
 }
 
-function saveProgress(done) {
-  writeFileSync(PROGRESS_FILE, JSON.stringify([...done]));
+function saveProgress(progress) {
+  writeFileSync(
+    PROGRESS_FILE,
+    JSON.stringify({ done: [...progress.done], missing: [...progress.missing] })
+  );
 }
 
 function sleep(ms) {
@@ -106,8 +130,9 @@ function toInsertSql(row) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const candidates = [...new Set(expandFlights(args).map(normaliseFlightNo))];
-  const done = args.force ? new Set() : loadProgress();
-  const queue = candidates.filter((f) => !done.has(f)).slice(0, args.limit);
+  const progress = args.force ? { done: new Set(), missing: new Set() } : loadProgress();
+  const skip = args.retryMissing ? progress.done : new Set([...progress.done, ...progress.missing]);
+  const queue = candidates.filter((f) => !skip.has(f)).slice(0, args.limit);
 
   if (!queue.length) {
     console.log("nothing to do (all flights already in progress file - use --force to redo)");
@@ -126,6 +151,28 @@ async function main() {
   const sqlStatements = [];
   const tally = { found: 0, notFound: 0, blocked: 0, written: 0 };
   const retried = new Map();
+  // Flights whose SQL is built but not yet in D1. They are only marked done once written -
+  // a kill mid-sweep used to leave 62 flights recorded as done with nothing written, because
+  // progress was per-flight while the write was one batch at the very end.
+  let unflushed = [];
+
+  const flush = () => {
+    if (!args.apply || !unflushed.length) return;
+    const sql = unflushed.flatMap((f) => f.sql);
+    mkdirSync(path.dirname(TMP_SQL_FILE), { recursive: true });
+    writeFileSync(TMP_SQL_FILE, sql.join("\n") + "\n");
+    console.log(`  flushing ${sql.length} statement(s) for ${unflushed.length} flight(s) to D1`);
+    // npx, not a bare `wrangler`: it's a devDependency here, not a global install.
+    execFileSync(
+      "npx",
+      ["wrangler", "d1", "execute", "roaster-me-db", "--remote", "--file", TMP_SQL_FILE],
+      { stdio: ["ignore", "ignore", "inherit"], cwd: path.join(__dirname, "..") }
+    );
+    tally.written += sql.length;
+    for (const f of unflushed) progress.done.add(f.flight);
+    saveProgress(progress);
+    unflushed = [];
+  };
 
   for (let i = 0; i < queue.length; i++) {
     const flight = queue[i];
@@ -173,8 +220,8 @@ async function main() {
       }
       tally.notFound++;
       console.log(`${flight}: not found (0 rows, no challenge marker)`);
-      done.add(flight);
-      saveProgress(done);
+      progress.missing.add(flight);
+      saveProgress(progress);
       await sleep(args.delay);
       continue;
     }
@@ -183,8 +230,9 @@ async function main() {
     tally.found++;
     const dateCount = new Set(rows.map((r) => r.dateText)).size;
     console.log(`${flight}: found - ${legs.length} leg(s) across ${dateCount} sampled date(s)`);
+    const flightSql = [];
     for (const leg of legs) {
-      sqlStatements.push(
+      flightSql.push(
         toInsertSql({
           flightNo: flight,
           legSeq: leg.legSeq,
@@ -198,30 +246,18 @@ async function main() {
         })
       );
     }
-    done.add(flight);
-    saveProgress(done);
+    sqlStatements.push(...flightSql);
+    unflushed.push({ flight, sql: flightSql });
+    if (unflushed.length >= FLUSH_EVERY) flush();
     await sleep(args.delay);
   }
 
+  flush();
   await browser.close();
 
-  console.log(`\n--- SQL (${sqlStatements.length} statement(s)) ---`);
-  console.log(sqlStatements.join("\n") || "(none)");
-
-  if (args.apply && sqlStatements.length) {
-    mkdirSync(path.dirname(TMP_SQL_FILE), { recursive: true });
-    writeFileSync(TMP_SQL_FILE, sqlStatements.join("\n") + "\n");
-    console.log(`\nApplying via wrangler d1 execute -> ${TMP_SQL_FILE}`);
-    // npx, not a bare `wrangler`: it's a devDependency here, not a global install.
-    execFileSync(
-      "npx",
-      ["wrangler", "d1", "execute", "roaster-me-db", "--remote", "--file", TMP_SQL_FILE],
-      {
-        stdio: "inherit",
-        cwd: path.join(__dirname, ".."),
-      }
-    );
-    tally.written = sqlStatements.length;
+  if (!args.apply) {
+    console.log(`\n--- SQL (${sqlStatements.length} statement(s)) ---`);
+    console.log(sqlStatements.join("\n") || "(none)");
   }
 
   console.log(
