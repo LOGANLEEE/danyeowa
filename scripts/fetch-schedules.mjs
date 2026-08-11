@@ -156,22 +156,38 @@ async function main() {
   // progress was per-flight while the write was one batch at the very end.
   let unflushed = [];
 
-  const flush = () => {
+  /**
+   * A failed write must not end the sweep. One batch died on `Authentication error [code: 10000]`
+   * from the D1 import endpoint, and the identical command against the identical file succeeded
+   * moments later with the same OAuth token - so treat a write failure as transient: retry, and
+   * if it still fails, keep the batch queued for the next flush rather than losing an hour of
+   * fetching. Nothing is marked done until it is actually in D1.
+   */
+  const flush = async () => {
     if (!args.apply || !unflushed.length) return;
     const sql = unflushed.flatMap((f) => f.sql);
     mkdirSync(path.dirname(TMP_SQL_FILE), { recursive: true });
     writeFileSync(TMP_SQL_FILE, sql.join("\n") + "\n");
     console.log(`  flushing ${sql.length} statement(s) for ${unflushed.length} flight(s) to D1`);
-    // npx, not a bare `wrangler`: it's a devDependency here, not a global install.
-    execFileSync(
-      "npx",
-      ["wrangler", "d1", "execute", "roaster-me-db", "--remote", "--file", TMP_SQL_FILE],
-      { stdio: ["ignore", "ignore", "inherit"], cwd: path.join(__dirname, "..") }
-    );
-    tally.written += sql.length;
-    for (const f of unflushed) progress.done.add(f.flight);
-    saveProgress(progress);
-    unflushed = [];
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        // npx, not a bare `wrangler`: it's a devDependency here, not a global install.
+        execFileSync(
+          "npx",
+          ["wrangler", "d1", "execute", "roaster-me-db", "--remote", "--file", TMP_SQL_FILE],
+          { stdio: ["ignore", "ignore", "inherit"], cwd: path.join(__dirname, "..") }
+        );
+        tally.written += sql.length;
+        for (const f of unflushed) progress.done.add(f.flight);
+        saveProgress(progress);
+        unflushed = [];
+        return;
+      } catch {
+        console.log(`  flush attempt ${attempt}/3 failed`);
+        if (attempt < 3) await sleep(5000 * attempt);
+      }
+    }
+    console.log(`  flush FAILED - ${unflushed.length} flight(s) stay queued for the next flush`);
   };
 
   for (let i = 0; i < queue.length; i++) {
@@ -248,11 +264,11 @@ async function main() {
     }
     sqlStatements.push(...flightSql);
     unflushed.push({ flight, sql: flightSql });
-    if (unflushed.length >= FLUSH_EVERY) flush();
+    if (unflushed.length >= FLUSH_EVERY) await flush();
     await sleep(args.delay);
   }
 
-  flush();
+  await flush();
   await browser.close();
 
   if (!args.apply) {
