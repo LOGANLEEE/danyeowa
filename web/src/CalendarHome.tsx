@@ -136,7 +136,7 @@ function CollapsibleCalendar({
       />
       <div
         className={[
-          "grid transition-[grid-template-rows] duration-[240ms]",
+          "grid w-full transition-[grid-template-rows] duration-[240ms]",
           SNAP_EASE,
           "motion-reduce:transition-none",
           collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
@@ -695,7 +695,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
 
   if (!nextDuty) {
     return (
-      <div className="entrance flex w-full max-w-xl flex-col items-center gap-4 text-center">
+      <div className="entrance flex w-full max-w-xl flex-col gap-4">
         <CollapsibleCalendar collapsed={scrollCollapsed} selectedIso={selectedIso} onPickDay={setSelectedIso}>
           <TripsCalendar
             now={now}
@@ -724,7 +724,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           // is always selected by the time an add happens (the form lives on its detail card),
           // so this branch never actually races the optimistic mark - kept as a guard anyway.
           optimisticDays.size === 0 && (
-            <>
+            <div className="flex flex-col items-center gap-4 text-center">
               <p className="text-ink-muted">No trips yet — add your first</p>
               <button
                 type="button"
@@ -733,7 +733,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
               >
                 Add your first trip
               </button>
-            </>
+            </div>
           )
         )}
       </div>
