@@ -106,9 +106,15 @@ Every run since Plan 10 failed instantly: `createAuth` throws without `GOOGLE_CL
 `wrangler dev` 500'd on every request and Playwright timed out before running a single spec. The
 job's generated `.dev.vars` predated the Google-login commit. Dummy values fixed it.
 
-`e2e` is still `continue-on-error: true`, so a red run **cannot block a merge**. Making it blocking
-is the right end state, but `autofill.spec.ts` has an undiagnosed intermittent failure that would
-then block real work.
+**The "known flake" was not a flake.** That belief deferred gating for a day. Checking the actual
+run history: every red run from 08-07 to 08-10 14:35 was this same boot bug, and the single
+genuine failure after the fix (08-10 17:13) was an assertion on the bottom sheet — code deleted two
+changes later. 18 consecutive green runs followed, across the card redesign, the inline-add rework,
+the sheet deletion and the timeline.
+
+So as of 2026-08-11 `e2e` is **blocking** and `deploy` needs `[check, e2e]`. Unit tests and
+typecheck cannot see the class of bug that actually reaches users here, so deploying on `check`
+alone was shipping past the only gate that would catch them.
 
 ---
 
