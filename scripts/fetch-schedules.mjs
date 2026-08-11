@@ -3,9 +3,15 @@
  * Harvests flightradar24 schedule data with a real, locally-launched Chrome and writes it
  * into production D1's flight_schedules table.
  *
- * WHY a local fetcher: the Worker's own fetch() to flightradar24 is fingerprint/egress-blocked
- * (a production lookup for EK247 recorded a miss), while the same page fetched by real Chrome
- * on this Mac yields every row. See docs/DECISIONS.md and scripts/lib/fr24-parse.mjs.
+ * WHY a local fetcher: fr24's API answers from inside a loaded flightradar24.com page but
+ * returns a Cloudflare 403 to a direct request, so a Worker fetch cannot reach it and real
+ * Chrome can. See docs/DECISIONS.md and scripts/lib/fr24-api.mjs.
+ *
+ * It reads api.flightradar24.com/common/v1/flight/list.json rather than scraping the HTML
+ * flight page. The JSON carries UTC epochs and per-airport timezone offsets, so leg order,
+ * local clock times and the arrival day offset are arithmetic instead of inference - and a
+ * challenge arrives as HTML where a real answer arrives as JSON, which is the difference
+ * between "blocked" and "no such flight" that the scraper could never see.
  *
  * The Worker's own scrape-fr24.ts provider (worker/src/schedule-providers/scrape-fr24.ts)
  * stays in place as a fallback for the cache-miss path - it isn't touched by this script.
@@ -46,7 +52,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { normaliseFlightNo } from "../shared/src/flight.ts";
-import { deriveLegSchedule, looksBlocked, parseFr24Rows } from "./lib/fr24-parse.mjs";
+import { deriveLegSchedule } from "./lib/fr24-api.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROGRESS_FILE = path.join(__dirname, ".fetch-progress.json");
@@ -57,8 +63,9 @@ const UA =
 // it (or make it adaptive on a blocked/empty response) if a long sweep still gets rate-limited.
 const CONTEXT_REFRESH_EVERY = 25;
 // How many resolved flights to batch into one D1 write. Bounds how much a kill can lose, at the
-// cost of one wrangler invocation per batch.
-const FLUSH_EVERY = 20;
+// cost of one wrangler invocation per batch. Kept low because long runs here get killed: three
+// background sweeps died, one after only 12 flights, and at 20 that one banked nothing.
+const FLUSH_EVERY = 5;
 
 export function parseArgs(argv) {
   const args = { delay: 8000, limit: Infinity, apply: false, force: false };
@@ -118,6 +125,43 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * The API is same-site-only in practice: a direct request from node gets a Cloudflare 403, while
+ * the identical request issued from a loaded flightradar24.com page succeeds. So land on the site
+ * once per context, then call the API from inside it.
+ */
+async function primePage(page) {
+  await page.goto("https://www.flightradar24.com/", {
+    waitUntil: "domcontentloaded",
+    timeout: 45_000,
+  });
+  await page.waitForTimeout(5000);
+}
+
+/**
+ * Blocked and absent are now distinguishable without guessing: a challenge comes back as HTML,
+ * a real answer as JSON. The HTML scraper could only see "zero rows" and had to sniff the body
+ * for challenge wording, which silently misclassified live flights as nonexistent.
+ */
+async function fetchFlight(page, flight) {
+  return page.evaluate(async (no) => {
+    try {
+      const r = await fetch(
+        `https://api.flightradar24.com/common/v1/flight/list.json?query=${no}&fetchBy=flight&page=1&limit=25`,
+        { headers: { accept: "application/json" } }
+      );
+      const contentType = r.headers.get("content-type") || "";
+      if (!contentType.includes("json")) {
+        return { blocked: true, reason: `http ${r.status}, ${contentType.split(";")[0] || "no type"}`, items: [] };
+      }
+      const j = await r.json();
+      return { blocked: false, items: j?.result?.response?.data || [] };
+    } catch (e) {
+      return { blocked: true, reason: String(e).slice(0, 60), items: [] };
+    }
+  }, flight);
+}
+
 function toInsertSql(row) {
   const esc = (s) => `'${String(s).replace(/'/g, "''")}'`;
   return (
@@ -147,6 +191,7 @@ async function main() {
     .catch(() => chromium.launch({ headless: false }));
   let ctx = await browser.newContext({ userAgent: UA, locale: "en-GB" });
   let page = await ctx.newPage();
+  await primePage(page);
 
   const sqlStatements = [];
   const tally = { found: 0, notFound: 0, blocked: 0, written: 0 };
@@ -196,56 +241,53 @@ async function main() {
       await ctx.close();
       ctx = await browser.newContext({ userAgent: UA, locale: "en-GB" });
       page = await ctx.newPage();
+      await primePage(page);
     }
 
-    let html = "";
-    try {
-      await page.goto(`https://www.flightradar24.com/data/flights/${flight.toLowerCase()}`, {
-        waitUntil: "domcontentloaded",
-        timeout: 45_000,
-      });
-      await page.waitForTimeout(3500);
-      html = await page.content();
-    } catch (e) {
-      console.log(`${flight}: ERROR ${String(e).slice(0, 100)}`);
-      await sleep(args.delay);
-      continue;
-    }
+    const res = await fetchFlight(page, flight);
 
-    const rows = parseFr24Rows(html);
-    if (!rows.length) {
-      if (looksBlocked(html)) {
-        // A challenge is a burst signal, not a verdict on the flight: measured 2-of-3 blocked
-        // back-to-back at 4s, while every one of those flights resolved when fetched alone.
-        // So retry once behind a fresh context - a rerun of the whole sweep is a poor substitute
-        // when the block rate is this high.
-        if ((retried.get(flight) ?? 0) < 1) {
-          retried.set(flight, 1);
-          console.log(`${flight}: BLOCKED (challenge page) - fresh context, retrying once`);
-          await ctx.close();
-          ctx = await browser.newContext({ userAgent: UA, locale: "en-GB" });
-          page = await ctx.newPage();
-          await sleep(args.delay * 3);
-          i--; // retry the same flight
-          continue;
-        }
-        tally.blocked++;
-        console.log(`${flight}: BLOCKED twice - backing off, not marked done`);
+    if (res.blocked) {
+      // A challenge is a burst signal, not a verdict on the flight. Retry once behind a fresh
+      // context; a rerun of the whole sweep is a poor substitute when a run gets challenged.
+      if ((retried.get(flight) ?? 0) < 1) {
+        retried.set(flight, 1);
+        console.log(`${flight}: BLOCKED (${res.reason}) - fresh context, retrying once`);
+        await ctx.close();
+        ctx = await browser.newContext({ userAgent: UA, locale: "en-GB" });
+        page = await ctx.newPage();
+        await primePage(page);
         await sleep(args.delay * 3);
-        continue; // NOT added to `done` - retried on next run
+        i--; // retry the same flight
+        continue;
       }
+      tally.blocked++;
+      console.log(`${flight}: BLOCKED twice - backing off, not marked done`);
+      await sleep(args.delay * 3);
+      continue; // NOT added to `done` - retried on next run
+    }
+
+    if (!res.items.length) {
+      // A JSON 200 carrying zero items is fr24 answering "no data for this flight", which is a
+      // real answer - unlike the HTML page, where empty was indistinguishable from a soft block.
       tally.notFound++;
-      console.log(`${flight}: not found (0 rows, no challenge marker)`);
+      console.log(`${flight}: not found (API returned 0 items)`);
       progress.missing.add(flight);
       saveProgress(progress);
       await sleep(args.delay);
       continue;
     }
 
-    const legs = deriveLegSchedule(rows);
+    const legs = deriveLegSchedule(res.items);
+    if (!legs.length) {
+      tally.notFound++;
+      console.log(`${flight}: ${res.items.length} item(s) but none with scheduled times`);
+      progress.missing.add(flight);
+      saveProgress(progress);
+      await sleep(args.delay);
+      continue;
+    }
     tally.found++;
-    const dateCount = new Set(rows.map((r) => r.dateText)).size;
-    console.log(`${flight}: found - ${legs.length} leg(s) across ${dateCount} sampled date(s)`);
+    console.log(`${flight}: found - ${legs.length} leg(s) from ${res.items.length} sampled flight(s)`);
     const flightSql = [];
     for (const leg of legs) {
       flightSql.push(
