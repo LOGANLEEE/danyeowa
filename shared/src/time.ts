@@ -150,6 +150,26 @@ function offsetMinutesAt(utcMs: number, tz: string): number {
   return hours < 0 ? hours * 60 - minutes : hours * 60 + minutes;
 }
 
+/**
+ * Destination's UTC offset minus the origin's, in whole hours — the clock jump a crew feels
+ * crossing this sector (e.g. BKK -> DXB is -3, DXB -> AKL is +8). Offsets are sampled at each
+ * leg's OWN instant (dep at `depUtcIso` in `depTz`, arr at `arrUtcIso` in `arrTz`), so a DST
+ * transition mid-trip is reflected rather than assumed constant. Rounds to the nearest whole
+ * hour (`Math.round` semantics — a .5 fraction rounds up) since a duty card reports the shift
+ * in whole hours, not minutes: a half-hour zone like Asia/Kathmandu (+5:45) against UTC nets
+ * +6, not +5.
+ */
+export function clockShiftHours(
+  depUtcIso: string,
+  depTz: string,
+  arrUtcIso: string,
+  arrTz: string,
+): number {
+  const depOffsetMin = offsetMinutesAt(Date.parse(depUtcIso), depTz);
+  const arrOffsetMin = offsetMinutesAt(Date.parse(arrUtcIso), arrTz);
+  return Math.round((arrOffsetMin - depOffsetMin) / 60);
+}
+
 export type TripProgress = {
   /** 1-indexed current day of the trip, clamped to [1, totalDays]. */
   currentDay: number;

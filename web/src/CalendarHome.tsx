@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  addDaysIso,
+  clockShiftHours,
   dayOffset,
   formatDuration,
+  formatHours,
   formatLocal,
   layoverHours,
   localDateKey,
@@ -12,10 +15,246 @@ import { deleteTrip, getTrips } from "./api";
 import type { TripWithFlights } from "./api";
 import AddTripForm from "./AddTripForm";
 import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
+import { useAirport } from "./lib/airports";
 import { humanDateLabel } from "./lib/dateLabel";
 import TripLegsPanel from "./TripLegsPanel";
 import TripsCalendar from "./TripsCalendar";
 import { useTripEntry } from "./useTripEntry";
+
+/** Lead time for "Leave home" ahead of report — ported from the old CrewHome's next-duty card
+ * (see git history: af7cc4c). */
+const LEAVE_HOME_LEAD_MS = 55 * 60 * 1000;
+
+// Hysteresis thresholds for the scroll-to-expand duty detail: collapsing and restoring at the
+// same pixel would flicker whenever a finger rests near it, so collapse needs a clear run past
+// 60px and restore needs to fall back under 30px before either fires.
+const SCROLL_COLLAPSE_AT = 60;
+const SCROLL_RESTORE_AT = 30;
+const SNAP_EASE = "ease-[cubic-bezier(.22,1,.36,1)]";
+
+/**
+ * Drives the calendar tab's scroll-to-expand interaction: collapsed=false until the page
+ * scrolls past SCROLL_COLLAPSE_AT, collapsed=true until it comes back above SCROLL_RESTORE_AT
+ * (hysteresis - a single threshold flickers when a finger rests on it). Only listens while
+ * `active` (a trip day is selected) - flips back to false and detaches otherwise, so leaving
+ * the day never leaves a stale collapsed calendar behind. rAF-batches the scroll handler and
+ * relies on React's own bail-out (returning the same boolean from a state setter skips the
+ * re-render) to avoid work when the threshold state hasn't actually changed.
+ */
+function useScrollCollapse(active: boolean): boolean {
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (!active) {
+      setCollapsed(false);
+      return;
+    }
+
+    let frame = 0;
+    function handleScroll() {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const y = window.scrollY;
+        setCollapsed((prev) => {
+          if (!prev && y > SCROLL_COLLAPSE_AT) return true;
+          if (prev && y < SCROLL_RESTORE_AT) return false;
+          return prev;
+        });
+      });
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [active]);
+
+  return collapsed;
+}
+
+/** A handful of days around the selected one, for the collapsed calendar strip — keeps date
+ * context on screen without the full month grid. Selected day gets the same filled-ring
+ * treatment as the grid uses for it. */
+function DayStrip({ selectedIso, onPick }: { selectedIso: string; onPick: (iso: string) => void }) {
+  const days = Array.from({ length: 7 }, (_, i) => addDaysIso(selectedIso, i - 3));
+  return (
+    <div data-testid="day-strip" className="flex items-center gap-1">
+      {days.map((iso) => {
+        const isSelected = iso === selectedIso;
+        return (
+          <button
+            key={iso}
+            type="button"
+            data-testid={`day-strip-${iso}`}
+            aria-current={isSelected ? "date" : undefined}
+            onClick={() => onPick(iso)}
+            className={[
+              "num flex min-h-[44px] flex-1 items-center justify-center rounded-lg text-sm transition-colors duration-[120ms]",
+              isSelected ? "bg-accent-soft text-accent ring-2 ring-accent" : "text-ink-muted hover:bg-raised",
+            ].join(" ")}
+          >
+            {Number(iso.slice(-2))}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Wraps the month grid so it can collapse to the day strip on scroll, plus the "ground
+ * deepens" cue: an overlay whose OPACITY crossfades (never a `background-color` transition —
+ * that can't be GPU-composited and stutters). The grid itself collapses via
+ * `grid-template-rows: 1fr -> 0fr` on this wrapper, never `height`/`max-height` (those force
+ * layout on every frame; grid-template-rows doesn't). The child needs `overflow-hidden` +
+ * `min-height:0` so a 0fr row genuinely clips it instead of the intrinsic content height
+ * winning. `motion-reduce:transition-none` drops the animation entirely under reduced motion —
+ * the state still changes (day strip still appears, ground still deepens), just without the
+ * animated crossfade. */
+function CollapsibleCalendar({
+  collapsed,
+  selectedIso,
+  onPickDay,
+  children,
+}: {
+  collapsed: boolean;
+  selectedIso: string | null;
+  onPickDay: (iso: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        className={[
+          "pointer-events-none fixed inset-0 -z-10 bg-ink/10 transition-opacity duration-[240ms]",
+          SNAP_EASE,
+          "motion-reduce:transition-none",
+          collapsed ? "opacity-100" : "opacity-0",
+        ].join(" ")}
+      />
+      <div
+        className={[
+          "grid transition-[grid-template-rows] duration-[240ms]",
+          SNAP_EASE,
+          "motion-reduce:transition-none",
+          collapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]",
+        ].join(" ")}
+      >
+        <div className="min-h-0 overflow-hidden">{children}</div>
+      </div>
+      {collapsed && selectedIso && <DayStrip selectedIso={selectedIso} onPick={onPickDay} />}
+    </>
+  );
+}
+
+/** City name for `iata`, once `useAirport` resolves it — falls back to the bare code otherwise
+ * (including forever, on a failed lookup), so a slow or broken airport fetch never blocks the
+ * timeline's first paint or breaks the card. `shift`, when given, appends the clock-shift
+ * suffix — that's independent of the airport fetch (derived purely from the leg's own tz
+ * fields), so it always shows even before the city resolves. Without `shift`, the IATA code
+ * IS the suffix, so it's dropped once the city resolves rather than doubled up as "DXB · DXB". */
+function StationLine({ iata, shift }: { iata: string; shift?: number }) {
+  const airport = useAirport(iata);
+  const city = airport?.city;
+  if (shift === undefined) {
+    return <p className="num text-sm text-ink-muted">{city ? `${city} · ${iata}` : iata}</p>;
+  }
+  return (
+    <p className="num text-sm text-ink-muted">
+      {city ?? iata} · clock {shift >= 0 ? "+" : ""}
+      {shift}h
+    </p>
+  );
+}
+
+type TimelineRow = {
+  key: string;
+  time: string;
+  icon: string;
+  iconTone: string;
+  label: string;
+  sub?: React.ReactNode;
+};
+
+/** The expanded duty detail (design "C"): Leave home -> Report -> (Departs -> Lands) per leg,
+ * with a Layover row between legs. Replaces the summary board rows entirely — this is the
+ * EXPANDED content, not an addition to it. The first three rows stagger in at 60/120/180ms
+ * (`.tl-enter`, tokens.css) — under reduced motion that class applies no animation at all, so
+ * the detail simply renders present rather than settling from a scroll-driven fade. */
+function TripTimeline({ legs }: { legs: TripWithFlights["flights"] }) {
+  const firstLeg = legs[0]!;
+  const leaveHomeUtc = new Date(Date.parse(firstLeg.reportUtc) - LEAVE_HOME_LEAD_MS).toISOString();
+
+  const rows: TimelineRow[] = [
+    {
+      key: "leave-home",
+      time: formatLocal(leaveHomeUtc, firstLeg.depTz),
+      icon: "○",
+      iconTone: "text-ink-muted",
+      label: "Leave home",
+    },
+    {
+      key: "report",
+      time: formatLocal(firstLeg.reportUtc, firstLeg.depTz),
+      icon: "●",
+      iconTone: "text-report",
+      label: "Report",
+      sub: <StationLine iata={firstLeg.origin} />,
+    },
+  ];
+
+  legs.forEach((leg, index) => {
+    if (index > 0) {
+      const prevLeg = legs[index - 1]!;
+      rows.push({
+        key: `layover-${leg.id}`,
+        time: formatHours(layoverHours(prevLeg.arrUtc, leg.depUtc)),
+        icon: "·",
+        iconTone: "text-ink-muted",
+        label: `Layover · ${prevLeg.dest}`,
+      });
+    }
+    rows.push({
+      key: `departs-${leg.id}`,
+      time: formatLocal(leg.depUtc, leg.depTz),
+      icon: "●",
+      iconTone: "text-ink",
+      label: "Departs",
+      sub: (
+        <p className="num text-sm text-ink-muted">{formatDuration(leg.depUtc, leg.arrUtc)} airborne</p>
+      ),
+    });
+    rows.push({
+      key: `lands-${leg.id}`,
+      time: formatLocal(leg.arrUtc, leg.arrTz),
+      icon: "◌",
+      iconTone: "text-ink-muted",
+      label: "Lands",
+      sub: <StationLine iata={leg.dest} shift={clockShiftHours(leg.depUtc, leg.depTz, leg.arrUtc, leg.arrTz)} />,
+    });
+  });
+
+  return (
+    <div data-testid="duty-timeline" className="mt-4 flex flex-col gap-3">
+      {rows.map((row, i) => (
+        <div key={row.key} className={["flex items-start gap-3", i < 3 ? `tl-enter tl-enter-${i + 1}` : ""].join(" ")}>
+          {/* w-12 (48px), not w-11 (44px): "00:00" at 5 tabular-num chars needs the extra
+              margin so it never clips against a fallback monospace font's advance width. */}
+          <span className="num w-12 shrink-0 text-sm text-ink-muted">{row.time}</span>
+          <span aria-hidden="true" className={`${row.iconTone} leading-none`}>
+            {row.icon}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-ink">{row.label}</p>
+            {row.sub}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type Props = {
   now: Date;
@@ -57,10 +296,15 @@ function TrashIcon() {
 function TripSummaryLines({
   legs,
   actions,
+  timelineExpanded,
 }: {
   legs: TripWithFlights["flights"];
   /** Corner controls, rendered in the header row so they never steal width from the board. */
   actions?: React.ReactNode;
+  /** Scroll-past-threshold state from the calendar tab's scroll-to-expand interaction: swaps
+   * the board rows below the header for the full duty timeline (TripTimeline) — the EXPANDED
+   * content, not an addition to the summary. Omitted/false renders exactly as before. */
+  timelineExpanded?: boolean;
 }) {
   const firstLeg = legs[0]!;
   const lastLeg = legs[legs.length - 1]!;
@@ -89,29 +333,35 @@ function TripSummaryLines({
         {actions}
       </div>
 
-      {/* Board rows: label left (small, uppercase, tracked, muted — amber for REPORT since
-          that's the one time worth flagging), value right (tabular). Dashed hairlines between
-          rows read as the split-flap rule this direction is named for; a justify-between row
-          never collides at 390px the way the old rail's centered duration badge did. */}
-      <div className="mt-4 flex flex-col divide-y divide-dashed divide-edge">
-        <div className="flex items-baseline justify-between py-1.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-report">Report</span>
-          <span className="num text-base text-report">{formatLocal(firstLeg.reportUtc, firstLeg.depTz)}</span>
-        </div>
-        <div className="flex items-baseline justify-between py-1.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">Dep</span>
-          <span className="num text-base text-ink">{formatLocal(firstLeg.depUtc, firstLeg.depTz)}</span>
-        </div>
-        <div className="flex items-baseline justify-between py-1.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">Arr</span>
-          <span className="num text-base text-ink">
-            {formatLocal(lastLeg.arrUtc, lastLeg.arrTz)}
-            {arrOffset > 0 && <sup className="text-xs text-ink-muted">+{arrOffset}</sup>}
-          </span>
-        </div>
-      </div>
+      {timelineExpanded ? (
+        <TripTimeline legs={legs} />
+      ) : (
+        <>
+          {/* Board rows: label left (small, uppercase, tracked, muted — amber for REPORT since
+              that's the one time worth flagging), value right (tabular). Dashed hairlines between
+              rows read as the split-flap rule this direction is named for; a justify-between row
+              never collides at 390px the way the old rail's centered duration badge did. */}
+          <div className="mt-4 flex flex-col divide-y divide-dashed divide-edge">
+            <div className="flex items-baseline justify-between py-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-report">Report</span>
+              <span className="num text-base text-report">{formatLocal(firstLeg.reportUtc, firstLeg.depTz)}</span>
+            </div>
+            <div className="flex items-baseline justify-between py-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">Dep</span>
+              <span className="num text-base text-ink">{formatLocal(firstLeg.depUtc, firstLeg.depTz)}</span>
+            </div>
+            <div className="flex items-baseline justify-between py-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-ink-muted">Arr</span>
+              <span className="num text-base text-ink">
+                {formatLocal(lastLeg.arrUtc, lastLeg.arrTz)}
+                {arrOffset > 0 && <sup className="text-xs text-ink-muted">+{arrOffset}</sup>}
+              </span>
+            </div>
+          </div>
 
-      {duration && <p className="num mt-1.5 text-right text-sm text-ink-muted">{duration}</p>}
+          {duration && <p className="num mt-1.5 text-right text-sm text-ink-muted">{duration}</p>}
+        </>
+      )}
     </>
   );
 }
@@ -127,6 +377,7 @@ function DayDetailCard({
   homeTz,
   onAdded,
   onChanged,
+  timelineExpanded,
 }: {
   isoDate: string;
   trip: TripWithFlights | null;
@@ -134,6 +385,9 @@ function DayDetailCard({
   /** Marks the day optimistically on the calendar grid ahead of the parent's refetch. */
   onAdded: (isoDate: string) => void;
   onChanged: () => void;
+  /** Forwarded straight to TripSummaryLines — see its own doc comment. Not the same thing as
+   * this component's own `expanded` state below (that one drives the pencil's edit mode). */
+  timelineExpanded?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -222,6 +476,7 @@ function DayDetailCard({
     <div data-testid="day-detail-card" className="hairline flex flex-col rounded-lg border border-edge bg-card p-4">
       <TripSummaryLines
         legs={legs}
+        timelineExpanded={timelineExpanded}
         actions={
           // Out of the reading path: the card is read far more often than it is edited.
           <div className="flex shrink-0 gap-1">
@@ -420,6 +675,13 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTodayToken, trips]);
 
+  // Scroll-to-expand only activates for a selected day that actually has a trip (the feature
+  // this hook drives is a duty-detail expansion — an empty day has no duty to expand into).
+  // Computed here, ahead of the `trips === null` early return below, so the hook itself is
+  // still called unconditionally on every render (Rules of Hooks).
+  const selectedTrip = selectedIso ? tripForDay(selectedIso) : null;
+  const scrollCollapsed = useScrollCollapse(Boolean(selectedTrip));
+
   if (trips === null) {
     return <p className="text-ink-muted">loading…</p>;
   }
@@ -434,14 +696,16 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
   if (!nextDuty) {
     return (
       <div className="entrance flex w-full max-w-xl flex-col items-center gap-4 text-center">
-        <TripsCalendar
-          now={now}
-          trips={trips}
-          homeTz={homeTz}
-          onPickDay={setSelectedIso}
-          optimisticIsoDates={optimisticDays}
-          selectedIso={selectedIso}
-        />
+        <CollapsibleCalendar collapsed={scrollCollapsed} selectedIso={selectedIso} onPickDay={setSelectedIso}>
+          <TripsCalendar
+            now={now}
+            trips={trips}
+            homeTz={homeTz}
+            onPickDay={setSelectedIso}
+            optimisticIsoDates={optimisticDays}
+            selectedIso={selectedIso}
+          />
+        </CollapsibleCalendar>
         {selectedIso ? (
           <div className="w-full text-left">
             <DayDetailCard
@@ -450,6 +714,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
               homeTz={homeTz}
               onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
               onChanged={refetch}
+              timelineExpanded={scrollCollapsed}
             />
           </div>
         ) : (
@@ -496,14 +761,16 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
 
   return (
     <div className="entrance flex w-full max-w-xl flex-col gap-4">
-      <TripsCalendar
-        now={now}
-        trips={trips}
-        homeTz={nextDuty.depTz}
-        onPickDay={setSelectedIso}
-        optimisticIsoDates={optimisticDays}
-        selectedIso={selectedIso}
-      />
+      <CollapsibleCalendar collapsed={scrollCollapsed} selectedIso={selectedIso} onPickDay={setSelectedIso}>
+        <TripsCalendar
+          now={now}
+          trips={trips}
+          homeTz={nextDuty.depTz}
+          onPickDay={setSelectedIso}
+          optimisticIsoDates={optimisticDays}
+          selectedIso={selectedIso}
+        />
+      </CollapsibleCalendar>
 
       {activePairing && (
         <div
@@ -551,6 +818,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
             homeTz={homeTz}
             onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
             onChanged={refetch}
+            timelineExpanded={scrollCollapsed}
           />
         </div>
       ) : (

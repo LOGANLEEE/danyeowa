@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clockShiftHours,
   dayOffset,
   formatHours,
   formatLocal,
@@ -141,6 +142,30 @@ describe("formatHours", () => {
   it("clamps negative or non-finite input to 0h", () => {
     expect(formatHours(-5)).toBe("0h");
     expect(formatHours(NaN)).toBe("0h");
+  });
+});
+
+describe("clockShiftHours", () => {
+  it("returns a negative shift westward (BKK -> DXB, +7 to +4)", () => {
+    expect(
+      clockShiftHours("2026-08-10T10:00:00Z", "Asia/Bangkok", "2026-08-10T14:00:00Z", "Asia/Dubai"),
+    ).toBe(-3);
+  });
+
+  it("returns a positive shift eastward (DXB -> AKL, +4 to +12 in NZ winter)", () => {
+    expect(
+      clockShiftHours("2026-08-10T10:00:00Z", "Asia/Dubai", "2026-08-11T02:00:00Z", "Pacific/Auckland"),
+    ).toBe(8);
+  });
+
+  it("returns 0 for a same-tz sector", () => {
+    expect(
+      clockShiftHours("2026-08-10T10:00:00Z", "Asia/Dubai", "2026-08-10T14:00:00Z", "Asia/Dubai"),
+    ).toBe(0);
+  });
+
+  it("rounds a half-hour zone (Asia/Kathmandu, +5:45) sensibly - .75 of an hour rounds UP to +6", () => {
+    expect(clockShiftHours("2026-08-10T00:00:00Z", "UTC", "2026-08-10T06:00:00Z", "Asia/Kathmandu")).toBe(6);
   });
 });
 

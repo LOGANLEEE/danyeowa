@@ -106,6 +106,9 @@ button:not(:disabled),
 /* Motion tokens */
 :root {
   --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  /* "Snap": the calendar tab's scroll-to-expand interaction (collapse/ground-deepen/timeline
+     stagger) — a springier settle than --ease-standard's linear-ish glide. */
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-enter: 240ms;
   --duration-micro: 120ms;
   --stagger-step: 60ms;
@@ -206,5 +209,25 @@ body {
   .stagger-2,
   .stagger-3 {
     animation-delay: 0ms;
+  }
+}
+
+/* Duty-detail timeline rows (scroll-to-expand on the calendar tab). Unlike .entrance, which
+   always opacity-fades (just without the rise) even under reduced motion, this is scoped
+   ENTIRELY inside the no-preference query below — under reduced motion .tl-enter carries no
+   styles at all, so the timeline is simply present with the scroll, no fade of any kind. */
+@media (prefers-reduced-motion: no-preference) {
+  .tl-enter {
+    opacity: 0;
+    animation: fade-rise var(--duration-enter) var(--ease-snap) forwards;
+  }
+  .tl-enter-1 {
+    animation-delay: 60ms;
+  }
+  .tl-enter-2 {
+    animation-delay: 120ms;
+  }
+  .tl-enter-3 {
+    animation-delay: 180ms;
   }
 }
