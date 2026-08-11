@@ -116,6 +116,27 @@ So as of 2026-08-11 `e2e` is **blocking** and `deploy` needs `[check, e2e]`. Uni
 typecheck cannot see the class of bug that actually reaches users here, so deploying on `check`
 alone was shipping past the only gate that would catch them.
 
+### Schedules are harvested locally with real Chrome, not fetched by the Worker
+
+The Worker's `fetch()` to flightradar24 is fingerprint/egress-blocked: a production lookup for
+EK247 recorded a miss, while the identical page fetched by a real, locally-launched Chrome on a
+dev machine returns every row (27, for EK247's two legs across the sampled dates). The block is
+on the caller, not the flight — `worker/src/schedule-providers/scrape-fr24.ts` stays in place as
+the cache-miss fallback (unchanged), but a Worker fetch to fr24 can no longer be trusted to
+populate the cache going forward.
+
+`scripts/fetch-schedules.mjs` is the workaround: launch real Chrome via Playwright, parse **every**
+row on a flight's fr24 page (not just the first, and not just "now" — the Worker provider's two
+known gaps), group by date to detect multi-leg services, and batch-write the result into
+production D1's `flight_schedules` with `source='local-fetch'` (distinct from `seed-verified` and
+`live-scrape`). Pure parsing/derivation lives in `scripts/lib/fr24-parse.mjs`, unit-tested against
+`worker/test/fixtures/fr24-ek247.html` in `worker/test/schedule-providers/fr24-local-parse.test.ts`.
+
+Default is dry-run (prints the SQL, writes nothing); `--apply` is required to actually write.
+Resumable via `scripts/.fetch-progress.json` (gitignored) so an interrupted multi-hundred-flight
+sweep can pick back up. Run: `node scripts/fetch-schedules.mjs --flights EK247,EK49` or
+`node scripts/fetch-schedules.mjs --range 0-999 --limit 50 --apply`.
+
 ---
 
 ## Recurring traps
