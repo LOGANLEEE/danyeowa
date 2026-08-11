@@ -212,10 +212,10 @@ body {
   }
 }
 
-/* Duty-detail timeline rows (scroll-to-expand on the calendar tab). Unlike .entrance, which
-   always opacity-fades (just without the rise) even under reduced motion, this is scoped
-   ENTIRELY inside the no-preference query below — under reduced motion .tl-enter carries no
-   styles at all, so the timeline is simply present with the scroll, no fade of any kind. */
+/* Duty-detail timeline rows (always visible on the calendar tab's day-detail card, staggered
+   in on mount). Unlike .entrance, which always opacity-fades (just without the rise) even under
+   reduced motion, this is scoped ENTIRELY inside the no-preference query below — under reduced
+   motion .tl-enter carries no styles at all, so the timeline is simply present, no fade at all. */
 @media (prefers-reduced-motion: no-preference) {
   .tl-enter {
     opacity: 0;

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Airport } from "@roaster/shared";
 import CalendarHome from "./CalendarHome";
@@ -9,7 +9,11 @@ import type { TripWithFlights } from "./api";
 vi.mock("./api", () => ({
   getTrips: vi.fn(),
   createTrip: vi.fn(),
-  getAirport: vi.fn(),
+  // Resolves null by default: the duty timeline (and its per-station useAirport lookups) now
+  // renders unconditionally for any selected trip day, not just in the airport-resolution tests
+  // below - every other test needs this to resolve to SOMETHING rather than leave the mock's
+  // default `undefined` return crashing useAirport's `.then()` on it.
+  getAirport: vi.fn().mockResolvedValue(null),
   lookupSchedule: vi.fn(),
   confirmSchedule: vi.fn(),
   deleteTrip: vi.fn(),
@@ -132,23 +136,10 @@ const citySampleTrip: TripWithFlights = {
   ],
 };
 
-/** Makes the rAF-batched scroll handler's callback run synchronously within the same tick as
- * the `fireEvent.scroll` that triggers it — real rAF has no equivalent in jsdom/vitest's fake
- * timers, so this is the only way to observe the collapse/expand state change in a test. */
-function stubSyncRaf() {
-  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
-    cb(0);
-    return 0;
-  });
-  vi.stubGlobal("cancelAnimationFrame", vi.fn());
-}
-
 describe("CalendarHome", () => {
   afterEach(() => {
     vi.useRealTimers();
-    vi.unstubAllGlobals();
     vi.mocked(getTrips).mockClear();
-    window.scrollY = 0;
   });
 
   it("renders the month calendar and a compact next-duty card", async () => {
@@ -590,20 +581,16 @@ describe("CalendarHome", () => {
     await waitFor(() => expect(screen.getByTestId("delete-trip")).toBeInTheDocument());
   });
 
-  describe("scroll-to-expand duty detail", () => {
-    it("scrolling past the collapse threshold swaps the summary board for the duty timeline, leave-home at report minus 55m", async () => {
+  describe("duty timeline", () => {
+    it("shows the full duty timeline inline as soon as a trip day is selected, no scroll or extra tap needed", async () => {
       vi.mocked(getTrips).mockResolvedValue([aklTrip]);
       vi.mocked(getAirport).mockResolvedValue(null);
-      stubSyncRaf();
       const user = userEvent.setup();
 
       render(<CalendarHome now={now} />);
-      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
-      await screen.findByTestId("day-detail-card");
       expect(screen.queryByTestId("duty-timeline")).not.toBeInTheDocument();
 
-      window.scrollY = 70;
-      fireEvent.scroll(window);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
 
       const timeline = await screen.findByTestId("duty-timeline");
       expect(timeline).toHaveTextContent("Leave home");
@@ -615,41 +602,17 @@ describe("CalendarHome", () => {
       expect(timeline).toHaveTextContent("11h 20m airborne"); // leg 0: 02:15Z -> 13:35Z
       expect(timeline).toHaveTextContent("Lands");
       expect(timeline).toHaveTextContent("21:35"); // leg 0 arrUtc in Asia/Singapore
-    });
-
-    it("scrolling back above the restore threshold collapses the timeline back to the summary board", async () => {
-      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
-      vi.mocked(getAirport).mockResolvedValue(null);
-      stubSyncRaf();
-      const user = userEvent.setup();
-
-      render(<CalendarHome now={now} />);
-      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
-      await screen.findByTestId("day-detail-card");
-
-      window.scrollY = 70;
-      fireEvent.scroll(window);
-      await screen.findByTestId("duty-timeline");
-
-      window.scrollY = 10;
-      fireEvent.scroll(window);
-      await waitFor(() => expect(screen.queryByTestId("duty-timeline")).not.toBeInTheDocument());
-      // The summary board rows are back.
+      // The summary board rows sit above the timeline, not swapped out for it.
       expect(screen.getByTestId("day-detail-card")).toHaveTextContent(/report/i);
     });
 
     it("shows a layover row between legs for a multi-leg trip, with a Departs/Lands pair per leg", async () => {
       vi.mocked(getTrips).mockResolvedValue([aklTrip]);
       vi.mocked(getAirport).mockResolvedValue(null);
-      stubSyncRaf();
       const user = userEvent.setup();
 
       render(<CalendarHome now={now} />);
       await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
-      await screen.findByTestId("day-detail-card");
-
-      window.scrollY = 70;
-      fireEvent.scroll(window);
 
       const timeline = await screen.findByTestId("duty-timeline");
       // layoverHours(leg0.arrUtc 13:35Z, leg1.depUtc 16:00Z) = ~2.4h, rounded to 2h by formatHours.
@@ -668,15 +631,10 @@ describe("CalendarHome", () => {
             resolvers.set(iata, resolve);
           }),
       );
-      stubSyncRaf();
       const user = userEvent.setup();
 
       render(<CalendarHome now={now} />);
       await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
-      await screen.findByTestId("day-detail-card");
-
-      window.scrollY = 70;
-      fireEvent.scroll(window);
 
       // Renders immediately with the bare code - never blocks on the airport fetch.
       const timeline = await screen.findByTestId("duty-timeline");
@@ -688,44 +646,6 @@ describe("CalendarHome", () => {
       // NRT (the Lands row, further down) hasn't resolved yet - still the bare code, and a
       // failed/pending lookup for it never breaks the rest of the card.
       expect(timeline).toHaveTextContent("NRT");
-    });
-
-    it("renders the duty timeline's content under prefers-reduced-motion with no extra async gating", async () => {
-      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
-      vi.mocked(getAirport).mockResolvedValue(null);
-      // jsdom doesn't implement matchMedia; the reduced-motion handling in this feature is
-      // CSS-only (tokens.css `.tl-enter` is scoped inside `@media (prefers-reduced-motion:
-      // no-preference)`, so under `reduce` it carries no animation at all) - that can't be
-      // observed from vitest/jsdom, which doesn't evaluate media queries for animation. This
-      // stub only proves the reveal isn't ALSO gated behind a JS/timer check that would delay
-      // or hide it under reduced motion for a different reason.
-      vi.stubGlobal(
-        "matchMedia",
-        (query: string) =>
-          ({
-            matches: query.includes("reduce"),
-            media: query,
-            addEventListener: () => {},
-            removeEventListener: () => {},
-            addListener: () => {},
-            removeListener: () => {},
-            dispatchEvent: () => false,
-          }) as unknown as MediaQueryList,
-      );
-      stubSyncRaf();
-      const user = userEvent.setup();
-
-      render(<CalendarHome now={now} />);
-      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
-      await screen.findByTestId("day-detail-card");
-
-      window.scrollY = 70;
-      fireEvent.scroll(window);
-
-      const timeline = await screen.findByTestId("duty-timeline");
-      expect(timeline).toHaveTextContent("Leave home");
-      expect(timeline).toHaveTextContent("Report");
-      expect(timeline).toHaveTextContent("Lands");
     });
   });
 });
