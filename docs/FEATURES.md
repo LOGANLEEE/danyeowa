@@ -32,7 +32,7 @@ codebase to find out. Status words mean exactly one thing:
 | Arrival alerts on/off in Settings | Built | `notification_prefs.arrival_enabled`, independent of report alerts |
 | Lead time 30–360 min | Built | Applies to report alerts only; arrival stages are fixed |
 | Self-test push | Live | `GET /api/push/test` sends to the caller's own devices |
-| Delay / early-arrival tracking | **Partial** | Alerts use the stored `arr_utc`. A delay the app never learned about produces an early "landing now". See "Live flight status" below |
+| Delay / early-arrival tracking | Built | `scripts/refresh-arrivals.mjs` on a Mac cron corrects `arr_utc` from live data and re-arms the alert stages. Verified on an airborne EK4 |
 
 ## Schedule data
 
@@ -42,7 +42,7 @@ codebase to find out. Status words mean exactly one thing:
 | Multi-leg services | Live | EK247 = DXB→GIG→EZE as two legs of one service |
 | Local harvester | Live | `scripts/fetch-schedules.mjs` — real Chrome, fr24 JSON API, writes prod D1 |
 | Negative cache for misses | Partial | Still records a miss when the fetch was *blocked*, which poisons a live flight for the TTL |
-| Live flight status (ETA) | **Not automated** | Reachable only from a real signed-in browser; automated browsers get 403. See RUNBOOK |
+| Live flight status (ETA) | Built | Needs the Mac awake. Real Chrome cookies + automation markers off; see RUNBOOK |
 
 ## Account and sharing
 
@@ -70,22 +70,15 @@ D1 for previews · a leg chooser for multi-leg flights. Reasons in `DECISIONS.md
 
 ---
 
-## The one real gap
+## Known limits
 
-**Arrival alerts fire against the timetable, not against reality.** If a flight is an hour late,
-the "landing now" push arrives an hour early.
+**Live status depends on a Mac being awake.** Arrival corrections come from a cron on this
+machine, because fr24's live endpoints refuse a Cloudflare Worker and a direct request alike. If
+the Mac is asleep, alerts fall back to the timetable — correct for an on-time flight, early for a
+delayed one.
 
-The data exists — fr24's `/clickhandler/?flight=<id>` returns `time.estimated.arrival` while a
-flight is airborne, confirmed live on EK4 showing 42 minutes early against its schedule. The
-problem is reach:
+The escape is the fr24 API at $9/month: the Worker would call it directly, and both the refresher
+and the harvester would stop needing a browser at all.
 
-| Caller | `/v1/search/web/find` | `/clickhandler/` | `flight/list.json` |
-|---|---|---|---|
-| Cloudflare Worker | 403 | 403 | 403 |
-| node / curl | 403 | 403 | 403 |
-| Playwright Chrome (headless or headed) | **403** | untested past the 403 | works |
-| The user's own signed-in Chrome | works | works | works |
-
-So the schedule harvester automates fine, and the live-status refresher does not — an automated
-browser is refused at the first hop. `scripts/refresh-arrivals.mjs` is written and its database
-side is verified; only the live lookup is blocked. Options are in `RUNBOOK.md`.
+**The negative cache still records a miss when a fetch was blocked**, which can poison a live
+flight for the TTL. That is what made EK247 unresolvable before the harvester took over the cache.

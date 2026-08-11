@@ -13,6 +13,46 @@
  * not assumed — six long-haul flights, all airborne, all null.
  */
 
+import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const CHROME_PROFILE = path.join(
+  os.homedir(),
+  "Library/Application Support/Google/Chrome"
+);
+
+/**
+ * Builds a throwaway Chrome profile carrying only the real one's cookies.
+ *
+ * Both endpoints refuse a fresh automated browser — 403 in headless AND headed Playwright — while
+ * the same calls from the user's own signed-in Chrome succeed. The difference is the session, so
+ * the session is what gets borrowed.
+ *
+ * Copying rather than pointing at the profile directly matters: Chrome holds a singleton lock on
+ * a live profile, and the user should not have to close their browser for a cron job. Only three
+ * files are needed — the cookie database, the Local State that holds its encryption key, and
+ * Preferences — so this stays small instead of duplicating a multi-gigabyte profile.
+ */
+export function borrowChromeProfile(scratchDir, profileName = "Default") {
+  if (!existsSync(CHROME_PROFILE)) {
+    throw new Error(`Chrome profile not found at ${CHROME_PROFILE}`);
+  }
+  rmSync(scratchDir, { recursive: true, force: true });
+  mkdirSync(path.join(scratchDir, profileName, "Network"), { recursive: true });
+
+  const copies = [
+    ["Local State", "Local State"],
+    [path.join(profileName, "Network", "Cookies"), path.join(profileName, "Network", "Cookies")],
+    [path.join(profileName, "Preferences"), path.join(profileName, "Preferences")],
+  ];
+  for (const [from, to] of copies) {
+    const src = path.join(CHROME_PROFILE, from);
+    if (existsSync(src)) copyFileSync(src, path.join(scratchDir, to));
+  }
+  return scratchDir;
+}
+
 /**
  * Resolves one flight number to its live arrival estimate, or null when it isn't in the air.
  *

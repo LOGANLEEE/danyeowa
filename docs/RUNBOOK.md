@@ -56,37 +56,39 @@ node scripts/fetch-schedules.mjs --range 1-300 --retry-missing # re-check flight
   retry behind a fresh context.
 - Long runs get killed in a background shell. Run a sweep in a terminal you own.
 
-## Refreshing arrival times against reality — **blocked**
+## Refreshing arrival times against reality
+
+Corrects stored arrival times against live flightradar24 data, and clears `arrival_alert_stage`
+so the 60/30/0 alerts re-arm against the corrected time.
 
 ```bash
 node scripts/refresh-arrivals.mjs --hours 12        # dry-run
-node scripts/refresh-arrivals.mjs --apply           # writes corrected arr_utc, re-arms alerts
+node scripts/refresh-arrivals.mjs --apply           # writes to prod D1
 ```
 
-The D1 half works. The live-status half does not, because fr24 refuses automated browsers at the
-first hop:
+Cron, every 15 minutes to match the Worker's alert scan (`crontab -e`):
 
-| Caller | search (flight no → fr24 id) | clickhandler (the ETA) |
-|---|---|---|
-| node / curl | 403 | 403 |
-| Playwright, headless **and** headed | 403 | — |
-| The user's own signed-in Chrome | works | works |
+```
+*/15 * * * * /usr/bin/env node scripts/refresh-arrivals.mjs --apply >> /tmp/roaster-refresh.log 2>&1
+```
 
-`data-cloud.flightradar24.com/zones/fcgi/feed.js` does answer node when sent with a
-`referer: https://www.flightradar24.com/` header, and carries fr24 ids for airborne aircraft — but
-it returned a full list once and an empty one minutes later, so it is not dependable as it stands.
+**Two things together get past fr24's bot check, and only together.** Measured: a plain Playwright
+context gets 403 whether headless or headed; borrowing the real Chrome cookies still gets 403;
+adding the automation-marker flags is what finally works.
 
-Three ways forward, in order of how much they cost:
+- the real profile's cookies, copied to a scratch dir so Chrome can stay open
+- `--disable-blink-features=AutomationControlled`, `ignoreDefaultArgs: ["--enable-automation"]`,
+  and `navigator.webdriver` stubbed
 
-1. **Point Playwright at the real Chrome profile** (`launchPersistentContext`) so it inherits the
-   session that works. Free, but Chrome must be closed while it runs, or the profile copied.
-2. **Buy the fr24 API** — Explorer, $9/month, 60k credits. The Worker calls it directly and the
-   whole browser-driving problem disappears, along with the harvester's challenge retries.
-3. **Ship schedule-only refresh.** Corrects timetable changes, not day-of delays. Honest but
-   partial.
+Runs headless, so a cron job throws no windows at you. It only rewrites a time when the drift is
+at least 10 minutes — every flight is a minute or two off its timetable and churning the row for
+that would re-arm alerts for nothing.
 
-Until one of these lands, arrival alerts fire against the timetable. Say so in the UI rather than
-implying live tracking.
+Verified end to end against a live EK4: stored 23:35Z corrected to 02:50Z from the airborne
+estimate, and the stage reset from 30 to NULL.
+
+If fr24 tightens the check, the fallback is the API at $9/month, which removes the browser
+entirely — for this and for the harvester.
 
 ## Push notifications
 

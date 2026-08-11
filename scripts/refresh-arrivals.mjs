@@ -24,10 +24,12 @@ import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { fetchLiveArrival, isMaterialDrift } from "./lib/fr24-live.mjs";
+import os from "node:os";
+import { borrowChromeProfile, fetchLiveArrival, isMaterialDrift } from "./lib/fr24-live.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..");
+const PROFILE_SCRATCH = path.join(os.tmpdir(), "roaster-chrome-profile");
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
@@ -74,11 +76,23 @@ async function main() {
       `${args.apply ? "WILL WRITE to prod D1" : "dry-run"}`
   );
 
-  const browser = await chromium
-    .launch({ headless: true, channel: "chrome" })
-    .catch(() => chromium.launch({ headless: true }));
-  const ctx = await browser.newContext({ userAgent: UA, locale: "en-GB" });
-  const page = await ctx.newPage();
+  // Two things are needed to get past the 403 that a plain Playwright context hits, and BOTH
+  // were measured — cookies alone still got 403, and automation flags alone were never tried
+  // without them:
+  //   - the real Chrome profile's cookies, copied so the browser can stay open
+  //   - automation markers off, since navigator.webdriver is what a bot check reads first
+  const ctx = await chromium.launchPersistentContext(borrowChromeProfile(PROFILE_SCRATCH), {
+    headless: true,
+    channel: "chrome",
+    userAgent: UA,
+    locale: "en-GB",
+    args: ["--disable-blink-features=AutomationControlled"],
+    ignoreDefaultArgs: ["--enable-automation"],
+  });
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
+  const page = ctx.pages()[0] ?? (await ctx.newPage());
   await page.goto("https://www.flightradar24.com/", { waitUntil: "domcontentloaded", timeout: 45_000 });
   await page.waitForTimeout(5000);
 
@@ -116,7 +130,7 @@ async function main() {
     await page.waitForTimeout(1500);
   }
 
-  await browser.close();
+  await ctx.close();
 
   if (!updates.length) {
     console.log("no corrections needed");
