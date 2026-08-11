@@ -1,3 +1,12 @@
+> [!WARNING]
+> **STALE — do not follow this document.**
+>
+> It describes an Expo / React Native / Supabase / Jest project. roaster-me is React + Vite +
+> Cloudflare Workers + D1 + better-auth, tested with Vitest and Playwright. Verified 2026-08-11:
+> this file has dozens of references to that old stack, and the repo contains none of it.
+>
+> Current guidance lives in `/CLAUDE.md` and `/docs/DECISIONS.md`.
+
 # Project Rules - Detailed Documentation
 
 This document contains detailed project rules and conventions. For quick reference, see `.cursor/rules/` files.
