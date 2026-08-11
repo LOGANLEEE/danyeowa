@@ -233,6 +233,9 @@ export type PushUnsubscribeInput = z.infer<typeof PushUnsubscribeSchema>;
 export const NotificationPrefsSchema = z.object({
   enabled: z.boolean(),
   leadMinutes: z.number().int().min(30).max(360),
+  // Optional so an older client that doesn't know about arrival alerts can still save the other
+  // two settings without silently turning them off.
+  arrivalEnabled: z.boolean().optional(),
 });
 
 export type NotificationPrefsInput = z.infer<typeof NotificationPrefsSchema>;
@@ -241,5 +244,6 @@ export type PushConfig = {
   publicKey: string;
   enabled: boolean;
   leadMinutes: number;
+  arrivalEnabled: boolean;
   subscribed: boolean;
 };

@@ -26,4 +26,7 @@ export const notificationPrefs = sqliteTable("notification_prefs", {
     .references(() => user.id, { onDelete: "cascade" }),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   leadMinutes: integer("lead_minutes").notNull().default(120),
+  // Arrival alerts are opt-outable on their own: someone who wants report reminders for their
+  // own duty doesn't necessarily want a ping for every landing on their roster.
+  arrivalEnabled: integer("arrival_enabled", { mode: "boolean" }).notNull().default(true),
 });

@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { formatLocal } from "@roaster/shared";
 import * as schema from "./db/schema";
@@ -38,17 +38,44 @@ async function claimFlightForNotification(
 }
 
 /**
- * Same claim-before-send trick as report alerts, on the arrival stamp.
+ * Minutes before arrival at which to ping, largest first. 0 is "it is landing now".
+ *
+ * Three fixed stages rather than a user-configured list: the useful moments for meeting someone
+ * are "set off", "get moving" and "they're down", and a free-form list would be a settings
+ * screen nobody wants to fill in.
  */
-async function claimFlightForArrival(
+export const ARRIVAL_STAGES = [60, 30, 0] as const;
+
+/**
+ * A landing alert has to fire slightly AFTER the arrival time, so the candidate window reaches
+ * back as well as forward. One cron period plus slack, so a flight that lands between two scans
+ * still gets its "landed" ping rather than being silently skipped.
+ */
+const ARRIVAL_LOOKBACK_MS = 20 * 60 * 1000;
+
+/**
+ * Claims one stage. The guard is `stage < recorded`, so a re-run at the same stage does nothing
+ * while the next stage down still gets through — which is what makes three alerts per flight
+ * idempotent without a lock or a row per alert.
+ */
+async function claimArrivalStage(
   database: ReturnType<typeof db>,
   flightId: string,
+  stage: number,
+  currentStage: number | null,
   stampMs: number,
 ): Promise<boolean> {
   const result = await database
     .update(schema.flights)
-    .set({ arrivalNotifiedAt: stampMs })
-    .where(and(eq(schema.flights.id, flightId), isNull(schema.flights.arrivalNotifiedAt)))
+    .set({ arrivalAlertStage: stage, arrivalNotifiedAt: stampMs })
+    .where(
+      and(
+        eq(schema.flights.id, flightId),
+        currentStage === null
+          ? isNull(schema.flights.arrivalAlertStage)
+          : eq(schema.flights.arrivalAlertStage, currentStage),
+      ),
+    )
     .run();
   return (result.meta.changes ?? 0) > 0;
 }
@@ -57,13 +84,19 @@ async function claimFlightForArrival(
  * "Her flight lands in an hour" — the alert for whoever is meeting a flight rather than working
  * it, keyed on arrival instead of report time.
  *
- * It reuses the user's existing lead_minutes rather than adding a second preference: the
- * question it answers ("how much warning do you want") is the same one, and one dial the user
- * already understands beats two they have to reconcile.
+ * Fires three times per flight — 60 min out, 30 min out, and on landing — rather than once at
+ * the user's report-time lead, because meeting someone has distinct moments: set off, get
+ * moving, they're down. It ignores lead_minutes for that reason and is opt-outable on its own
+ * via arrival_enabled.
+ *
+ * Times come from the flight row's arr_utc, so an alert is only as current as that column. A
+ * delay the app never learned about will produce an early "landing now". Keeping that honest
+ * needs a live status source the Worker can reach, which is a separate problem — see
+ * docs/DECISIONS.md on fr24 being reachable only from inside a browser page.
  */
 export async function runArrivalScan(env: Env, nowMs: number): Promise<ReportScanResult> {
   const database = db(env);
-  const nowIso = new Date(nowMs).toISOString();
+  const windowStartIso = new Date(nowMs - ARRIVAL_LOOKBACK_MS).toISOString();
   const windowEndIso = new Date(nowMs + MAX_WINDOW_MS).toISOString();
 
   const candidates = await database
@@ -74,13 +107,15 @@ export async function runArrivalScan(env: Env, nowMs: number): Promise<ReportSca
       origin: schema.flights.origin,
       dest: schema.flights.dest,
       arrUtc: schema.flights.arrUtc,
+      arrivalAlertStage: schema.flights.arrivalAlertStage,
     })
     .from(schema.flights)
     .where(
       and(
-        gte(schema.flights.arrUtc, nowIso),
+        gte(schema.flights.arrUtc, windowStartIso),
         lte(schema.flights.arrUtc, windowEndIso),
-        isNull(schema.flights.arrivalNotifiedAt),
+        // Stage 0 is the last one, so a flight that has had it is finished.
+        or(isNull(schema.flights.arrivalAlertStage), gt(schema.flights.arrivalAlertStage, 0)),
       ),
     );
 
@@ -103,29 +138,48 @@ export async function runArrivalScan(env: Env, nowMs: number): Promise<ReportSca
   const airportByIata = new Map(airportRows.map((a) => [a.iata, a]));
 
   for (const flight of candidates) {
-    const prefs = prefsByUser.get(flight.userId) ?? { enabled: true, leadMinutes: 120 };
-    if (!prefs.enabled) {
+    const prefs = prefsByUser.get(flight.userId) ?? {
+      enabled: true,
+      leadMinutes: 120,
+      arrivalEnabled: true,
+    };
+    if (!prefs.enabled || !prefs.arrivalEnabled) {
       result.skippedOutsideLead++;
       continue;
     }
 
     const minutesUntilArrival = (Date.parse(flight.arrUtc) - nowMs) / 60_000;
-    if (minutesUntilArrival > prefs.leadMinutes) {
+
+    // The stage that is due now: the smallest offset already reached, but only if it hasn't
+    // been sent. Picking the smallest means a scan that straddles two stages (a 15-minute cron
+    // over a 30-minute gap) sends the one that matches reality, not a stale "in 60 minutes".
+    const due = ARRIVAL_STAGES.filter(
+      (stage) =>
+        minutesUntilArrival <= stage &&
+        (flight.arrivalAlertStage === null || stage < flight.arrivalAlertStage),
+    );
+    const stage = due.length ? Math.min(...due) : null;
+    if (stage === null) {
       result.skippedOutsideLead++;
       continue;
     }
 
-    const claimed = await claimFlightForArrival(database, flight.id, nowMs);
+    const claimed = await claimArrivalStage(database, flight.id, stage, flight.arrivalAlertStage, nowMs);
     if (!claimed) continue;
 
     // Local time AT THE DESTINATION: the person waiting is standing in the arrivals hall.
     const destTz = airportByIata.get(flight.dest)?.tz ?? "UTC";
     const arrivalLocal = formatLocal(flight.arrUtc, destTz);
+    const minutesOut = Math.max(0, Math.round(minutesUntilArrival));
 
     const payload = {
-      title: `${flight.flightNo} lands ${arrivalLocal}`,
-      body: `${flight.origin} → ${flight.dest}, in ${Math.max(0, Math.round(minutesUntilArrival))} min`,
-      tag: `arrival-${flight.id}`,
+      title:
+        stage === 0
+          ? `${flight.flightNo} landing now`
+          : `${flight.flightNo} lands in ${minutesOut} min`,
+      body: `${flight.origin} → ${flight.dest}, arrives ${arrivalLocal}`,
+      // Per stage, so the three alerts don't collapse into one another in the notification tray.
+      tag: `arrival-${flight.id}-${stage}`,
     };
 
     const subs = await database

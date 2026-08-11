@@ -40,6 +40,10 @@ export const flights = sqliteTable("flights", {
   // Separate from reportNotifiedAt because the two alerts fire at different moments of the same
   // flight: report time is for the person working it, arrival is for whoever is meeting it.
   arrivalNotifiedAt: integer("arrival_notified_at", { mode: "number" }),
+  // Arrival fires more than once (60 min out, 30 min out, on landing), so a single timestamp
+  // can't say WHICH ones already went. This holds the smallest offset sent so far; a stage only
+  // fires when it is smaller than what is recorded.
+  arrivalAlertStage: integer("arrival_alert_stage", { mode: "number" }),
 });
 
 export const airports = sqliteTable("airports", {

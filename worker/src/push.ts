@@ -21,7 +21,7 @@ function db(env: Env) {
   return drizzle(env.DB, { schema });
 }
 
-const DEFAULT_PREFS = { enabled: true, leadMinutes: 120 };
+const DEFAULT_PREFS = { enabled: true, leadMinutes: 120, arrivalEnabled: true };
 
 pushRouter.get("/push/config", async (c) => {
   const user = c.var.user;
@@ -45,6 +45,7 @@ pushRouter.get("/push/config", async (c) => {
     publicKey: c.env.VAPID_PUBLIC_KEY ?? "",
     enabled: prefsRow?.enabled ?? DEFAULT_PREFS.enabled,
     leadMinutes: prefsRow?.leadMinutes ?? DEFAULT_PREFS.leadMinutes,
+    arrivalEnabled: prefsRow?.arrivalEnabled ?? DEFAULT_PREFS.arrivalEnabled,
     subscribed: subRows.length > 0,
   };
 
@@ -160,13 +161,18 @@ pushRouter.put("/push/prefs", async (c) => {
 
   const database = db(c.env);
   const { enabled, leadMinutes } = parsed.data;
+  // Absent means "client didn't send it", not "off" — keep whatever is stored.
+  const arrivalEnabled = parsed.data.arrivalEnabled ?? DEFAULT_PREFS.arrivalEnabled;
 
   await database
     .insert(schema.notificationPrefs)
-    .values({ userId: user.id, enabled, leadMinutes })
+    .values({ userId: user.id, enabled, leadMinutes, arrivalEnabled })
     .onConflictDoUpdate({
       target: schema.notificationPrefs.userId,
-      set: { enabled, leadMinutes },
+      set:
+        parsed.data.arrivalEnabled === undefined
+          ? { enabled, leadMinutes }
+          : { enabled, leadMinutes, arrivalEnabled },
     });
 
   return c.body(null, 200);
