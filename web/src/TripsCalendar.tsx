@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { localDateKey, monthGrid, tripDaysInMonth } from "@roaster/shared";
 import type { TripWithFlights } from "./api";
 import { dutyDayMarks, type DayKind } from "./lib/dayMarks";
@@ -54,6 +54,16 @@ const DAY_LABEL: Record<DayKind, string> = {
   sector: "sector to",
   layover: "layover at",
 };
+// Swipe thresholds. 50px of horizontal travel rules out an accidental brush; the 1.5x
+// horizontal/vertical ratio rejects a vertical scroll that happens to also drift >50px sideways
+// (a straight-down drag on a phone is rarely perfectly vertical). Pointer Events, not touch-only,
+// so a trackpad drag works too and the gesture is testable without a touch-emulating harness.
+const SWIPE_MIN_DISTANCE = 50;
+const SWIPE_DIRECTIONAL_RATIO = 1.5;
+// Well under SWIPE_MIN_DISTANCE: a drag that falls short of a real swipe should still cancel the
+// tap it would otherwise leave behind, so releasing mid-gesture never also selects a day.
+const TAP_CANCEL_DISTANCE = 10;
+
 const MONTH_LABELS = [
   "January",
   "February",
@@ -131,6 +141,47 @@ export default function TripsCalendar({
     }
   }
 
+  // Swipe state lives in refs, not useState — it's read/written only inside pointer handlers on
+  // the same render, never needs to trigger a re-render itself.
+  const dragStart = useRef<{ x: number; y: number } | null>(null);
+  // Set once a gesture has moved past TAP_CANCEL_DISTANCE; consumed (and reset) by
+  // handleGridClickCapture so a dragged release never also fires the day button underneath it.
+  const dragMoved = useRef(false);
+
+  function handlePointerDown(e: React.PointerEvent) {
+    dragStart.current = { x: e.clientX, y: e.clientY };
+    dragMoved.current = false;
+  }
+
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!dragStart.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    if (Math.abs(dx) > TAP_CANCEL_DISTANCE || Math.abs(dy) > TAP_CANCEL_DISTANCE) {
+      dragMoved.current = true;
+    }
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    if (!dragStart.current) return;
+    const dx = e.clientX - dragStart.current.x;
+    const dy = e.clientY - dragStart.current.y;
+    dragStart.current = null;
+    if (Math.abs(dx) > SWIPE_MIN_DISTANCE && Math.abs(dx) > Math.abs(dy) * SWIPE_DIRECTIONAL_RATIO) {
+      if (dx < 0) goNextMonth();
+      else goPrevMonth();
+    }
+  }
+
+  // Capture phase runs before the day button's own onClick (bubble phase), so this swallows the
+  // click a swipe leaves in its wake before it ever reaches the button.
+  function handleGridClickCapture(e: React.MouseEvent) {
+    if (dragMoved.current) {
+      e.stopPropagation();
+      dragMoved.current = false;
+    }
+  }
+
   function goPrevMonth() {
     if (viewMonth === 1) {
       setViewYear((y) => y - 1);
@@ -195,8 +246,18 @@ export default function TripsCalendar({
       </div>
 
       {/* gap-2 (8px), not gap-1: adjacent tap targets need 8px of separation, and 7 cells plus
-          six 8px gaps still leaves 44px cells at a 390px viewport. */}
-      <div className="grid grid-cols-7 gap-2">
+          six 8px gaps still leaves 44px cells at a 390px viewport.
+          touch-pan-y: the browser keeps owning vertical scrolling outright (we never
+          preventDefault on it) - horizontal movement is left free for the pointer handlers
+          below to read as a swipe. */}
+      <div
+        data-testid="calendar-grid"
+        className="grid touch-pan-y grid-cols-7 gap-2"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onClickCapture={handleGridClickCapture}
+      >
         {grid.flat().map((cell) => {
           const isToday = cell.iso === today;
           const isSelected = cell.iso === selectedIso;

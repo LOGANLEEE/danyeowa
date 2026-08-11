@@ -478,6 +478,25 @@ function DayDetailCard({
   );
 }
 
+/** Shown in place of the calendar while `/api/trips` is still in flight. Two blocks sized to
+ * roughly match TripsCalendar and the card beneath it (next-duty / day-detail), so the layout
+ * doesn't jump when real content lands — same shape-matching approach as SharedViewer's own
+ * loading skeleton. motion-reduce disables the pulse rather than just slowing it, per the
+ * reduced-motion contract the rest of the app follows (tokens.css's .entrance/.tl-enter). */
+function CalendarSkeleton() {
+  return (
+    <div
+      data-testid="calendar-skeleton"
+      aria-live="polite"
+      aria-busy="true"
+      className="flex w-full max-w-xl flex-col gap-4"
+    >
+      <div className="h-[360px] w-full animate-pulse rounded-lg bg-raised motion-reduce:animate-none" />
+      <div className="h-32 w-full animate-pulse rounded-lg bg-raised motion-reduce:animate-none" />
+    </div>
+  );
+}
+
 /** Calendar tab: month grid (trip days marked) + an active-pairing progress card (when a
  * trip spans `now`) + a compact next-duty card. Single tap on any day SELECTS it, showing its
  * detail in place of the next-duty card: a trip day expands to its legs + Edit/Delete, an
@@ -544,7 +563,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
   }, [openTodayToken, trips]);
 
   if (trips === null) {
-    return <p className="text-ink-muted">loading…</p>;
+    return <CalendarSkeleton />;
   }
 
   const allFlights = trips

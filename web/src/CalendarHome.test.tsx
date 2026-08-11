@@ -165,6 +165,26 @@ describe("CalendarHome", () => {
     expect(card).not.toHaveTextContent(/leave home/i);
   });
 
+  it("shows the calendar skeleton while trips are loading, then replaces it once they resolve", async () => {
+    let resolveTrips!: (trips: TripWithFlights[]) => void;
+    vi.mocked(getTrips).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveTrips = resolve;
+        }),
+    );
+
+    render(<CalendarHome now={now} />);
+
+    expect(await screen.findByTestId("calendar-skeleton")).toBeInTheDocument();
+    expect(screen.queryByText(/loading…/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("calendar-next")).not.toBeInTheDocument();
+
+    resolveTrips([aklTrip]);
+    expect(await screen.findByTestId("calendar-next")).toBeInTheDocument();
+    expect(screen.queryByTestId("calendar-skeleton")).not.toBeInTheDocument();
+  });
+
   it("marks a trip day on the grid", async () => {
     vi.mocked(getTrips).mockResolvedValue([aklTrip]);
 
