@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export * from "./time";
+export * from "./flight";
 
 export type HealthResponse = { ok: boolean; d1: boolean };
 export type Me = { id: string; email: string; name: string | null };

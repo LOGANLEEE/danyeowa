@@ -89,8 +89,9 @@ describe("useTripEntry", () => {
 
     await waitFor(() => expect(createTrip).toHaveBeenCalled());
     const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
+    // normaliseFlightNo strips the leading zero: "EK001" -> "EK1".
     expect(payload!.legs[0]).toMatchObject({
-      flightNo: "EK001",
+      flightNo: "EK1",
       origin: "DXB",
       dest: "LHR",
       depUtc: "2026-08-20T05:45:00.000Z",
@@ -102,7 +103,7 @@ describe("useTripEntry", () => {
 
     await waitFor(() => expect(confirmSchedule).toHaveBeenCalled());
     expect(confirmSchedule).toHaveBeenCalledWith({
-      flightNo: "EK001",
+      flightNo: "EK1",
       legSeq: 0,
       origin: "DXB",
       dest: "LHR",
@@ -245,7 +246,8 @@ describe("useTripEntry", () => {
       result.current.switchToManual();
     });
     expect(result.current.mode).toBe("manual");
-    expect(result.current.legs[0]!.flightNo).toBe("EK001");
+    // switchToManual normalises: "EK001" -> "EK1".
+    expect(result.current.legs[0]!.flightNo).toBe("EK1");
   });
 
   it("switches to manual mode on an unknown flight (404) and prefills the flight no + picked date", async () => {
@@ -319,8 +321,9 @@ describe("useTripEntry", () => {
     await waitFor(() => expect(createTrip).toHaveBeenCalled());
     const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
     expect(payload!.legs).toHaveLength(1);
+    // handleManualSubmit normalises at the submit boundary: "EK002" -> "EK2".
     expect(payload!.legs[0]).toMatchObject({
-      flightNo: "EK002",
+      flightNo: "EK2",
       origin: "DXB",
       dest: "LHR",
       depUtc: "2026-08-10T04:45:00.000Z",
@@ -406,11 +409,12 @@ describe("useTripEntry", () => {
         await result.current.appendFlight("EK098");
       });
 
-      expect(lookupSchedule).toHaveBeenCalledWith("EK098", "2026-08-20");
-      expect(result.current.appendedFlightNo).toBe("EK098");
+      // appendFlight normalises the candidate: "EK098" -> "EK98".
+      expect(lookupSchedule).toHaveBeenCalledWith("EK98", "2026-08-20");
+      expect(result.current.appendedFlightNo).toBe("EK98");
       expect(result.current.autofillLegs).toHaveLength(2);
       expect(result.current.autofillLegs![1]).toMatchObject({
-        flightNo: "EK098",
+        flightNo: "EK98",
         legSeq: 1,
         origin: "BCN",
         dest: "DXB",
@@ -432,20 +436,20 @@ describe("useTripEntry", () => {
       const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
       expect(payload!.legs).toHaveLength(2);
 
-      // Leg 0 (EK097): dep 2026-08-20 08:20 Asia/Dubai (+4) -> 04:20Z; arr 2026-08-20 12:35
-      // Europe/Madrid (+2 in Aug) -> 10:35Z.
+      // Leg 0 (EK097, normalised to EK97): dep 2026-08-20 08:20 Asia/Dubai (+4) -> 04:20Z;
+      // arr 2026-08-20 12:35 Europe/Madrid (+2 in Aug) -> 10:35Z.
       expect(payload!.legs[0]).toMatchObject({
-        flightNo: "EK097",
+        flightNo: "EK97",
         origin: "DXB",
         dest: "BCN",
         depUtc: "2026-08-20T04:20:00.000Z",
         arrUtc: "2026-08-20T10:35:00.000Z",
       });
-      // Leg 1 (EK098): depDate = EK097's arrival local date (2026-08-20); dep 14:15
-      // Europe/Madrid (+2) -> 12:15Z; arrDate = depDate + dayOffset(1) = 2026-08-21, arr 00:05
-      // Asia/Dubai (+4) -> 2026-08-20T20:05Z.
+      // Leg 1 (EK098, normalised to EK98): depDate = EK097's arrival local date (2026-08-20);
+      // dep 14:15 Europe/Madrid (+2) -> 12:15Z; arrDate = depDate + dayOffset(1) = 2026-08-21,
+      // arr 00:05 Asia/Dubai (+4) -> 2026-08-20T20:05Z.
       expect(payload!.legs[1]).toMatchObject({
-        flightNo: "EK098",
+        flightNo: "EK98",
         origin: "BCN",
         dest: "DXB",
         depUtc: "2026-08-20T12:15:00.000Z",
@@ -467,11 +471,11 @@ describe("useTripEntry", () => {
       await waitFor(() => expect(confirmSchedule).toHaveBeenCalledTimes(2));
       expect(confirmSchedule).toHaveBeenNthCalledWith(
         1,
-        expect.objectContaining({ flightNo: "EK097", legSeq: 0 }),
+        expect.objectContaining({ flightNo: "EK97", legSeq: 0 }),
       );
       expect(confirmSchedule).toHaveBeenNthCalledWith(
         2,
-        expect.objectContaining({ flightNo: "EK098", legSeq: 0 }),
+        expect.objectContaining({ flightNo: "EK98", legSeq: 0 }),
       );
     });
 
@@ -506,7 +510,8 @@ describe("useTripEntry", () => {
 
       expect(result.current.appendedFlightNo).toBeNull();
       expect(result.current.autofillLegs).toHaveLength(1);
-      expect(result.current.autofillLegs![0]!.flightNo).toBe("EK097");
+      // Outbound's own flightNo was normalised at lookup time: "EK097" -> "EK97".
+      expect(result.current.autofillLegs![0]!.flightNo).toBe("EK97");
     });
   });
 

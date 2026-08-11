@@ -314,8 +314,9 @@ describe("AddTripForm", () => {
       const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
       // ONE trip, two legs, combined save (not two POSTs).
       expect(payload!.legs).toHaveLength(2);
-      expect(payload!.legs[0]).toMatchObject({ flightNo: "EK097", origin: "DXB", dest: "BCN" });
-      expect(payload!.legs[1]).toMatchObject({ flightNo: "EK098", origin: "BCN", dest: "DXB" });
+      // Leading zeros are stripped by normaliseFlightNo at the submit boundary (EK097 -> EK97).
+      expect(payload!.legs[0]).toMatchObject({ flightNo: "EK97", origin: "DXB", dest: "BCN" });
+      expect(payload!.legs[1]).toMatchObject({ flightNo: "EK98", origin: "BCN", dest: "DXB" });
     });
 
     it("reverts to single-flight preview when the appended card's ✕ is clicked", async () => {

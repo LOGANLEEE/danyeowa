@@ -140,6 +140,28 @@ describe("GET /api/schedule/lookup", () => {
     expect(res.status).toBe(404);
   });
 
+  it("normalises leading zeros: a lookup for EK049 hits a cache row stored as EK49", async () => {
+    const db = drizzle(env.DB, { schema });
+    await db.insert(schema.flightSchedules).values({
+      flightNo: "EK49",
+      legSeq: 0,
+      origin: "DXB",
+      dest: "LHR",
+      depLocal: "09:00",
+      arrLocal: "13:00",
+      dayOffset: 0,
+      daysOfWeek: "1234567",
+    });
+
+    const res = await SELF.fetch(
+      "https://example.com/api/schedule/lookup?flight_no=EK049&date=2026-08-20",
+      { headers: { Cookie: cookie } },
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json<{ legs: Array<{ origin: string; dest: string }> }>();
+    expect(body.legs[0]).toMatchObject({ origin: "DXB", dest: "LHR" });
+  });
+
   it("400s on a malformed flight_no", async () => {
     const res = await SELF.fetch(
       "https://example.com/api/schedule/lookup?flight_no=1234&date=2026-08-20",
