@@ -108,18 +108,71 @@ function isoWeekday(dateText) {
  * it's the ISO weekdays (1=Mon..7=Sun) actually observed for that leg_seq, sorted, joined -
  * e.g. "135".
  */
+/**
+ * Orders one date's legs into flying sequence by following the route, not the clock.
+ *
+ * Clock order is wrong whenever a service crosses midnight: EK248 flies EZE 22:25 -> GIG 01:10,
+ * then GIG 03:05 -> DXB 00:30, and sorting on local departure time puts the GIG leg first,
+ * inverting the pairing. Chaining on dest -> origin gets it right; leg 0 is the station that is
+ * nobody else's destination.
+ *
+ * Falls back to clock order when the rows don't form a single chain (a repeated station, or a
+ * date whose rows are genuinely unrelated) - a wrong-but-stable order beats throwing.
+ */
+function orderLegs(dateRows) {
+  if (dateRows.length < 2) return [...dateRows];
+  const byOrigin = new Map(dateRows.map((r) => [r.origin, r]));
+  const dests = new Set(dateRows.map((r) => r.dest));
+  if (byOrigin.size !== dateRows.length || dests.size !== dateRows.length) {
+    return [...dateRows].sort((a, b) => a.depLocal.localeCompare(b.depLocal));
+  }
+  const start = dateRows.find((r) => !dests.has(r.origin));
+  if (!start) return [...dateRows].sort((a, b) => a.depLocal.localeCompare(b.depLocal));
+
+  const chain = [];
+  let cur = start;
+  while (cur && chain.length < dateRows.length) {
+    chain.push(cur);
+    cur = byOrigin.get(cur.dest);
+  }
+  return chain.length === dateRows.length
+    ? chain
+    : [...dateRows].sort((a, b) => a.depLocal.localeCompare(b.depLocal));
+}
+
+/**
+ * Weekdays a leg actually operates, judged only over the window where fr24 could have seen it.
+ *
+ * Counting absences across the WHOLE sample gets daily flights wrong: fr24's page is a short
+ * window truncated at both ends, and a leg that departs after midnight lands in the next date
+ * group - so the last leg of a service is routinely missing from the first or last sampled
+ * date. Live EK248 came out "167" (Mon/Sat/Sun) that way, which would have made the app deny a
+ * daily flight on a Tuesday.
+ *
+ * Interior gaps are real signal (a 3x-weekly flight skips days inside its own run); edge
+ * truncation is not. So the verdict is taken between the leg's first and last sighting only.
+ */
+function deriveDaysOfWeek(legDates, sampledDates) {
+  const first = sampledDates.findIndex((d) => legDates.has(d));
+  const last = sampledDates.findLastIndex((d) => legDates.has(d));
+  const window = sampledDates.slice(first, last + 1);
+  if (window.every((d) => legDates.has(d))) return "1234567";
+  return [...new Set([...legDates].map(isoWeekday))].sort((a, b) => a - b).join("");
+}
+
 export function deriveLegSchedule(rows) {
   const byDate = new Map();
   for (const row of rows) {
     if (!byDate.has(row.dateText)) byDate.set(row.dateText, []);
     byDate.get(row.dateText).push(row);
   }
-  const totalDates = byDate.size;
+  const sampledDates = [...byDate.keys()].sort(
+    (a, b) => new Date(`${a} UTC`) - new Date(`${b} UTC`)
+  );
 
   const legs = new Map(); // legSeq -> { combos: Map<comboKey, count>, dates: Set<dateText> }
   for (const dateRows of byDate.values()) {
-    const sorted = [...dateRows].sort((a, b) => a.depLocal.localeCompare(b.depLocal));
-    sorted.forEach((row, legSeq) => {
+    orderLegs(dateRows).forEach((row, legSeq) => {
       if (!legs.has(legSeq)) legs.set(legSeq, { combos: new Map(), dates: new Set() });
       const leg = legs.get(legSeq);
       const key = `${row.origin}|${row.dest}|${row.depLocal}|${row.arrLocal}`;
@@ -142,10 +195,7 @@ export function deriveLegSchedule(rows) {
       }
       const [origin, dest, depLocal, arrLocal] = bestKey.split("|");
       const dayOffset = arrLocal < depLocal ? 1 : 0;
-      const daysOfWeek =
-        leg.dates.size === totalDates
-          ? "1234567"
-          : [...new Set([...leg.dates].map(isoWeekday))].sort((a, b) => a - b).join("");
+      const daysOfWeek = deriveDaysOfWeek(leg.dates, sampledDates);
       return { legSeq, origin, dest, depLocal, arrLocal, dayOffset, daysOfWeek };
     });
 }

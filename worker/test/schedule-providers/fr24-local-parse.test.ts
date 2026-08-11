@@ -44,16 +44,60 @@ describe("looksBlocked", () => {
 });
 
 describe("deriveLegSchedule", () => {
-  it("assigns leg_seq by departure-time order within a date, and day_offset per leg", () => {
+  it("assigns leg_seq in flying order within a date, and day_offset per leg", () => {
     const rows = parseFr24Rows(fr24Ek247Html);
     const legs = deriveLegSchedule(rows);
     expect(legs).toHaveLength(2);
-    // Sorted by depLocal within each date: DXB->GIG (08:05) is the earlier departure -> leg 0.
+    // Chained on dest->origin: DXB->GIG is nobody's destination, so it's leg 0.
     expect(legs[0]).toMatchObject({ legSeq: 0, origin: "DXB", dest: "GIG", depLocal: "08:05", arrLocal: "15:50" });
     expect(legs[1]).toMatchObject({ legSeq: 1, origin: "GIG", dest: "EZE", depLocal: "17:25", arrLocal: "20:50" });
     // Both legs land same-day in the fixture (no midnight crossing).
     expect(legs[0]!.dayOffset).toBe(0);
     expect(legs[1]!.dayOffset).toBe(0);
+  });
+
+  it("orders legs by route, not by clock, when the service crosses midnight", () => {
+    // Real EK248: EZE 22:25 -> GIG 01:10, then GIG 03:05 -> DXB 00:30. Sorting on departure
+    // time puts the GIG leg first and inverts the pairing, which is what it used to do.
+    const rows = [
+      { dateText: "10 Aug 2026", origin: "GIG", dest: "DXB", depLocal: "03:05", arrLocal: "00:30" },
+      { dateText: "10 Aug 2026", origin: "EZE", dest: "GIG", depLocal: "22:25", arrLocal: "01:10" },
+    ];
+    const legs = deriveLegSchedule(rows);
+    expect(legs[0]).toMatchObject({ legSeq: 0, origin: "EZE", dest: "GIG" });
+    expect(legs[1]).toMatchObject({ legSeq: 1, origin: "GIG", dest: "DXB" });
+  });
+
+  it("falls back to clock order when the rows don't form one chain", () => {
+    const rows = [
+      { dateText: "10 Aug 2026", origin: "DXB", dest: "BKK", depLocal: "09:00", arrLocal: "18:00" },
+      { dateText: "10 Aug 2026", origin: "DXB", dest: "SIN", depLocal: "03:00", arrLocal: "14:00" },
+    ];
+    const legs = deriveLegSchedule(rows);
+    expect(legs[0]).toMatchObject({ legSeq: 0, dest: "SIN" });
+    expect(legs[1]).toMatchObject({ legSeq: 1, dest: "BKK" });
+  });
+
+  it("still calls a leg daily when it is only missing at the edges of the sampled window", () => {
+    // fr24's window is truncated at both ends, and a post-midnight leg falls into the next date
+    // group - so the second leg is routinely absent from the first sampled date. Live EK248
+    // came out "167" this way, which would have denied a daily flight on a Tuesday.
+    const leg = (dateText: string, origin: string, dest: string, depLocal: string) => ({
+      dateText,
+      origin,
+      dest,
+      depLocal,
+      arrLocal: "06:00",
+    });
+    const rows = [
+      leg("10 Aug 2026", "EZE", "GIG", "22:25"),
+      leg("11 Aug 2026", "EZE", "GIG", "22:25"),
+      leg("11 Aug 2026", "GIG", "DXB", "03:05"),
+      leg("12 Aug 2026", "EZE", "GIG", "22:25"),
+      leg("12 Aug 2026", "GIG", "DXB", "03:05"),
+    ];
+    const legs = deriveLegSchedule(rows);
+    expect(legs[1]).toMatchObject({ origin: "GIG", dest: "DXB", daysOfWeek: "1234567" });
   });
 
   it("marks a leg daily (\"1234567\") when it appears on every sampled date", () => {

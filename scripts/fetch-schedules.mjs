@@ -50,7 +50,7 @@ const UA =
 const CONTEXT_REFRESH_EVERY = 25;
 
 export function parseArgs(argv) {
-  const args = { delay: 4000, limit: Infinity, apply: false, force: false };
+  const args = { delay: 8000, limit: Infinity, apply: false, force: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--flights") args.flights = argv[++i];
@@ -125,6 +125,7 @@ async function main() {
 
   const sqlStatements = [];
   const tally = { found: 0, notFound: 0, blocked: 0, written: 0 };
+  const retried = new Map();
 
   for (let i = 0; i < queue.length; i++) {
     const flight = queue[i];
@@ -151,8 +152,22 @@ async function main() {
     const rows = parseFr24Rows(html);
     if (!rows.length) {
       if (looksBlocked(html)) {
+        // A challenge is a burst signal, not a verdict on the flight: measured 2-of-3 blocked
+        // back-to-back at 4s, while every one of those flights resolved when fetched alone.
+        // So retry once behind a fresh context - a rerun of the whole sweep is a poor substitute
+        // when the block rate is this high.
+        if ((retried.get(flight) ?? 0) < 1) {
+          retried.set(flight, 1);
+          console.log(`${flight}: BLOCKED (challenge page) - fresh context, retrying once`);
+          await ctx.close();
+          ctx = await browser.newContext({ userAgent: UA, locale: "en-GB" });
+          page = await ctx.newPage();
+          await sleep(args.delay * 3);
+          i--; // retry the same flight
+          continue;
+        }
         tally.blocked++;
-        console.log(`${flight}: BLOCKED (challenge page) - backing off, not marked done`);
+        console.log(`${flight}: BLOCKED twice - backing off, not marked done`);
         await sleep(args.delay * 3);
         continue; // NOT added to `done` - retried on next run
       }
