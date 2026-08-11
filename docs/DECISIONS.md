@@ -23,7 +23,7 @@ the 4.5:1 text minimum, while a glyph is a non-text graphic held to 3:1. The sta
 Optimistically-added days keep a plain dot — they have no legs yet, and the layover fallback would
 otherwise label them with an unrelated trip's station.
 
-### Trip card: departure board, then a scroll-expanded timeline
+### Trip card: departure board + always-visible timeline (scroll-expand was removed)
 
 Collapsed, the card is a board: route headline, `flight · date`, then `REPORT` (amber) / `DEP` /
 `ARR` rows with the `+N` day offset, duration closing right-aligned.
@@ -32,7 +32,20 @@ Collapsed, the card is a board: route headline, `flight · date`, then `REPORT` 
 home → report → departs → lands, with destination city and body-clock shift, and layover rows
 between sectors. Scroll back above 30px to restore.
 
-- The two thresholds are **hysteresis**, not a typo. One threshold flickers when a finger rests on it.
+**Scroll-to-expand was built, shipped, and then removed on 2026-08-11.** It defeated itself:
+collapsing the calendar removed the very scroll that triggered it, so the browser clamped scrollY
+back below the restore threshold and it un-collapsed ~60ms later.
+
+```
+t=0ms    y=200  docH=913  timeline=false
+t=60ms   y=57   docH=721  timeline=TRUE     <- collapses, document shrinks, y clamped
+t=120ms  y=0    docH=870  timeline=false    <- below restore threshold, reverts
+```
+
+That flicker was what the user reported as "there's no animation" — no easing would have fixed it.
+The timeline is now simply always visible; there is space for it. The weekly `DayStrip` that
+appeared on collapse went with it (unwanted), and the month header no longer disappears.
+**Do not reintroduce a scroll-driven collapse without solving the shrink-clamp feedback loop.**
 - **Report time was removed from the card, then deliberately restored.** It was first cut as a
   run-on sentence (`Report 08:10 · leave home 07:15 · now`); the board gives it a labelled row that
   reads at a glance. Don't remove it again without checking this line.
@@ -116,7 +129,67 @@ So as of 2026-08-11 `e2e` is **blocking** and `deploy` needs `[check, e2e]`. Uni
 typecheck cannot see the class of bug that actually reaches users here, so deploying on `check`
 alone was shipping past the only gate that would catch them.
 
+### Schedules are harvested locally with real Chrome, not fetched by the Worker
+
+The Worker's `fetch()` to flightradar24 is fingerprint/egress-blocked: a production lookup for
+EK247 recorded a miss, while the identical page fetched by a real, locally-launched Chrome on a
+dev machine returns every row (27, for EK247's two legs across the sampled dates). The block is
+on the caller, not the flight — `worker/src/schedule-providers/scrape-fr24.ts` stays in place as
+the cache-miss fallback (unchanged), but a Worker fetch to fr24 can no longer be trusted to
+populate the cache going forward.
+
+`scripts/fetch-schedules.mjs` is the workaround: launch real Chrome via Playwright, parse **every**
+row on a flight's fr24 page (not just the first, and not just "now" — the Worker provider's two
+known gaps), group by date to detect multi-leg services, and batch-write the result into
+production D1's `flight_schedules` with `source='local-fetch'` (distinct from `seed-verified` and
+`live-scrape`). Pure parsing/derivation lives in `scripts/lib/fr24-parse.mjs`, unit-tested against
+`worker/test/fixtures/fr24-ek247.html` in `worker/test/schedule-providers/fr24-local-parse.test.ts`.
+
+Default is dry-run (prints the SQL, writes nothing); `--apply` is required to actually write.
+Resumable via `scripts/.fetch-progress.json` (gitignored) so an interrupted multi-hundred-flight
+sweep can pick back up. Run: `node scripts/fetch-schedules.mjs --flights EK247,EK49` or
+`node scripts/fetch-schedules.mjs --range 0-999 --limit 50 --apply`.
+
 ---
+
+### The lookup failure chain, in the order it was actually diagnosed
+
+EK247 failing in the app took four wrong turns before the real cause. Recorded so the next person
+skips them:
+
+1. "Negative cache is hiding it" — partly true, cleared it, still failed.
+2. "The provider chain is misconfigured" — true but not the cause: `AERODATABOX_KEY` is set neither
+   locally nor in production, so that fallback returns `null` immediately. The chain is one
+   provider, not two.
+3. "fr24 blocks datacentre IPs" — **wrong**, and stated too confidently from a `curl` 403. CI (a
+   GitHub runner) resolved a flight through the same code path, and production holds 7 rows with
+   `source='live-scrape'`. The block is on client fingerprint, not address class.
+4. "The parser can't handle a two-leg service" — **wrong**. Run against the real captured page it
+   parses fine; it just returns the SECOND leg (`GIG→EZE 17:25`) and discards the first, because it
+   keeps only the first table row and ignores the requested date entirely (`_dateIso` unused).
+
+The actual cause: **production's fetch now receives a bot-challenge page**, proven by production
+recording a miss for EK247 two minutes after its negative-cache row was cleared, while the same URL
+in real Chrome returned 27 rows. The `live-scrape` rows are historical.
+
+Method note worth keeping: every wrong turn above was a claim made from one measurement without
+checking whether the instrument could see what was being claimed.
+
+### Verification traps that produced confidently wrong reports
+
+Three separate times this session a working feature was reported broken because the *measurement*
+was wrong, not the code:
+
+- `boundingBox()` ignores clipping by an ancestor's `overflow:hidden`, so a fully collapsed element
+  still reports its natural height.
+- `page.screenshot({fullPage:true})` **scrolls the page and resets it**, so anything measured
+  afterwards reads as though the user scrolled back to the top.
+- A bundle fetched mid-deploy returns the *previous* hash, which looks exactly like a failed deploy.
+  Re-request with cache-busting before concluding.
+
+Also: this repo's jsdom has **no `PointerEvent` constructor**, so `fireEvent.pointerDown` degrades
+to a bare `Event` with undefined coordinates — gesture tests can pass while proving nothing. The
+swipe tests dispatch `MouseEvent` typed as pointer events to work around it.
 
 ## Recurring traps
 
@@ -131,12 +204,14 @@ alone was shipping past the only gate that would catch them.
 
 ## Open questions
 
-- **Is scroll-to-expand reachable when the roster is short?** The collapse needs 60px of scroll.
-  On a tall phone (390×844) with a single trip and no install banner, the page may not scroll that
-  far, which would make the timeline unreachable — a product gap, not a test bug. Surfaced by
-  `e2e/layout.spec.ts` failing in CI; the assertion was removed rather than guess-fixed, and the
-  cause is unconfirmed because the machine was too loaded to reproduce. Verify, then either
-  guarantee a minimum scrollable height when a duty is selected, or trigger the expand another way.
+- ~~Is scroll-to-expand reachable on a short roster?~~ **Resolved by removing the feature** — the
+  real defect was the shrink-clamp loop above, not reachability.
+- **The Worker still records a miss when its fetch was BLOCKED.** That is what poisoned EK247 for a
+  whole TTL. Now that the local fetcher owns the cache, a challenged fetch should write nothing.
+- **`TripForm.tsx`** is a near-duplicate of `useTripEntry` still submitting un-normalised flight
+  numbers to the same endpoints — the `EK049` bug survives in that path.
+- **`docs/rules/*`** (Expo/Supabase/Jest, 74 stale references) is flagged but not deleted; removal
+  is the owner's call.
 
 ## Not built, deliberately
 

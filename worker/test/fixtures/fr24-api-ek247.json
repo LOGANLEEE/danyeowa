@@ -1,0 +1,2186 @@
+{
+ "ek247": [
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1787171100,
+     "arrival": 1787183400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1787112300,
+     "arrival": 1787165400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786998300,
+     "arrival": 1787010600
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786939500,
+     "arrival": 1786992600
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786911900,
+     "arrival": 1786924200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786853100,
+     "arrival": 1786906200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786825500,
+     "arrival": 1786837800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786766700,
+     "arrival": 1786819800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786739100,
+     "arrival": 1786751400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786680300,
+     "arrival": 1786733400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786566300,
+     "arrival": 1786578600
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786507500,
+     "arrival": 1786560600
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786393500,
+     "arrival": 1786405800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786334700,
+     "arrival": 1786387800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786307100,
+     "arrival": 1786319400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786248300,
+     "arrival": 1786301400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786220700,
+     "arrival": 1786233000
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786161900,
+     "arrival": 1786215000
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786134300,
+     "arrival": 1786146600
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786075500,
+     "arrival": 1786128600
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786047900,
+     "arrival": 1786060200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1785989100,
+     "arrival": 1786042200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1785961500,
+     "arrival": 1785973800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1785902700,
+     "arrival": 1785955800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK247"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1785875100,
+     "arrival": 1785887400
+    }
+   }
+  }
+ ],
+ "ek248": [
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1787205900,
+     "arrival": 1787257800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1787189100,
+     "arrival": 1787199000
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1787033100,
+     "arrival": 1787085000
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1787016300,
+     "arrival": 1787026200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786946700,
+     "arrival": 1786998600
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786929900,
+     "arrival": 1786939800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786860300,
+     "arrival": 1786912200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786843500,
+     "arrival": 1786853400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786773900,
+     "arrival": 1786825800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786757100,
+     "arrival": 1786767000
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786601100,
+     "arrival": 1786653000
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786584300,
+     "arrival": 1786594200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786428300,
+     "arrival": 1786480200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786411500,
+     "arrival": 1786421400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786341900,
+     "arrival": 1786393800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786325100,
+     "arrival": 1786335000
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786255500,
+     "arrival": 1786307400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786238700,
+     "arrival": 1786248600
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786169100,
+     "arrival": 1786221000
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786152300,
+     "arrival": 1786162200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786082700,
+     "arrival": 1786134600
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786065900,
+     "arrival": 1786075800
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1785996300,
+     "arrival": 1786048200
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "EZE"
+     },
+     "timezone": {
+      "name": "America/Argentina/Buenos_Aires",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1785979500,
+     "arrival": 1785989400
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK248"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "GIG"
+     },
+     "timezone": {
+      "name": "America/Sao_Paulo",
+      "offset": -10800
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1785909900,
+     "arrival": 1785961800
+    }
+   }
+  }
+ ],
+ "ek1": [
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1787196900,
+     "arrival": 1787225100
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1787110500,
+     "arrival": 1787138700
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1787024100,
+     "arrival": 1787052300
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786937700,
+     "arrival": 1786965900
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786851300,
+     "arrival": 1786879500
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786764900,
+     "arrival": 1786793100
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786678500,
+     "arrival": 1786706700
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786592100,
+     "arrival": 1786620300
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786505700,
+     "arrival": 1786533900
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786419300,
+     "arrival": 1786447500
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786332900,
+     "arrival": 1786361100
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786246500,
+     "arrival": 1786274700
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786160100,
+     "arrival": 1786188300
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1786073700,
+     "arrival": 1786101900
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1785987300,
+     "arrival": 1786015500
+    }
+   }
+  },
+  {
+   "identification": {
+    "number": {
+     "default": "EK1"
+    }
+   },
+   "airport": {
+    "origin": {
+     "code": {
+      "iata": "DXB"
+     },
+     "timezone": {
+      "name": "Asia/Dubai",
+      "offset": 14400
+     }
+    },
+    "destination": {
+     "code": {
+      "iata": "LHR"
+     },
+     "timezone": {
+      "name": "Europe/London",
+      "offset": 3600
+     }
+    }
+   },
+   "time": {
+    "scheduled": {
+     "departure": 1785900900,
+     "arrival": 1785929100
+    }
+   }
+  }
+ ]
+}

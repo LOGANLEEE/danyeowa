@@ -82,6 +82,7 @@ describe("SettingsView", () => {
         publicKey: "pubkey",
         enabled: true,
         leadMinutes: 120,
+        arrivalEnabled: true,
         subscribed: false,
       });
 
@@ -105,6 +106,7 @@ describe("SettingsView", () => {
         publicKey: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         enabled: true,
         leadMinutes: 120,
+        arrivalEnabled: true,
         subscribed: false,
       });
 
@@ -148,6 +150,7 @@ describe("SettingsView", () => {
         publicKey: "pubkey",
         enabled: true,
         leadMinutes: 60,
+        arrivalEnabled: true,
         subscribed: true,
       });
 
@@ -185,6 +188,7 @@ describe("SettingsView", () => {
         publicKey: "pubkey",
         enabled: true,
         leadMinutes: 120,
+        arrivalEnabled: true,
         subscribed: true,
       });
       Object.defineProperty(navigator, "serviceWorker", {
@@ -200,6 +204,69 @@ describe("SettingsView", () => {
       await waitFor(() =>
         expect(api.updateNotificationPrefs).toHaveBeenCalledWith({ enabled: true, leadMinutes: 30 }),
       );
+    });
+
+    it("PUTs prefs when arrival alerts are switched off", async () => {
+      const user = userEvent.setup();
+
+      vi.stubGlobal("Notification", { permission: "granted", requestPermission: vi.fn() });
+      vi.stubGlobal("PushManager", class {});
+
+      vi.mocked(api.getPushConfig).mockResolvedValue({
+        publicKey: "pubkey",
+        enabled: true,
+        leadMinutes: 120,
+        arrivalEnabled: true,
+        subscribed: true,
+      });
+      Object.defineProperty(navigator, "serviceWorker", {
+        value: { getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }) },
+        configurable: true,
+      });
+
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      const toggle = await screen.findByTestId("arrival-alerts-toggle");
+      expect(toggle).toBeChecked();
+      await user.click(toggle);
+
+      await waitFor(() =>
+        expect(api.updateNotificationPrefs).toHaveBeenCalledWith({
+          enabled: true,
+          leadMinutes: 120,
+          arrivalEnabled: false,
+        }),
+      );
+      expect(toggle).not.toBeChecked();
+    });
+
+    it("puts the arrival switch back when the save fails", async () => {
+      // A switch that stays flipped after a failed save is a lie about what the server holds.
+      const user = userEvent.setup();
+
+      vi.stubGlobal("Notification", { permission: "granted", requestPermission: vi.fn() });
+      vi.stubGlobal("PushManager", class {});
+
+      vi.mocked(api.getPushConfig).mockResolvedValue({
+        publicKey: "pubkey",
+        enabled: true,
+        leadMinutes: 120,
+        arrivalEnabled: true,
+        subscribed: true,
+      });
+      vi.mocked(api.updateNotificationPrefs).mockRejectedValueOnce(new Error("offline"));
+      Object.defineProperty(navigator, "serviceWorker", {
+        value: { getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }) },
+        configurable: true,
+      });
+
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      const toggle = await screen.findByTestId("arrival-alerts-toggle");
+      await user.click(toggle);
+
+      await waitFor(() => expect(toggle).toBeChecked());
+      expect(screen.getByText(/couldn't save arrival alerts/i)).toBeInTheDocument();
     });
   });
 

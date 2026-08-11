@@ -44,6 +44,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
   );
   const [subscribed, setSubscribed] = useState(false);
   const [leadMinutes, setLeadMinutes] = useState(120);
+  const [arrivalEnabled, setArrivalEnabled] = useState(true);
   const [pushError, setPushError] = useState<string | null>(null);
 
   const [installAvailable, setInstallAvailable] = useState(isInstallPromptAvailable);
@@ -65,6 +66,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
       .then((config) => {
         setSubscribed(config.subscribed);
         setLeadMinutes(config.leadMinutes);
+        setArrivalEnabled(config.arrivalEnabled);
       })
       .catch(() => {
         // Leave defaults in place — the toggle simply starts off.
@@ -134,6 +136,17 @@ export default function SettingsView({ email, onSignOut }: Props) {
     }
   }
 
+  async function handleArrivalToggle(next: boolean) {
+    setArrivalEnabled(next);
+    try {
+      await updateNotificationPrefs({ enabled: true, leadMinutes, arrivalEnabled: next });
+    } catch {
+      // Put the switch back rather than leaving it showing a setting the server never took.
+      setArrivalEnabled(!next);
+      setPushError("Couldn't save arrival alerts — try again");
+    }
+  }
+
   return (
     <div className="entrance flex w-full max-w-xl flex-col gap-6">
       <div className="flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
@@ -198,6 +211,24 @@ export default function SettingsView({ email, onSignOut }: Props) {
                     </option>
                   ))}
                 </select>
+              </label>
+            )}
+
+            {subscribed && (
+              <label className="flex items-center justify-between gap-2 text-ink">
+                <span>
+                  Arrival alerts
+                  <span className="block text-sm text-ink-muted">
+                    1 hour, 30 minutes, and on landing
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  data-testid="arrival-alerts-toggle"
+                  checked={arrivalEnabled}
+                  onChange={(e) => handleArrivalToggle(e.target.checked)}
+                  className="h-6 w-6 accent-accent"
+                />
               </label>
             )}
 

@@ -40,3 +40,13 @@ pyvenv.cfg
 /path/
 /python/
 .firecrawl/
+
+# scripts/fetch-schedules.mjs local state - resume progress + the SQL it writes before an
+# --apply run; both are regenerated locally, never meant to be committed.
+/scripts/.fetch-progress.json
+/scripts/.fetch-schedules-tmp.sql
+
+# One-off diagnostic scratch files, never part of the suite
+worker/test/**/__*.test.ts
+scripts/.probe-*.mjs
+.verify-*.mjs
