@@ -212,10 +212,15 @@ async function main() {
     mkdirSync(path.dirname(TMP_SQL_FILE), { recursive: true });
     writeFileSync(TMP_SQL_FILE, sqlStatements.join("\n") + "\n");
     console.log(`\nApplying via wrangler d1 execute -> ${TMP_SQL_FILE}`);
-    execFileSync("wrangler", ["d1", "execute", "roaster-me-db", "--remote", "--file", TMP_SQL_FILE], {
-      stdio: "inherit",
-      cwd: path.join(__dirname, ".."),
-    });
+    // npx, not a bare `wrangler`: it's a devDependency here, not a global install.
+    execFileSync(
+      "npx",
+      ["wrangler", "d1", "execute", "roaster-me-db", "--remote", "--file", TMP_SQL_FILE],
+      {
+        stdio: "inherit",
+        cwd: path.join(__dirname, ".."),
+      }
+    );
     tally.written = sqlStatements.length;
   }
 
