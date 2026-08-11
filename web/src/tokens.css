@@ -66,6 +66,28 @@
   min-width: 1ch;
 }
 
+/* Zoom control. Three separate mechanisms, because no single one covers every case:
+   1. A 16px floor on form controls. iOS Safari zooms to any focused input smaller than 16px,
+      which is what wrecked the layout — and it IGNORES maximum-scale/user-scalable for that,
+      so the meta tag alone cannot fix it. An element selector loses to Tailwind's class
+      specificity, so a deliberate text-lg still wins; this only catches controls that set no
+      size at all.
+   2. touch-action: manipulation removes the double-tap-to-zoom gesture (and with it the 300ms
+      tap delay).
+   3. Pinch is handled in main.tsx — Safari needs the gesture events cancelled, since it honours
+      neither meta flag. */
+input,
+select,
+textarea,
+button {
+  font-size: 16px;
+}
+
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
 /* Interactive affordances, global so every control gets them without per-component classes.
    Tailwind v4's preflight ships neither: the built CSS had zero `cursor:pointer` and zero
    `:focus-visible` rules, leaving buttons with an arrow cursor and only the UA focus ring

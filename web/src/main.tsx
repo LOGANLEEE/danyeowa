@@ -14,6 +14,13 @@ applyTheme(getStoredTheme());
 // cannot intercept or stale-serve any request the e2e suite's reloads depend on.
 // Failures (unsupported browser, registration error) are ignored: push is an opt-in
 // enhancement, never a requirement for the app to function.
+// Safari honours neither maximum-scale nor user-scalable, so pinch-zoom has to be cancelled
+// at the gesture events. This is a roster tool with fixed, already-legible type — zooming only
+// ever broke the layout here. Non-passive on purpose: preventDefault is the whole point.
+for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
+  document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+}
+
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/sw.js").catch(() => {});
 }
