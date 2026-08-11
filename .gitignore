@@ -45,3 +45,8 @@ pyvenv.cfg
 # --apply run; both are regenerated locally, never meant to be committed.
 /scripts/.fetch-progress.json
 /scripts/.fetch-schedules-tmp.sql
+
+# One-off diagnostic scratch files, never part of the suite
+worker/test/**/__*.test.ts
+scripts/.probe-*.mjs
+.verify-*.mjs
