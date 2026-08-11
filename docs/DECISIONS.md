@@ -123,6 +123,15 @@ then block real work.
 - **A bundle fetched mid-deploy returns the previous hash**, which looks exactly like a failed
   deploy. Re-request with cache-busting before concluding anything.
 
+## Open questions
+
+- **Is scroll-to-expand reachable when the roster is short?** The collapse needs 60px of scroll.
+  On a tall phone (390×844) with a single trip and no install banner, the page may not scroll that
+  far, which would make the timeline unreachable — a product gap, not a test bug. Surfaced by
+  `e2e/layout.spec.ts` failing in CI; the assertion was removed rather than guess-fixed, and the
+  cause is unconfirmed because the machine was too loaded to reproduce. Verify, then either
+  guarantee a minimum scrollable height when a duty is selected, or trigger the expand another way.
+
 ## Not built, deliberately
 
 | Thing | Why not |
