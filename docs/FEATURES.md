@@ -7,6 +7,8 @@ codebase to find out. Status words mean exactly one thing:
 - **Built** — merged and deployed, but never confirmed against reality.
 - **Partial** — works within a stated limit; the limit is named.
 - **Not built** — deliberately, with the reason. See `DECISIONS.md` for the argument.
+- **Unmerged** — written and tested, sitting on a branch. Not in production, no matter how done it
+  looks in the code.
 
 ---
 
@@ -15,7 +17,7 @@ codebase to find out. Status words mean exactly one thing:
 | Feature | Status | Notes |
 |---|---|---|
 | Month calendar with duty markers | Live | Glyph + station per day: `↗BKK` out, `↙AKL` back, `⇄BKK` turnaround, `→` sector, `·` layover |
-| Swipe between months | Live | Pointer events, 50px threshold, cancels on vertical intent |
+| Swipe between months | **Unmerged** | Built in PR #31 with tests, never merged — so it is not in production. Pointer events, 50px threshold, cancels on vertical intent |
 | Tap a day to see the trip | Live | One tap. No bottom sheet — it was deleted, see DECISIONS |
 | Add a trip inline on an empty day | Live | Flight-code input appears immediately; airline prefix is a setting, digits only |
 | Turnarounds in one save | Live | Second flight appends to the same preview before saving |
@@ -58,7 +60,7 @@ codebase to find out. Status words mean exactly one thing:
 | Feature | Status | Notes |
 |---|---|---|
 | PWA install | Live | Install button where supported, iOS gets the Share → Add to Home Screen hint |
-| Install nudge banner | Built | |
+| Install nudge banner | **Unmerged** | PR #31 |
 | Dark / light theme | Live | Semantic tokens only, no raw hex outside `tokens.css` |
 | Zoom disabled app-wide | Live | Requested explicitly; 16px floor on controls is what actually fixes the iOS layout bug |
 | Offline / service worker | Built | Push delivery depends on it |

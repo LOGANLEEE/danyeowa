@@ -1,0 +1,20 @@
+import { describe, expect, it } from "vitest";
+import { parseFr24Html } from "../src/schedule-providers/scrape-fr24";
+
+describe("debug zag parse", () => {
+  it("parses", async () => {
+    const zagRowHtml = `<table id="tbl-datatable"><tbody>
+      <tr class=" data-row">
+        <td class="hidden-xs hidden-sm" data-timestamp="1786945200" data-offset="14400">9:40 AM</td>
+        <td title="Dubai International Airport, United Arab Emirates" class="hidden-xs hidden-sm"> Dubai <a href="https://www.flightradar24.com/data/airports/dxb" class="fs-10 fbold">(DXB)</a></td>
+        <td title="Zagreb Airport, Croatia" class="hidden-xs hidden-sm"> Zagreb <a href="https://www.flightradar24.com/data/airports/zag" class="fs-10 fbold">(ZAG)</a></td>
+        <td class="hidden-xs hidden-sm" data-timestamp="1786945200" data-offset="14400">9:40 AM</td>
+        <td class="hidden-xs hidden-sm" data-timestamp="1786958400" data-offset="7200">1:00 PM</td>
+      </tr>
+      <tr class=" data-row"><td class="hidden-xs hidden-sm" data-timestamp="1786858800" data-offset="14400">9:40 AM</td></tr>
+    </tbody></table>`;
+    const leg = await parseFr24Html(new Response(zagRowHtml));
+    console.log(JSON.stringify(leg));
+    expect(leg).not.toBeNull();
+  });
+});
