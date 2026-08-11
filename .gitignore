@@ -50,3 +50,4 @@ pyvenv.cfg
 worker/test/**/__*.test.ts
 scripts/.probe-*.mjs
 .verify-*.mjs
+*.test.ts.bak
