@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ShareLink } from "@roaster/shared";
 import { createShareLink, getShareLinks, revokeShareLink } from "./api";
+import CrewPanel from "./CrewPanel";
 
 function linkUrl(token: string): string {
   return `${location.origin}/share/${token}`;
@@ -66,6 +67,10 @@ export default function ShareView() {
 
   return (
     <div className="entrance flex w-full max-w-xl flex-col gap-4">
+      {/* Crew first: family links are the older, better-known half of this tab, and pushing
+          them down a screen is cheaper than burying the half nobody has seen yet. */}
+      <CrewPanel />
+
       {links.length === 0 && !creating ? (
         <div className="flex flex-col items-center gap-3 py-6 text-center">
           <p className="text-lg font-semibold text-ink">Invite family</p>

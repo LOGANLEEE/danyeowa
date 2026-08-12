@@ -8,6 +8,55 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-12
+
+### Crew sharing: one table, and read-only by construction
+
+A crew member invites another by email; once accepted, each can open the other's calendar and
+neither can change it. Badges above the grid switch whose roster is on screen.
+
+**One table, not two.** `crew_invites` carries `acceptedAt` / `acceptedByUserId` / `revokedAt`, so
+an accepted, unrevoked invite *is* the pairing. A separate `crew_links` table would hold exactly
+the same fact twice, and the two can disagree; there is no state a second table would record.
+
+**Read-only is structural, not a flag.** No mutation route accepts a user id — every one resolves
+the owner from the session, as they already did. The only route that takes an id is
+`GET /api/crew/:userId/trips`, which is a read. The `readOnly` prop on the day card hides controls
+that would fail anyway; deleting that prop cannot grant write access, it can only put a dead
+button on screen. This is why the feature adds no `?userId=` to `/api/trips`: a parameter that
+selects whose data you get is one copy-paste away from appearing on a write route.
+
+**Not found, never forbidden.** Accepting an invite addressed to someone else, revoking one you
+are not party to, and reading a roster you are not paired with all answer 404 — the same answer an
+unknown id gets. A 403 would confirm the invite exists and hint at who it is for.
+
+**Emails are stored and compared lower-cased.** better-auth does not normalise case, so an invite
+to `Sam@…` accepted by a session on `sam@…` would otherwise silently never match.
+
+**The invite is claimed by signing in, not by holding the token.** Invites carry a token, but
+accepting goes by invite id and checks the session's email — so a leaked link grants nothing, and
+there is no unauthenticated accept route to attack. The receiving side is told about the invite in
+the app; no email is sent. *Not built:* a push or email notification of a pending invite.
+
+### Boot splash: one DOM node, dismissed by `#root:not(:empty)`
+
+The splash lives in `index.html` **outside** `#root`, and this is the whole dismissal mechanism:
+
+```css
+#root:not(:empty) + #boot-splash { opacity: 0; visibility: hidden; }
+```
+
+`App` renders `null` while `/api/me` is in flight, so an empty `#root` is what holds the splash up.
+Do not "simplify" either half — moving the splash back inside `#root` means React's first render
+destroys it, which is what forced the earlier two-copy version (an inline copy for the first frame
+plus a React `<Splash/>` for the fetch wait, matched by hand down to the letter-spacing).
+`web/src/boot-splash.test.ts` guards the rule, the DOM order, and the hard-coded colours, which
+cannot use `var(--color-*)` because they paint before `tokens.css` exists.
+
+`:empty` rather than `:has([data-app-ready])`: it needs no React attribute and no `:has()` support.
+
+---
+
 ## 2026-08-10 → 08-11
 
 ### Calendar grid: direction on the day cell

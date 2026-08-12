@@ -10,9 +10,11 @@ import {
   tripProgress,
   tripDaysInMonth,
 } from "@roaster/shared";
-import { deleteTrip, getTrips } from "./api";
+import { deleteTrip, getCrew, getCrewTrips, getTrips } from "./api";
 import type { TripWithFlights } from "./api";
+import type { CrewMember } from "@roaster/shared";
 import AddTripForm from "./AddTripForm";
+import CrewBadges from "./CrewBadges";
 import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
 import { useAirport } from "./lib/airports";
 import { humanDateLabel } from "./lib/dateLabel";
@@ -249,6 +251,7 @@ function DayDetailCard({
   homeTz,
   onAdded,
   onChanged,
+  readOnly = false,
 }: {
   isoDate: string;
   trip: TripWithFlights | null;
@@ -256,6 +259,9 @@ function DayDetailCard({
   /** Marks the day optimistically on the calendar grid ahead of the parent's refetch. */
   onAdded: (isoDate: string) => void;
   onChanged: () => void;
+  /** Viewing a crew member's roster: their day is readable, never editable. The API refuses
+   * the writes regardless — this only keeps controls that would always fail off the screen. */
+  readOnly?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -326,6 +332,7 @@ function DayDetailCard({
     return (
       <div data-testid="day-detail-card" className="hairline flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
         <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
+        {readOnly ? null : (
         <AddTripForm
           key={`${isoDate}-${addFormKey}`}
           isoDate={isoDate}
@@ -336,6 +343,7 @@ function DayDetailCard({
             setAddFormKey((k) => k + 1);
           }}
         />
+        )}
       </div>
     );
   }
@@ -346,6 +354,7 @@ function DayDetailCard({
         legs={legs}
         showTimeline
         actions={
+          readOnly ? null : (
           // Out of the reading path: the card is read far more often than it is edited.
           <div className="flex shrink-0 gap-1">
             <button
@@ -371,6 +380,7 @@ function DayDetailCard({
               <TrashIcon />
             </button>
           </div>
+          )
         }
       />
 
@@ -508,17 +518,59 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
   // Days added inline, marked on the grid immediately ahead of the refetch each add triggers
   // (cleared once that refetch's own data covers them).
   const [optimisticDays, setOptimisticDays] = useState<Set<string>>(new Set());
+  const [crew, setCrew] = useState<CrewMember[]>([]);
+  // null = your own roster; a user id = that crew member's, read-only.
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const nowMs = now.getTime();
+  const readOnly = viewingUserId !== null;
 
-  function refetch() {
-    getTrips().then(setTrips);
+  // Roster fetches are racy by nature: switching badges fires a second request while the first
+  // is still out, and without a sequence guard a slow /api/trips landing after a fast crew read
+  // would paint your own roster under their badge — or theirs under yours.
+  const rosterRequest = useRef(0);
+
+  function refetch(userId: string | null = viewingUserId) {
+    const seq = ++rosterRequest.current;
+    (userId === null ? getTrips() : getCrewTrips(userId))
+      .then((loaded) => {
+        if (seq === rosterRequest.current) setTrips(loaded);
+      })
+      .catch(() => {
+        if (seq !== rosterRequest.current || userId === null) return;
+        // The pairing ended while their roster was open (they revoked, or it expired between
+        // the badge render and the tap): the crew read now 404s forever. Fall back to your own
+        // roster and re-read the crew list, rather than sitting on the skeleton.
+        setViewingUserId(null);
+        setSelectedIso(null);
+        getCrew()
+          .then((res) => setCrew(res.members))
+          .catch(() => setCrew([]));
+        refetch(null);
+      });
     setOptimisticDays(new Set());
   }
 
   useEffect(() => {
-    refetch();
+    refetch(null);
+    // A crew list is the common case of "empty" — this failing is not worth a visible error,
+    // it just means no badges.
+    getCrew()
+      .then((res) => setCrew(res.members))
+      .catch(() => setCrew([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Switching whose roster is on screen. The selected day is dropped: it belongs to the
+   * roster being left, and keeping it would open someone else's day in the detail card. */
+  function showRosterOf(userId: string | null) {
+    if (userId === viewingUserId) return;
+    setViewingUserId(userId);
+    setSelectedIso(null);
+    setTrips(null);
+    refetch(userId);
+  }
+
+  const badges = <CrewBadges members={crew} viewing={viewingUserId} onSelect={showRosterOf} />;
 
   const homeTz = trips?.[0]?.flights[0]?.depTz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -549,6 +601,12 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
   useEffect(() => {
     if (openTodayToken === lastSeenToken.current || trips === null) return;
     lastSeenToken.current = openTodayToken;
+    // + means "add a trip", which is only ever a thing on your own roster. Viewing a crew
+    // member, the day it selected was theirs and read-only, so the button did nothing at all.
+    if (viewingUserId !== null) {
+      showRosterOf(null);
+      return;
+    }
     const today = localDateKey(now.toISOString(), homeTz);
     let candidate = today;
     for (let i = 0; i < 366; i++) {
@@ -563,7 +621,12 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
   }, [openTodayToken, trips]);
 
   if (trips === null) {
-    return <CalendarSkeleton />;
+    return (
+      <div className="flex w-full max-w-xl flex-col gap-4">
+        {badges}
+        <CalendarSkeleton />
+      </div>
+    );
   }
 
   const allFlights = trips
@@ -576,6 +639,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
   if (!nextDuty) {
     return (
       <div className="entrance flex w-full max-w-xl flex-col gap-4">
+        {badges}
         <TripsCalendar
           now={now}
           trips={trips}
@@ -592,8 +656,11 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
               homeTz={homeTz}
               onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
               onChanged={refetch}
+              readOnly={readOnly}
             />
           </div>
+        ) : readOnly ? (
+          <p className="text-center text-ink-muted">Nothing on this roster yet</p>
         ) : (
           // trips stays [] until the first add's own refetch resolves - once a day has been
           // marked optimistically, this "no trips yet" empty state + its CTA would otherwise
@@ -638,6 +705,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
 
   return (
     <div className="entrance flex w-full max-w-xl flex-col gap-4">
+      {badges}
       <TripsCalendar
         now={now}
         trips={trips}
@@ -693,6 +761,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
             homeTz={homeTz}
             onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
             onChanged={refetch}
+            readOnly={readOnly}
           />
         </div>
       ) : (

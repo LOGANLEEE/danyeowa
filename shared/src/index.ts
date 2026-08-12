@@ -309,3 +309,42 @@ export const IngestArrivalSchema = z.object({
 });
 
 export type IngestArrivalInput = z.infer<typeof IngestArrivalSchema>;
+
+/** Crew sharing: an invite by email, which once accepted lets two accounts READ each other's
+ * roster. Nothing here grants write access — the mutation routes resolve the owner from the
+ * session and never take a user id from the request. */
+export const CrewInviteCreateSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+});
+
+export type CrewInviteCreateInput = z.infer<typeof CrewInviteCreateSchema>;
+
+/** The other party of an accepted pairing — everything the badge row needs to render. */
+export type CrewMember = {
+  userId: string;
+  email: string;
+  name: string | null;
+  /** The accepted invite that established the pairing; revoking it ends the sharing. */
+  inviteId: string;
+};
+
+export type CrewInvite = {
+  id: string;
+  /** The invited address, lower-cased. */
+  email: string;
+  /** Present only on invites you sent — the other side never needs to see it. */
+  token?: string;
+  /** Who sent it. Filled in only on invites addressed to you: accepting hands someone your
+   * whereabouts for as long as it stands, so it cannot be an anonymous "someone". */
+  fromEmail?: string;
+  fromName?: string | null;
+  createdAt: number;
+};
+
+export type CrewResponse = {
+  members: CrewMember[];
+  /** Pending invites you sent, awaiting the other person. */
+  sent: CrewInvite[];
+  /** Pending invites addressed to your email, awaiting you. */
+  received: CrewInvite[];
+};

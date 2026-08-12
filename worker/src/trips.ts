@@ -36,18 +36,25 @@ async function requireOwn<T extends OwnableTable>(
   return (rows[0] as T["$inferSelect"] | undefined) ?? null;
 }
 
-tripsRouter.get("/trips", async (c) => {
-  const user = c.var.user;
-  if (!user) return c.json({ error: "unauthenticated" }, 401);
-
-  const database = db(c.env);
-  const from = c.req.query("from");
-  const to = c.req.query("to");
-
+/**
+ * One user's trips with their flights attached, filtered to a dep_utc window and ordered by the
+ * earliest leg. Exported because the crew read route must return the identical shape to
+ * /api/trips — the calendar renders both through the same components, and a second assembly
+ * would drift from this one the first time either changed.
+ *
+ * The user id is a parameter, so callers are responsible for having earned it: /api/trips takes
+ * it from the session; the crew route takes it only after proving an active pairing.
+ */
+export async function loadTripsWithFlights(
+  database: ReturnType<typeof db>,
+  userId: string,
+  from?: string,
+  to?: string,
+) {
   const trips = await database
     .select()
     .from(schema.trips)
-    .where(eq(schema.trips.userId, user.id));
+    .where(eq(schema.trips.userId, userId));
 
   const tripIds = trips.map((t) => t.id);
   const flightConditions = [
@@ -84,7 +91,15 @@ tripsRouter.get("/trips", async (c) => {
     return aDep.localeCompare(bDep);
   });
 
-  return c.json({ trips: tripsWithFlights });
+  return tripsWithFlights;
+}
+
+tripsRouter.get("/trips", async (c) => {
+  const user = c.var.user;
+  if (!user) return c.json({ error: "unauthenticated" }, 401);
+
+  const trips = await loadTripsWithFlights(db(c.env), user.id, c.req.query("from"), c.req.query("to"));
+  return c.json({ trips });
 });
 
 tripsRouter.post("/trips", async (c) => {

@@ -9,6 +9,12 @@ vi.mock("./api", () => ({
   createShareLink: vi.fn(),
   getShareLinks: vi.fn(),
   revokeShareLink: vi.fn(),
+  // The crew panel shares this tab; these keep it rendered but empty. CrewPanel's own
+  // behaviour is covered in CrewPanel.test.tsx.
+  getCrew: vi.fn().mockResolvedValue({ members: [], sent: [], received: [] }),
+  inviteCrew: vi.fn(),
+  acceptCrewInvite: vi.fn(),
+  revokeCrewInvite: vi.fn(),
 }));
 
 const momLink: ShareLink = {
