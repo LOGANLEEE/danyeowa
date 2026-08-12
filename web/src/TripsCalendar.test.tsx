@@ -327,6 +327,60 @@ describe("TripsCalendar", () => {
     expect(screen.getByText(/august 2026/i)).toBeInTheDocument();
   });
 
+  // The carousel track — the element the transform is written to, straight to the DOM rather than
+  // through React (a re-render per pointermove would put 126 day cells through React per frame).
+  const trackOf = (el: Element) => el.firstElementChild as HTMLElement;
+
+  it("settles the track back to centre once a swipe has committed the new month", () => {
+    render(<TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />);
+    const grid = screen.getByTestId("calendar-grid");
+
+    swipe(grid, -60, 0);
+
+    // Committed synchronously — the month must never wait on a CSS transition that jsdom, a
+    // background tab, or reduced motion will not run.
+    expect(screen.getByText(/september 2026/i)).toBeInTheDocument();
+    expect(trackOf(grid).style.transform).toBe("translate3d(-100%, 0, 0)");
+    expect(trackOf(grid).style.transition).toMatch(/transform 320ms/);
+  });
+
+  it("glides back to centre after a drag too short to change the month", () => {
+    render(<TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />);
+    const grid = screen.getByTestId("calendar-grid");
+
+    swipe(grid, -30, 0);
+
+    expect(screen.getByText(/august 2026/i)).toBeInTheDocument();
+    expect(trackOf(grid).style.transform).toBe("translate3d(-100%, 0, 0)");
+    expect(trackOf(grid).style.transition).toMatch(/transform 320ms/);
+  });
+
+  it("renders both neighbouring months, inert, so a drag reveals real days", () => {
+    render(<TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />);
+    const panels = [...trackOf(screen.getByTestId("calendar-grid")).children] as HTMLElement[];
+
+    expect(panels).toHaveLength(3);
+    // jsdom implements neither the `inert` IDL property nor its behaviour, so this asserts the
+    // attribute only; that it actually takes the panel out of the a11y tree is verified in a real
+    // engine by web/verify-swipe.mjs.
+    expect(panels.map((p) => p.hasAttribute("inert"))).toEqual([true, false, true]);
+    // Only the centre panel is addressable: neighbouring grids repeat each other's edge days, so
+    // test ids on all three would collide (2026-08-31 would exist twice).
+    expect(panels[0]!.querySelector("[data-testid]")).toBeNull();
+  });
+
+  it("animates the ‹ › buttons with the same settle as a swipe", async () => {
+    const user = userEvent.setup();
+    render(<TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />);
+    const track = trackOf(screen.getByTestId("calendar-grid"));
+
+    await user.click(screen.getByTestId("calendar-next"));
+
+    expect(screen.getByText(/september 2026/i)).toBeInTheDocument();
+    expect(track.style.transition).toMatch(/transform 320ms/);
+    expect(track.style.transform).toBe("translate3d(-100%, 0, 0)");
+  });
+
   it("puts today's ring on the home-base LOCAL date, not the UTC date, when tz is behind UTC", () => {
     // 2026-08-10T02:00:00Z in America/Sao_Paulo (-3) is local Aug 9 23:00 - the today ring
     // must land on Aug 9, not the UTC calendar date Aug 10.

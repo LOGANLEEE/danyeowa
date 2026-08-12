@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { localDateKey, monthGrid, tripDaysInMonth } from "@roaster/shared";
 import type { TripWithFlights } from "./api";
 import { dutyDayMarks, type DayKind } from "./lib/dayMarks";
@@ -63,6 +63,15 @@ const SWIPE_DIRECTIONAL_RATIO = 1.5;
 // Well under SWIPE_MIN_DISTANCE: a drag that falls short of a real swipe should still cancel the
 // tap it would otherwise leave behind, so releasing mid-gesture never also selects a day.
 const TAP_CANCEL_DISTANCE = 10;
+// The settle after a release. --ease-snap is the token the rest of the app uses for "arrives and
+// stops" motion; 320ms is long enough to read as travel at phone width without feeling slow.
+const SLIDE_TRANSITION = "transform 320ms var(--ease-snap)";
+// The track is a flex row whose three panels each take its full width and overflow it, so the
+// track's own box stays exactly one panel wide. Percentages in `translate` resolve against that
+// box — which is why centring the middle panel is -100%, not -33.33%. Measured, not assumed: at
+// -33.33% the calendar sat two thirds of a panel off, showing mostly the previous month.
+const TRACK_BASE = "translate3d(-100%, 0, 0)";
+const trackOffset = (px: number) => `translate3d(calc(-100% + ${px}px), 0, 0)`;
 
 const MONTH_LABELS = [
   "January",
@@ -78,6 +87,12 @@ const MONTH_LABELS = [
   "November",
   "December",
 ];
+
+/** Month arithmetic that rolls the year, so the carousel's neighbours work across December. */
+function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
+  const index = year * 12 + (month - 1) + delta;
+  return { year: Math.floor(index / 12), month: (index % 12) + 1 };
+}
 
 export default function TripsCalendar({
   now,
@@ -95,8 +110,6 @@ export default function TripsCalendar({
   const [todayYear, todayMonthStr] = today.split("-");
   const [viewYear, setViewYear] = useState(Number(todayYear));
   const [viewMonth, setViewMonth] = useState(Number(todayMonthStr)); // 1-12
-  const grid = monthGrid(viewYear, viewMonth, homeTz);
-
   const tripSpans = isPicker
     ? []
     : trips
@@ -112,45 +125,97 @@ export default function TripsCalendar({
             entry !== null,
         );
 
-  const dayMarks = tripDaysInMonth(
-    tripSpans.map(({ firstDepUtc, lastArrUtc }) => ({ firstDepUtc, lastArrUtc })),
-    viewYear,
-    viewMonth,
-    homeTz,
-  );
-  // Direction glyphs come from the real trip days only: an optimistic day has no legs yet, and
-  // the layover fallback would otherwise label it with a station from some earlier trip.
-  const dutyMarks = dutyDayMarks(
-    tripSpans.map(({ trip }) => trip),
-    homeTz,
-    HOME_BASE_IATA,
-    dayMarks.keys(),
-  );
+  /** Everything one rendered month needs. Every mark here is month-scoped, so the neighbours the
+   * carousel shows mid-swipe each need their own build — none of it can be hoisted out. */
+  function buildMonth(year: number, month: number) {
+    const grid = monthGrid(year, month, homeTz);
+    const dayMarks = tripDaysInMonth(
+      tripSpans.map(({ firstDepUtc, lastArrUtc }) => ({ firstDepUtc, lastArrUtc })),
+      year,
+      month,
+      homeTz,
+    );
+    // Direction glyphs come from the real trip days only: an optimistic day has no legs yet, and
+    // the layover fallback would otherwise label it with a station from some earlier trip.
+    const dutyMarks = dutyDayMarks(
+      tripSpans.map(({ trip }) => trip),
+      homeTz,
+      HOME_BASE_IATA,
+      dayMarks.keys(),
+    );
 
-  const monthPrefix = `${viewYear}-${String(viewMonth).padStart(2, "0")}`;
-  for (const iso of optimisticIsoDates ?? []) {
-    if (iso.startsWith(monthPrefix) && !dayMarks.has(iso)) dayMarks.set(iso, "away");
-  }
-
-  // Per-day trip lookup for the click handler: which trip (if any) covers a given ISO date.
-  const tripByDay = new Map<string, TripWithFlights>();
-  for (const span of tripSpans) {
-    const spanDays = tripDaysInMonth([span], viewYear, viewMonth, homeTz);
-    for (const iso of spanDays.keys()) {
-      if (!tripByDay.has(iso)) tripByDay.set(iso, span.trip);
+    const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
+    for (const iso of optimisticIsoDates ?? []) {
+      if (iso.startsWith(monthPrefix) && !dayMarks.has(iso)) dayMarks.set(iso, "away");
     }
+
+    // Per-day trip lookup for the click handler: which trip (if any) covers a given ISO date.
+    const tripByDay = new Map<string, TripWithFlights>();
+    for (const span of tripSpans) {
+      const spanDays = tripDaysInMonth([span], year, month, homeTz);
+      for (const iso of spanDays.keys()) {
+        if (!tripByDay.has(iso)) tripByDay.set(iso, span.trip);
+      }
+    }
+
+    return { year, month, grid, dayMarks, dutyMarks, tripByDay };
   }
+
+  const previous = shiftMonth(viewYear, viewMonth, -1);
+  const next = shiftMonth(viewYear, viewMonth, 1);
+  const panels = [
+    buildMonth(previous.year, previous.month),
+    buildMonth(viewYear, viewMonth),
+    buildMonth(next.year, next.month),
+  ];
+  const tripByDay = panels[1]!.tripByDay;
 
   // Swipe state lives in refs, not useState — it's read/written only inside pointer handlers on
-  // the same render, never needs to trigger a re-render itself.
+  // the same render, never needs to trigger a re-render itself. The track's transform is written
+  // straight to the DOM for the same reason: a re-render per pointermove would put 126 day cells
+  // through React on every frame of the drag.
   const dragStart = useRef<{ x: number; y: number } | null>(null);
   // Set once a gesture has moved past TAP_CANCEL_DISTANCE; consumed (and reset) by
   // handleGridClickCapture so a dragged release never also fires the day button underneath it.
   const dragMoved = useRef(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+  // Where the settle animation should start from, in px, once the new month has rendered. Set by
+  // whatever triggered the change (a swipe, a ‹ › tap) and consumed by the layout effect below.
+  const slideFrom = useRef<number | null>(null);
+
+  const panelWidth = () => trackRef.current?.offsetWidth ?? 0;
+
+  /** Committing the month change and animating it are deliberately separate: state lands
+   * synchronously on release, and the animation is replayed *afterwards* from where the finger
+   * left off. Waiting on `transitionend` to commit would make the month depend on a CSS
+   * transition running at all — which it doesn't under jsdom, or reduced motion, or a
+   * background tab. */
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    const from = slideFrom.current;
+    slideFrom.current = null;
+    if (!track || from === null) return;
+
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      track.style.transition = "none";
+      track.style.transform = TRACK_BASE;
+      return;
+    }
+
+    // Two writes in one frame collapse into the last one, so the browser would render only the
+    // end state and animate nothing. Reading offsetWidth forces the first to be committed.
+    track.style.transition = "none";
+    track.style.transform = trackOffset(from);
+    void track.offsetWidth;
+    track.style.transition = SLIDE_TRANSITION;
+    track.style.transform = TRACK_BASE;
+  }, [viewYear, viewMonth]);
 
   function handlePointerDown(e: React.PointerEvent) {
     dragStart.current = { x: e.clientX, y: e.clientY };
     dragMoved.current = false;
+    // Kill any settle still in flight so the finger takes over from exactly where it is.
+    if (trackRef.current) trackRef.current.style.transition = "none";
   }
 
   function handlePointerMove(e: React.PointerEvent) {
@@ -160,6 +225,12 @@ export default function TripsCalendar({
     if (Math.abs(dx) > TAP_CANCEL_DISTANCE || Math.abs(dy) > TAP_CANCEL_DISTANCE) {
       dragMoved.current = true;
     }
+    // Only track horizontally once the gesture has declared itself, so the grid doesn't creep
+    // sideways during a straight-down page scroll.
+    if (!trackRef.current || Math.abs(dx) <= Math.abs(dy)) return;
+    // Clamped to one panel: past that there is nothing rendered to show but blank track.
+    const width = panelWidth();
+    trackRef.current.style.transform = trackOffset(Math.max(-width, Math.min(width, dx)));
   }
 
   function handlePointerUp(e: React.PointerEvent) {
@@ -167,10 +238,36 @@ export default function TripsCalendar({
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
     dragStart.current = null;
-    if (Math.abs(dx) > SWIPE_MIN_DISTANCE && Math.abs(dx) > Math.abs(dy) * SWIPE_DIRECTIONAL_RATIO) {
-      if (dx < 0) goNextMonth();
-      else goPrevMonth();
+
+    const isSwipe =
+      Math.abs(dx) > SWIPE_MIN_DISTANCE && Math.abs(dx) > Math.abs(dy) * SWIPE_DIRECTIONAL_RATIO;
+    if (!isSwipe) return settleBack();
+
+    const width = panelWidth();
+    const clamped = Math.max(-width, Math.min(width, dx));
+    // The committed month re-renders centred, so the settle has to start from where the panel
+    // already is on screen: one panel further along, plus however far the finger carried it.
+    if (dx < 0) {
+      slideFrom.current = clamped + width;
+      goNextMonth();
+    } else {
+      slideFrom.current = clamped - width;
+      goPrevMonth();
     }
+  }
+
+  /** A drag that didn't earn a month change — or was cancelled by the browser taking over the
+   * gesture — glides back to centre rather than snapping. */
+  function settleBack() {
+    const track = trackRef.current;
+    if (!track) return;
+    track.style.transition = SLIDE_TRANSITION;
+    track.style.transform = TRACK_BASE;
+  }
+
+  function handlePointerCancel() {
+    dragStart.current = null;
+    settleBack();
   }
 
   // Capture phase runs before the day button's own onClick (bubble phase), so this swallows the
@@ -180,6 +277,13 @@ export default function TripsCalendar({
       e.stopPropagation();
       dragMoved.current = false;
     }
+  }
+
+  /** ‹ › taps get the same travel as a swipe — the arrows and the gesture are the same move. */
+  function stepMonth(delta: -1 | 1) {
+    slideFrom.current = delta * panelWidth();
+    if (delta === 1) goNextMonth();
+    else goPrevMonth();
   }
 
   function goPrevMonth() {
@@ -219,19 +323,19 @@ export default function TripsCalendar({
         <button
           type="button"
           data-testid="calendar-prev"
-          onClick={goPrevMonth}
+          onClick={() => stepMonth(-1)}
           aria-label="Previous month"
           className="min-h-[44px] min-w-[44px] rounded border border-edge px-2 py-1 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
         >
           ‹
         </button>
-        <p className="text-sm font-medium text-ink">
+        <p data-testid="calendar-month" className="text-sm font-medium text-ink">
           {MONTH_LABELS[viewMonth - 1]} {viewYear}
         </p>
         <button
           type="button"
           data-testid="calendar-next"
-          onClick={goNextMonth}
+          onClick={() => stepMonth(1)}
           aria-label="Next month"
           className="min-h-[44px] min-w-[44px] rounded border border-edge px-2 py-1 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
         >
@@ -245,68 +349,93 @@ export default function TripsCalendar({
         ))}
       </div>
 
-      {/* gap-2 (8px), not gap-1: adjacent tap targets need 8px of separation, and 7 cells plus
-          six 8px gaps still leaves 44px cells at a 390px viewport.
+      {/* The three-month carousel. gap-2 (8px), not gap-1: adjacent tap targets need 8px of
+          separation, and 7 cells plus six 8px gaps still leaves 44px cells at a 390px viewport.
           touch-pan-y: the browser keeps owning vertical scrolling outright (we never
           preventDefault on it) - horizontal movement is left free for the pointer handlers
-          below to read as a swipe. */}
+          above to read as a swipe.
+
+          Both neighbours are rendered so a drag reveals real days rather than blank track. They
+          are `inert`, so they are out of the tab order and out of the accessibility tree while
+          off-screen — otherwise tabbing would wander into a month nobody can see. */}
       <div
         data-testid="calendar-grid"
-        className="grid touch-pan-y grid-cols-7 gap-2"
+        className="touch-pan-y overflow-hidden"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onClickCapture={handleGridClickCapture}
       >
-        {grid.flat().map((cell) => {
-          const isToday = cell.iso === today;
-          const isSelected = cell.iso === selectedIso;
-          const isPast = cell.iso < today;
-          const mark = dayMarks.get(cell.iso);
-          const hasTrip = mark !== undefined;
-          const duty = dutyMarks.get(cell.iso);
-          const disabled = !hasTrip && isPast;
-
-          return (
-            <button
-              key={cell.iso}
-              type="button"
-              data-testid={`calendar-day-${cell.iso}`}
-              disabled={disabled}
-              aria-label={duty ? `${cell.day} ${DAY_LABEL[duty.kind]} ${duty.code}` : undefined}
-              aria-current={isToday ? "date" : undefined}
-              aria-pressed={isSelected}
-              onClick={() => handleDayClick(cell.iso)}
-              className={[
-                "flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-lg border py-2 transition-[background-color,border-color,transform] duration-[120ms]",
-                hasTrip ? "border-transparent bg-accent-soft" : "border-edge",
-                // Selected (tap-to-detail) gets a stronger, filled ring - visually distinct
-                // from today's plain outline ring so both can be told apart when they coincide.
-                isSelected ? "ring-2 ring-accent ring-offset-1 ring-offset-ground" : isToday ? "ring-2 ring-accent" : "",
-                !cell.inMonth ? "opacity-40" : "",
-                isPast && !hasTrip ? "opacity-60" : "",
-                // Press feedback: transform only, so a pressed cell never nudges its neighbours.
-                disabled ? "cursor-default" : "hover:bg-raised active:scale-[0.96]",
-              ].join(" ")}
+        <div ref={trackRef} className="flex will-change-transform" style={{ transform: TRACK_BASE }}>
+          {panels.map((panel, index) => {
+            const isCurrent = index === 1;
+            return (
+            <div
+              key={`${panel.year}-${panel.month}`}
+              inert={!isCurrent}
+              className="grid w-full shrink-0 grid-cols-7 gap-2"
             >
-              <span className="num text-sm text-ink">{cell.day}</span>
-              {duty ? (
-                <span
-                  data-testid={`day-mark-${cell.iso}`}
-                  className="num flex items-center gap-px text-xs leading-none text-ink"
-                >
-                  <span aria-hidden="true" className={DAY_TONE[duty.kind]}>
-                    {DAY_GLYPH[duty.kind]}
-                  </span>
-                  {duty.code}
-                </span>
-              ) : (
-                // Optimistically added day: marked, but the legs haven't been refetched yet.
-                hasTrip && <span className="h-1 w-3 rounded-full bg-accent" aria-hidden="true" />
-              )}
-            </button>
-          );
-        })}
+              {panel.grid.flat().map((cell) => {
+                const isToday = cell.iso === today;
+                const isSelected = cell.iso === selectedIso;
+                const isPast = cell.iso < today;
+                const mark = panel.dayMarks.get(cell.iso);
+                const hasTrip = mark !== undefined;
+                const duty = panel.dutyMarks.get(cell.iso);
+                const disabled = !hasTrip && isPast;
+
+                return (
+                  <button
+                    key={cell.iso}
+                    type="button"
+                    // Only the centre panel is addressable: a month grid carries its neighbours'
+                    // edge days too, so all three panels together repeat some ISO dates, and a
+                    // duplicated test id silently breaks every getByTestId that uses one.
+                    data-testid={isCurrent ? `calendar-day-${cell.iso}` : undefined}
+                    disabled={disabled}
+                    aria-label={duty ? `${cell.day} ${DAY_LABEL[duty.kind]} ${duty.code}` : undefined}
+                    aria-current={isToday ? "date" : undefined}
+                    aria-pressed={isSelected}
+                    onClick={() => handleDayClick(cell.iso)}
+                    className={[
+                      "flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-lg border py-2 transition-[background-color,border-color,transform] duration-[120ms]",
+                      hasTrip ? "border-transparent bg-accent-soft" : "border-edge",
+                      // Selected (tap-to-detail) gets a stronger, filled ring - visually distinct
+                      // from today's plain outline ring so both can be told apart when they coincide.
+                      isSelected
+                        ? "ring-2 ring-accent ring-offset-1 ring-offset-ground"
+                        : isToday
+                          ? "ring-2 ring-accent"
+                          : "",
+                      !cell.inMonth ? "opacity-40" : "",
+                      isPast && !hasTrip ? "opacity-60" : "",
+                      // Press feedback: transform only, so a pressed cell never nudges its neighbours.
+                      disabled ? "cursor-default" : "hover:bg-raised active:scale-[0.96]",
+                    ].join(" ")}
+                  >
+                    <span className="num text-sm text-ink">{cell.day}</span>
+                    {duty ? (
+                      <span
+                        data-testid={isCurrent ? `day-mark-${cell.iso}` : undefined}
+                        className="num flex items-center gap-px text-xs leading-none text-ink"
+                      >
+                        <span aria-hidden="true" className={DAY_TONE[duty.kind]}>
+                          {DAY_GLYPH[duty.kind]}
+                        </span>
+                        {duty.code}
+                      </span>
+                    ) : (
+                      // Optimistically added day: marked, but the legs haven't been refetched yet.
+                      hasTrip && <span className="h-1 w-3 rounded-full bg-accent" aria-hidden="true" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
