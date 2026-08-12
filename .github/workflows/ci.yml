@@ -52,10 +52,20 @@ jobs:
         # always(), not failure(): this job is continue-on-error, so a failed suite still reports
         # the job as successful and failure() never fires — meaning the report was missing in
         # exactly the case it exists for.
+        #
+        # test-results/ is where the evidence actually lives: per-test error-context.md (the
+        # page snapshot at the moment of failure) and trace.zip. playwright-report/ is only
+        # written by the html reporter, and this suite runs the list reporter — so that path
+        # matched nothing and every upload logged "No files were found", leaving CI-only
+        # failures with no artifact to read. Both paths are listed so adding the html
+        # reporter later doesn't silently drop it again.
         if: always()
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
           retention-days: 7
 
   # Every PR gets its own throwaway URL, so a change can be looked at on a real phone —
