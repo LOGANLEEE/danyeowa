@@ -99,14 +99,25 @@ export function groupServices(legs) {
   const sorted = [...legs].sort((a, b) => a.depEpoch - b.depEpoch);
   const services = [];
   let current = [];
+  let departedFrom = new Set();
+
   for (const leg of sorted) {
     const prev = current[current.length - 1];
-    const continues = prev && prev.dest === leg.origin && leg.depEpoch - prev.arrEpoch <= MAX_CONNECT;
+    // A rotation that comes back to a station it already left is a NEW service, not a longer
+    // one. Without this, EK338 (CRK->DXB->CEB->CRK->DXB->...) chained day after day into a
+    // single service with a dozen legs, because every hop connects inside the window and the
+    // cycle never breaks on its own.
+    const revisits = departedFrom.has(leg.origin);
+    const continues =
+      prev && !revisits && prev.dest === leg.origin && leg.depEpoch - prev.arrEpoch <= MAX_CONNECT;
+
     if (!continues) {
       if (current.length) services.push(current);
       current = [];
+      departedFrom = new Set();
     }
     current.push(leg);
+    departedFrom.add(leg.origin);
   }
   if (current.length) services.push(current);
   return services;
