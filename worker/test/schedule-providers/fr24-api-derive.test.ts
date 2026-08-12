@@ -123,3 +123,45 @@ describe("deriveAirports", () => {
     expect(deriveAirports(items)[0]).toMatchObject({ iata: "CCC", city: "Lone Field", tz: "UTC" });
   });
 });
+
+describe("groupServices — rotations", () => {
+  /** CRK->DXB->CEB->CRK, repeated daily. Every hop connects, and the cycle never breaks itself. */
+  function rotation(days: number) {
+    const DAY = 86_400;
+    const base = Date.parse("2026-08-12T16:55:00Z") / 1000;
+    const items = [];
+    for (let d = 0; d < days; d++) {
+      const at = base + d * DAY;
+      const hop = (fromIata: string, toIata: string, depOffset: number, arrOffset: number) => ({
+        airport: {
+          origin: { code: { iata: fromIata }, timezone: { name: "UTC", offset: 0 } },
+          destination: { code: { iata: toIata }, timezone: { name: "UTC", offset: 0 } },
+        },
+        time: { scheduled: { departure: at + depOffset, arrival: at + arrOffset } },
+      });
+      items.push(hop("CRK", "DXB", 0, 15_600));
+      items.push(hop("DXB", "CEB", 21_600, 69_900));
+      items.push(hop("CEB", "CRK", 75_600, 80_700));
+    }
+    return items;
+  }
+
+  it("starts a new service when the rotation returns to a station it already left", () => {
+    // Before this rule EK338 chained day after day into one service with a dozen legs, which
+    // the ingest schema then rejected outright — every batch containing it wrote nothing.
+    const legs = deriveLegSchedule(rotation(3));
+    expect(legs).toHaveLength(3);
+    expect(legs.map((l: { origin: string }) => l.origin)).toEqual(["CRK", "DXB", "CEB"]);
+  });
+
+  it("keeps leg_seq inside the range the ingest API accepts", () => {
+    for (const leg of deriveLegSchedule(rotation(5))) {
+      expect(leg.legSeq).toBeLessThanOrEqual(9);
+    }
+  });
+
+  it("still joins a genuine multi-leg service that does not double back", () => {
+    const legs = deriveLegSchedule(fixture.ek247);
+    expect(legs).toHaveLength(2);
+  });
+});
