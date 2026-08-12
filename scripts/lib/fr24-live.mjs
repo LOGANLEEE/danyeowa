@@ -54,6 +54,49 @@ export function borrowChromeProfile(scratchDir, profileName = "Default") {
 }
 
 /**
+ * Every flight number an airline currently has in the air.
+ *
+ * This exists because sweeping EK0..EK999 spends ~94% of its requests on numbers that were never
+ * assigned. The live feed hands back the real ones — 148 distinct EK numbers in a single sample —
+ * so the sweep can work from a roster instead of guessing. The airline's own search endpoint is
+ * no use for this: a query for "emirates" returns three operator rows and nothing else.
+ *
+ * One sample is only what is airborne at that moment, so a caller accumulates across runs.
+ */
+export async function fetchAirlineFlightNumbers(page, icao = "UAE", attempts = 3) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const res = await page.evaluate(async (operator) => {
+      const r = await fetch(
+        `https://data-cloud.flightradar24.com/zones/fcgi/feed.js?bounds=90,-90,-180,180&airline=${operator}&limit=500&air=1&gnd=1`,
+        { headers: { accept: "application/json" } }
+      );
+      const contentType = r.headers.get("content-type") || "";
+      if (!contentType.includes("json")) return { blocked: true, status: r.status, numbers: [] };
+      const body = await r.json();
+      // Feed rows are positional arrays; index 13 is the flight number, and non-array values are
+      // metadata like full_count / version.
+      const rows = Object.values(body).filter(Array.isArray);
+      const numbers = rows
+        .map((row) => row[13])
+        .filter((n) => typeof n === "string" && /^[A-Z]{2}\d+$/.test(n));
+      return { blocked: false, fullCount: body.full_count ?? 0, rows: rows.length, numbers: [...new Set(numbers)] };
+    }, icao);
+
+    if (res.blocked) return { ...res, numbers: [] };
+
+    // Zero rows while full_count is non-zero means throttled, not "nothing airborne" — the feed
+    // rate-limits rapid repeats and answers with an empty body that still reports a global count.
+    // Measured: a first call returns ~154 Emirates rows, an immediate repeat returns 0 rows with
+    // full_count jumping to a fixed sentinel. Reading that as "no flights" would quietly produce
+    // an empty roster.
+    const throttled = res.rows === 0 && res.fullCount > 0;
+    if (!throttled) return { blocked: false, numbers: res.numbers };
+    if (attempt < attempts) await new Promise((r) => setTimeout(r, 20_000 * attempt));
+  }
+  return { blocked: true, status: "throttled", numbers: [] };
+}
+
+/**
  * Resolves one flight number to its live arrival estimate, or null when it isn't in the air.
  *
  * Runs entirely inside the page because both endpoints are same-origin only. Returns the
