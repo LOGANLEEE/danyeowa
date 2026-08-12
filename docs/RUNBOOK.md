@@ -25,15 +25,44 @@ Merging to `main` also deploys, via GitHub Actions, after typecheck + unit + e2e
 
 ## Database migrations
 
-Drizzle files live in `drizzle/`. Applying to production is manual:
+Write the migration into `drizzle/` and let CI apply it. The deploy job runs
+`wrangler d1 migrations apply --remote` **before** `wrangler deploy`, so schema always precedes
+the code that needs it, and applies only what `d1_migrations` has not recorded.
+
+**Do not apply migrations by hand.** Three went in that way and were only safe because they were
+additive; reversed, production breaks the moment the Worker deploys. If one ever does get applied
+manually, record it in the ledger or the next automated run will try to re-apply it:
 
 ```bash
-npx wrangler d1 execute roaster-me-db --remote --command "ALTER TABLE ..."
 npx wrangler d1 execute roaster-me-db --remote --command \
-  "SELECT name FROM pragma_table_info('flights');"     # confirm it landed
+  "INSERT INTO d1_migrations (name, applied_at) SELECT '00XX_name.sql', datetime('now')
+   WHERE NOT EXISTS (SELECT 1 FROM d1_migrations WHERE name='00XX_name.sql');"
 ```
 
 The preview environment **shares production's D1**. Trips added through a preview URL are real.
+
+## Writing to production
+
+**Scripts hold no database credentials.** Every write goes through `/api/ingest/*` on the Worker,
+validated with the same schema the app reads:
+
+| route | for |
+|---|---|
+| `POST /api/ingest/schedules` | harvested airports + legs (airports written first, server-side) |
+| `GET /api/ingest/upcoming-arrivals` | the refresher's work list |
+| `POST /api/ingest/arrival-corrections` | corrected arrival times, re-arming the alert stages |
+
+Guarded by a bearer token. The Worker secret and the local copy must match:
+
+```bash
+export INGEST_TOKEN=...                       # or: source ~/.config/roaster-me/env
+npx wrangler secret put INGEST_TOKEN          # to rotate; update the launchd plists too
+```
+
+No configured token means every ingest request is refused — it fails closed on purpose.
+
+`SELECT` against production for diagnosis is fine. `INSERT`/`UPDATE`/`DELETE` by hand is not; see
+the rules in `CLAUDE.md`.
 
 ## Harvesting schedules
 
