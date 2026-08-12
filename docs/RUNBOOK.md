@@ -40,11 +40,7 @@ The preview environment **shares production's D1**. Trips added through a previe
 Fills `flight_schedules` from flightradar24's JSON API, driven by a real Chrome (a direct request
 gets a Cloudflare 403).
 
-**On cron already**, at :05 and :35, capped at 15 flights a run:
-
-```
-5,35 * * * * <node> <repo>/scripts/fetch-schedules.mjs --live-roster --limit 15 --apply
-```
+Runs from launchd every 30 minutes, capped at 15 flights a run — see "Scheduling" below.
 
 `--live-roster` reads the flight numbers fr24 shows airborne and accumulates them in the progress
 file, instead of guessing at EK0..EK999 where ~94% of the numbers were never assigned. One sample
@@ -91,11 +87,7 @@ node scripts/refresh-arrivals.mjs --hours 12        # dry-run
 node scripts/refresh-arrivals.mjs --apply           # writes to prod D1
 ```
 
-Cron, every 15 minutes to match the Worker's alert scan (`crontab -e`):
-
-```
-*/15 * * * * /usr/bin/env node scripts/refresh-arrivals.mjs --apply >> /tmp/roaster-refresh.log 2>&1
-```
+Runs from launchd, not cron — see "Scheduling" below.
 
 **Two things together get past fr24's bot check, and only together.** Measured: a plain Playwright
 context gets 403 whether headless or headed; borrowing the real Chrome cookies still gets 403;
@@ -119,6 +111,29 @@ entirely — for this and for the harvester.
 authorized".** It reads like a dead credential and is not — the same command works moments later,
 and the harvester writing at the same time is enough to cause it. Both scripts retry; don't go
 looking for a broken token when this appears in a log.
+
+## Scheduling
+
+Both background jobs are launchd user agents, not cron entries:
+
+| Label | Interval | Log |
+|---|---|---|
+| `com.roasterme.refresh-arrivals` | 900s | `/tmp/roaster-refresh.log` |
+| `com.roasterme.harvest` | 1800s | `/tmp/roaster-harvest.log` |
+
+`StartInterval` is the reason for the switch. **cron simply skips a slot the machine slept
+through; launchd runs the missed interval once it wakes.** Measured on the cron setup: 1 skipped
+run in 39, which matters most at the exact moment it hurts — the last check before a landing.
+
+```bash
+launchctl list | grep roasterme                              # loaded?
+launchctl kickstart -p gui/$(id -u)/com.roasterme.harvest    # run one now
+launchctl bootout gui/$(id -u)/com.roasterme.harvest         # stop
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.roasterme.harvest.plist
+```
+
+Plists live in `~/Library/LaunchAgents/`. They carry an explicit `PATH` (launchd, like cron, has
+no brew in it) and an absolute `WorkingDirectory`.
 
 ## Push notifications
 

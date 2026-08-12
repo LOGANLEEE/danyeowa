@@ -74,13 +74,15 @@ D1 for previews · a leg chooser for multi-leg flights. Reasons in `DECISIONS.md
 
 ## Known limits
 
-**Live status depends on a Mac being awake.** Arrival corrections come from a cron on this
-machine, because fr24's live endpoints refuse a Cloudflare Worker and a direct request alike. If
-the Mac is asleep, alerts fall back to the timetable — correct for an on-time flight, early for a
-delayed one.
+**Live status depends on a Mac being awake.** Arrival corrections come from a launchd agent on
+this machine, because fr24's live endpoints refuse a Cloudflare Worker and a direct request alike.
+While the Mac sleeps nothing runs; launchd fires the missed interval on wake, so a nap costs a
+delay in the correction rather than losing it, and a long sleep still leaves alerts on the
+timetable — correct for an on-time flight, early for a delayed one.
 
 The escape is the fr24 API at $9/month: the Worker would call it directly, and both the refresher
 and the harvester would stop needing a browser at all.
 
-**The negative cache still records a miss when a fetch was blocked**, which can poison a live
-flight for the TTL. That is what made EK247 unresolvable before the harvester took over the cache.
+~~The negative cache records a miss when a fetch was blocked~~ — **fixed 2026-08-12.** Providers
+now report `absent` (answered, no such flight) separately from `unavailable` (blocked, timed out,
+no key), and only `absent` is cached.
