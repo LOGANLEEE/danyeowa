@@ -186,8 +186,9 @@ export async function refreshScheduleFromProviders(
   flightNo: string,
   dateIso: string,
 ): Promise<void> {
-  const resolved = await resolveFromProviders(flightNo, dateIso, env);
-  if (!resolved) return;
+  const outcome = await resolveFromProviders(flightNo, dateIso, env);
+  if (outcome.status !== "resolved") return;
+  const resolved = outcome.schedule;
 
   const stillMissing = await learnAirportsForLegs(database, resolved.legs);
   if (stillMissing.size > 0) return; // can't safely refresh - leave the stale row as-is.
@@ -228,11 +229,15 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
     // Cache miss: fall through to the live provider chain (scraper, then API fallback).
     // A provider miss (network failure, blocked, not found, no key) is a normal outcome —
     // respond 404 exactly as before so the client falls back to manual entry, never a 500.
-    const resolved = await resolveFromProviders(flightNo, date, c.env);
-    if (!resolved) {
-      await recordMiss(database, flightNo);
+    const outcome = await resolveFromProviders(flightNo, date, c.env);
+    if (outcome.status !== "resolved") {
+      // Only cache a miss when a provider actually ANSWERED that the flight does not exist.
+      // A blocked or timed-out chain says nothing about the flight, and caching it shadows a
+      // real service for the whole TTL — that is what made EK247 unresolvable.
+      if (outcome.status === "absent") await recordMiss(database, flightNo);
       return c.json({ error: "unknown_flight" }, 404);
     }
+    const resolved = outcome.schedule;
 
     // A resolved leg can touch an airport outside our seeded set (providers return
     // arbitrary real-world routes) - attempt to self-warm it, and if that's not possible

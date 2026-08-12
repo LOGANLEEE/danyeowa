@@ -50,7 +50,7 @@ describe("parseAeroDataBoxFlight", () => {
 });
 
 describe("AeroDataBoxProvider", () => {
-  it("returns null without a fetch when AERODATABOX_KEY is unset", async () => {
+  it("reports unavailable without a fetch when AERODATABOX_KEY is unset", async () => {
     const provider = new AeroDataBoxProvider(testEnv());
     const originalFetch = globalThis.fetch;
     let fetchCalled = false;
@@ -59,8 +59,8 @@ describe("AeroDataBoxProvider", () => {
       return Promise.reject(new Error("should not be called"));
     };
     try {
-      const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
-      expect(legs).toBeNull();
+      const outcome = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
+      expect(outcome).toMatchObject({ status: "unavailable" });
       expect(fetchCalled).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
@@ -72,8 +72,9 @@ describe("AeroDataBoxProvider", () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify(fixtureFlights)));
     try {
-      const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
-      expect(legs).toEqual([
+      const outcome = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
+      expect(outcome.status).toBe("legs");
+      expect(outcome.status === "legs" && outcome.legs).toEqual([
         {
           origin: "DXB",
           dest: "BKK",
@@ -99,37 +100,37 @@ describe("AeroDataBoxProvider", () => {
     expect(legs?.[0]?.destAirport).toBeUndefined();
   });
 
-  it("returns null on a non-ok response", async () => {
+  it("reports unavailable on a non-ok response", async () => {
     const provider = new AeroDataBoxProvider(testEnv({ AERODATABOX_KEY: "test-key" }));
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => Promise.resolve(new Response("unauthorized", { status: 401 }));
     try {
-      const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
-      expect(legs).toBeNull();
+      const outcome = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
+      expect(outcome).toMatchObject({ status: "unavailable" });
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("returns null on malformed JSON", async () => {
+  it("reports unavailable on malformed JSON", async () => {
     const provider = new AeroDataBoxProvider(testEnv({ AERODATABOX_KEY: "test-key" }));
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => Promise.resolve(new Response("not json"));
     try {
-      const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
-      expect(legs).toBeNull();
+      const outcome = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
+      expect(outcome).toMatchObject({ status: "unavailable" });
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("returns null on an empty array response", async () => {
+  it("reports absent on an empty array response", async () => {
     const provider = new AeroDataBoxProvider(testEnv({ AERODATABOX_KEY: "test-key" }));
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => Promise.resolve(new Response("[]"));
     try {
-      const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
-      expect(legs).toBeNull();
+      const outcome = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
+      expect(outcome).toEqual({ status: "absent" });
     } finally {
       globalThis.fetch = originalFetch;
     }
