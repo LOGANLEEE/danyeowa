@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-// @ts-expect-error - plain .mjs script shared with scripts/, no type declarations
-import { expandFlights, parseArgs } from "../../../scripts/fetch-schedules.mjs";
+// @ts-expect-error - plain .mjs helper shared with scripts/, no type declarations
+import { expandFlights, parseArgs } from "../../../scripts/lib/harvest-args.mjs";
 
 /**
  * The harvester's argument handling, which has cost real work twice: a --force run silently
@@ -21,7 +21,8 @@ describe("parseArgs", () => {
   it("keeps the explicit forms working", () => {
     expect(parseArgs(["--flights", "EK247,EK49"]).flights).toBe("EK247,EK49");
     expect(parseArgs(["--range", "1-300"]).range).toBe("1-300");
-    expect(parseArgs(["--limit", "20"]).limit).toBe(20);
+    // --limit needs a source alongside it; on its own it is not a way to say what to fetch.
+    expect(parseArgs(["--live-roster", "--limit", "20"]).limit).toBe(20);
   });
 
   it("defaults to dry-run, because --apply writes to production", () => {

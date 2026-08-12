@@ -58,6 +58,9 @@ import { normaliseFlightNo } from "../shared/src/flight.ts";
 import os from "node:os";
 import { deriveLegSchedule } from "./lib/fr24-api.mjs";
 import { borrowChromeProfile, fetchAirlineFlightNumbers } from "./lib/fr24-live.mjs";
+import { expandFlights, parseArgs } from "./lib/harvest-args.mjs";
+
+export { expandFlights, parseArgs };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROGRESS_FILE = path.join(__dirname, ".fetch-progress.json");
@@ -72,38 +75,6 @@ const CONTEXT_REFRESH_EVERY = 25;
 // cost of one wrangler invocation per batch. Kept low because long runs here get killed: three
 // background sweeps died, one after only 12 flights, and at 20 that one banked nothing.
 const FLUSH_EVERY = 5;
-
-export function parseArgs(argv) {
-  const args = { delay: 8000, limit: Infinity, apply: false, force: false };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--flights") args.flights = argv[++i];
-    else if (a === "--range") args.range = argv[++i];
-    else if (a === "--limit") args.limit = Number(argv[++i]);
-    else if (a === "--delay") args.delay = Number(argv[++i]);
-    else if (a === "--apply") args.apply = true;
-    else if (a === "--retry-missing") args.retryMissing = true;
-    else if (a === "--live-roster") args.liveRoster = true;
-    else if (a === "--force") args.force = true;
-    else if (a === "--dry-run") void 0; // no-op: dry-run is already the default without --apply
-  }
-  if (!args.flights && !args.range && !args.liveRoster)
-    throw new Error("pass --flights EK247,EK49, --range 0-999, or --live-roster");
-  return args;
-}
-
-export function expandFlights(args) {
-  if (args.liveRoster) return [];
-  if (args.flights)
-    return args.flights
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  const [lo, hi] = args.range.split("-").map(Number);
-  const out = [];
-  for (let n = lo; n <= hi; n++) out.push(`EK${n}`);
-  return out;
-}
 
 /**
  * Progress is {done, missing}. `missing` is separate because fr24 returning zero rows is NOT
