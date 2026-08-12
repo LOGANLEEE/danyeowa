@@ -1,6 +1,6 @@
 import type { ProviderLeg } from "@roaster/shared";
 import type { Env } from "../index";
-import type { ScheduleProvider } from "./index";
+import type { ProviderOutcome, ScheduleProvider } from "./index";
 
 /**
  * AeroDataBox "Flight status/schedule by number" response shape (via RapidAPI), verified
@@ -37,9 +37,10 @@ export class AeroDataBoxProvider implements ScheduleProvider {
 
   constructor(private env: Env) {}
 
-  async fetchFlight(flightNo: string, dateIso: string, signal: AbortSignal): Promise<ProviderLeg[] | null> {
+  async fetchFlight(flightNo: string, dateIso: string, signal: AbortSignal): Promise<ProviderOutcome> {
     const apiKey = this.env.AERODATABOX_KEY;
-    if (!apiKey) return null;
+    // No key is a configuration gap, not evidence about the flight.
+    if (!apiKey) return { status: "unavailable", reason: "no AERODATABOX_KEY" };
 
     const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(flightNo)}/${dateIso}`;
     let res: Response;
@@ -51,21 +52,23 @@ export class AeroDataBoxProvider implements ScheduleProvider {
           "X-RapidAPI-Host": "aerodatabox.p.rapidapi.com",
         },
       });
-    } catch {
-      return null;
+    } catch (e) {
+      return { status: "unavailable", reason: `fetch failed: ${String(e).slice(0, 60)}` };
     }
-    if (!res.ok) return null;
+    // 404 is the API answering "no such flight"; anything else non-OK is the API not answering.
+    if (res.status === 404) return { status: "absent" };
+    if (!res.ok) return { status: "unavailable", reason: `http ${res.status}` };
 
     let flights: AeroDataBoxFlight[];
     try {
       flights = await res.json();
-    } catch {
-      return null;
+    } catch (e) {
+      return { status: "unavailable", reason: `bad json: ${String(e).slice(0, 40)}` };
     }
-    if (!Array.isArray(flights) || flights.length === 0) return null;
+    if (!Array.isArray(flights) || flights.length === 0) return { status: "absent" };
 
-    const flight = flights[0]!;
-    return parseAeroDataBoxFlight(flight);
+    const legs = parseAeroDataBoxFlight(flights[0]!);
+    return legs ? { status: "legs", legs } : { status: "absent" };
   }
 }
 

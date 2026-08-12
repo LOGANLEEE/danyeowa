@@ -14,8 +14,10 @@ import { Fr24ScrapeProvider } from "../../src/schedule-providers/scrape-fr24";
 describe.skipIf(!(env as { LIVE_PROVIDER_TEST?: string }).LIVE_PROVIDER_TEST)("Fr24ScrapeProvider (live network)", () => {
   it("resolves EK372 to DXB->BKK from the real flightradar24 page", async () => {
     const provider = new Fr24ScrapeProvider();
-    const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
-    expect(legs).not.toBeNull();
-    expect(legs?.[0]).toMatchObject({ origin: "DXB", dest: "BKK" });
+    const outcome = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
+    // A blocked run must be visibly different from "no such flight" — that distinction is the
+    // whole point of the outcome type, and this live test is where it shows up first.
+    expect(outcome.status).toBe("legs");
+    expect(outcome.status === "legs" && outcome.legs[0]).toMatchObject({ origin: "DXB", dest: "BKK" });
   });
 });

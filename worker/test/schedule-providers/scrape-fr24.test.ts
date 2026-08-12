@@ -55,27 +55,27 @@ describe("parseFr24Html", () => {
 });
 
 describe("Fr24ScrapeProvider", () => {
-  it("returns null when fetch throws (network error / abort)", async () => {
+  it("reports unavailable when fetch throws (network error / abort)", async () => {
     const provider = new Fr24ScrapeProvider();
     const controller = new AbortController();
     controller.abort();
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => Promise.reject(new Error("aborted"));
     try {
-      const legs = await provider.fetchFlight("EK372", "2026-08-17", controller.signal);
-      expect(legs).toBeNull();
+      const outcome = await provider.fetchFlight("EK372", "2026-08-17", controller.signal);
+      expect(outcome).toMatchObject({ status: "unavailable" });
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it("returns null on a non-ok response", async () => {
+  it("reports unavailable on a non-ok response", async () => {
     const provider = new Fr24ScrapeProvider();
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => Promise.resolve(new Response("blocked", { status: 403 }));
     try {
-      const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
-      expect(legs).toBeNull();
+      const outcome = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
+      expect(outcome).toMatchObject({ status: "unavailable" });
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -86,9 +86,52 @@ describe("Fr24ScrapeProvider", () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => Promise.resolve(new Response(fr24Ek372Html));
     try {
-      const legs = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
-      expect(legs).toHaveLength(1);
-      expect(legs?.[0]).toMatchObject({ origin: "DXB", dest: "BKK" });
+      const outcome = await provider.fetchFlight("EK372", "2026-08-17", new AbortController().signal);
+      expect(outcome.status).toBe("legs");
+      expect(outcome.status === "legs" && outcome.legs).toHaveLength(1);
+      expect(outcome.status === "legs" && outcome.legs[0]).toMatchObject({ origin: "DXB", dest: "BKK" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("calls a bot challenge unavailable, not a missing flight", async () => {
+    // A challenge arrives with HTTP 200 and parses to nothing. Read as absence it produces a
+    // miss row that hides a real flight for the whole TTL — exactly what happened to EK247.
+    const provider = new Fr24ScrapeProvider();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () =>
+      Promise.resolve(new Response("<html><title>Just a moment...</title></html>", { status: 200 }));
+    try {
+      const outcome = await provider.fetchFlight("EK247", "2026-08-17", new AbortController().signal);
+      expect(outcome).toMatchObject({ status: "unavailable" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("calls an HTTP 403 unavailable", async () => {
+    const provider = new Fr24ScrapeProvider();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () => Promise.resolve(new Response("nope", { status: 403 }));
+    try {
+      const outcome = await provider.fetchFlight("EK247", "2026-08-17", new AbortController().signal);
+      expect(outcome).toMatchObject({ status: "unavailable", reason: "http 403" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("calls a real page with no flight rows absent", async () => {
+    const provider = new Fr24ScrapeProvider();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () =>
+      Promise.resolve(
+        new Response("<html><body>There is currently no data available for your request</body></html>"),
+      );
+    try {
+      const outcome = await provider.fetchFlight("EK9999", "2026-08-17", new AbortController().signal);
+      expect(outcome).toEqual({ status: "absent" });
     } finally {
       globalThis.fetch = originalFetch;
     }

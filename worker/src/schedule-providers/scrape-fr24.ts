@@ -1,5 +1,5 @@
 import type { ProviderLeg } from "@roaster/shared";
-import type { ScheduleProvider } from "./index";
+import type { ProviderOutcome, ScheduleProvider } from "./index";
 
 /**
  * Scrapes a flightradar24 flight-history page (e.g. flightradar24.com/data/flights/ek372)
@@ -33,7 +33,7 @@ import type { ScheduleProvider } from "./index";
 export class Fr24ScrapeProvider implements ScheduleProvider {
   name = "fr24";
 
-  async fetchFlight(flightNo: string, _dateIso: string, signal: AbortSignal): Promise<ProviderLeg[] | null> {
+  async fetchFlight(flightNo: string, _dateIso: string, signal: AbortSignal): Promise<ProviderOutcome> {
     const url = `https://www.flightradar24.com/data/flights/${flightNo.toLowerCase()}`;
     let res: Response;
     try {
@@ -44,14 +44,35 @@ export class Fr24ScrapeProvider implements ScheduleProvider {
             "RoasterMeBot/1.0 (+schedule cache warm-up; one request per resolved flight, then cached; misses re-tried at most once per 24h via schedule_lookup_misses)",
         },
       });
-    } catch {
-      return null;
+    } catch (e) {
+      return { status: "unavailable", reason: `fetch failed: ${String(e).slice(0, 60)}` };
     }
-    if (!res.ok) return null;
+    // 404 is the page saying this flight number has nothing behind it — a real answer, and the
+    // one case worth negative-caching. Every other non-OK status says nothing about the flight:
+    // 403 is the bot challenge this endpoint serves to datacentre callers, 5xx is fr24 having a
+    // bad day, and caching either as absence hides a flight that exists.
+    if (res.status === 404) return { status: "absent" };
+    if (!res.ok) return { status: "unavailable", reason: `http ${res.status}` };
 
-    const leg = await parseFr24Html(res);
-    return leg ? [leg] : null;
+    const html = await res.text();
+    // A challenge can arrive with HTTP 200, in which case the row count is zero for a reason
+    // that has nothing to do with the flight.
+    if (looksBlocked(html)) return { status: "unavailable", reason: "bot challenge" };
+
+    const leg = await parseFr24Html(new Response(html, { headers: res.headers }));
+    return leg ? { status: "legs", legs: [leg] } : { status: "absent" };
   }
+}
+
+/**
+ * Cloudflare's interstitial, in the wordings fr24 actually serves. Each of these has been seen
+ * on a 200 response whose body then parses to nothing — indistinguishable from "no such flight"
+ * without this check, which is precisely how a live flight got negative-cached.
+ */
+export function looksBlocked(html: string): boolean {
+  return /just a moment|attention required|checking your browser|cf-chl|access denied|cf-browser-verification|verifying you are human|security verification/i.test(
+    html,
+  );
 }
 
 /** Parses a flightradar24 flight-history page `Response` (or an equivalent fixture
