@@ -42,7 +42,7 @@ codebase to find out. Status words mean exactly one thing:
 |---|---|---|
 | Flight lookup by number | Live | Cache-first from `flight_schedules`, then the provider chain |
 | Multi-leg services | Live | EK247 = DXB→GIG→EZE as two legs of one service |
-| Local harvester | Live | `scripts/fetch-schedules.mjs` — real Chrome, fr24 JSON API, writes prod D1 |
+| Local harvester | Live | `scripts/fetch-schedules.mjs` — real Chrome, fr24 JSON API, writes prod D1. On cron at :05/:35, working from the live roster |
 | Negative cache for misses | Partial | Still records a miss when the fetch was *blocked*, which poisons a live flight for the TTL |
 | Live flight status (ETA) | Built | Needs the Mac awake. Real Chrome cookies + automation markers off; see RUNBOOK |
 
