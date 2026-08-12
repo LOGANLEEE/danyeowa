@@ -121,6 +121,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # Schema BEFORE code, always. A migration applied by hand after its code shipped is a
+      # coin flip: three of them landed that way and only stayed safe because they were
+      # additive. wrangler applies only what `d1_migrations` has not recorded, so this is a
+      # no-op on a run with nothing new.
+      - name: Apply D1 migrations
+        run: npx wrangler d1 migrations apply roaster-me-db --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - run: pnpm run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

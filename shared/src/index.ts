@@ -247,3 +247,65 @@ export type PushConfig = {
   arrivalEnabled: boolean;
   subscribed: boolean;
 };
+
+/**
+ * Payloads the local harvester and arrival refresher send to the Worker.
+ *
+ * These exist so those scripts stop opening a raw SQL connection to production. A script with
+ * database credentials can write anything, in any shape, with no validation and no test
+ * coverage — three of this project's worst incidents were exactly that. Going through the
+ * Worker means every write is typed here, validated at the edge, and exercised in CI.
+ */
+export const IngestScheduleSchema = z.object({
+  airports: z
+    .array(
+      z.object({
+        iata: iataSchema,
+        city: z.string().min(1),
+        name: z.string().min(1),
+        // A real IANA zone name. The lookup route refuses to serve a leg whose airport has no
+        // usable zone, so a fabricated one is worse than a missing airport.
+        tz: z.string().min(3).regex(/^[A-Za-z_]+\/[A-Za-z_+\-0-9\/]+$|^UTC$/),
+      }),
+    )
+    .max(50),
+  flights: z
+    .array(
+      z.object({
+        flightNo: flightNoSchema,
+        legs: z
+          .array(
+            z.object({
+              legSeq: z.number().int().min(0).max(9),
+              origin: iataSchema,
+              dest: iataSchema,
+              depLocal: z.string().regex(/^\d{2}:\d{2}$/),
+              arrLocal: z.string().regex(/^\d{2}:\d{2}$/),
+              dayOffset: z.number().int().min(0).max(3),
+              daysOfWeek: z.string().regex(/^[1-7]{1,7}$/),
+            }),
+          )
+          .min(1)
+          .max(10),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
+export type IngestScheduleInput = z.infer<typeof IngestScheduleSchema>;
+
+/** One flight's arrival time corrected against live data. */
+export const IngestArrivalSchema = z.object({
+  corrections: z
+    .array(
+      z.object({
+        flightId: z.string().min(1),
+        arrUtc: z.string().datetime(),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
+export type IngestArrivalInput = z.infer<typeof IngestArrivalSchema>;

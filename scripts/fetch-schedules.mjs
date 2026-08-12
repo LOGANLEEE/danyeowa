@@ -16,6 +16,9 @@
  * The Worker's own scrape-fr24.ts provider (worker/src/schedule-providers/scrape-fr24.ts)
  * stays in place as a fallback for the cache-miss path - it isn't touched by this script.
  *
+ * It holds no database credentials: every write goes through the Worker's /api/ingest routes,
+ * which validate against the same schema the app reads. Needs INGEST_TOKEN in the environment.
+ *
  * Usage:
  *   node scripts/fetch-schedules.mjs --live-roster --limit 20    # the cron mode
  *   node scripts/fetch-schedules.mjs --flights EK247,EK49        # dry-run (default: prints
@@ -53,26 +56,32 @@ import { chromium } from "@playwright/test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 import { normaliseFlightNo } from "../shared/src/flight.ts";
 import os from "node:os";
 import { deriveAirports, deriveLegSchedule } from "./lib/fr24-api.mjs";
 import { borrowChromeProfile, fetchAirlineFlightNumbers } from "./lib/fr24-live.mjs";
+import { postSchedules } from "./lib/ingest-client.mjs";
 import { expandFlights, parseArgs } from "./lib/harvest-args.mjs";
 
 export { expandFlights, parseArgs };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROGRESS_FILE = path.join(__dirname, ".fetch-progress.json");
-const TMP_SQL_FILE = path.join(__dirname, ".fetch-schedules-tmp.sql");
 const PROFILE_SCRATCH = path.join(os.tmpdir(), "roaster-chrome-profile");
+
+/** One row per IATA across a batch — the same airport shows up on every flight that touches it. */
+function dedupeAirports(airports) {
+  const byIata = new Map();
+  for (const a of airports) if (!byIata.has(a.iata)) byIata.set(a.iata, a);
+  return [...byIata.values()];
+}
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 // ponytail: fixed context-refresh cadence, not measured against a real block threshold - lower
 // it (or make it adaptive on a blocked/empty response) if a long sweep still gets rate-limited.
 const CONTEXT_REFRESH_EVERY = 25;
 // How many resolved flights to batch into one D1 write. Bounds how much a kill can lose, at the
-// cost of one wrangler invocation per batch. Kept low because long runs here get killed: three
+// cost of one ingest call per batch. Kept low because long runs here get killed: three
 // background sweeps died, one after only 12 flights, and at 20 that one banked nothing.
 const FLUSH_EVERY = 5;
 
@@ -151,34 +160,6 @@ async function fetchFlight(page, flight) {
   }, flight);
 }
 
-/**
- * Upserts an airport the way the lookup route needs it.
- *
- * Written BEFORE the schedule rows in the same batch, because a schedule row whose airport is
- * missing is not merely incomplete — the lookup 404s the whole flight over it.
- *
- * `source='live-api'` is the existing marker for a row learned from a provider response. It was
- * documented as AeroDataBox-only on the grounds that nothing else returned a real IANA name; the
- * fr24 JSON API does (the old HTML scraper did not), so that premise no longer holds.
- */
-function toAirportSql(airport) {
-  const esc = (s) => `'${String(s).replace(/'/g, "''")}'`;
-  return (
-    `INSERT INTO airports (iata, city, name, tz, source) VALUES ` +
-    `(${esc(airport.iata)}, ${esc(airport.city)}, ${esc(airport.name)}, ${esc(airport.tz)}, 'live-api') ` +
-    `ON CONFLICT(iata) DO UPDATE SET tz=excluded.tz;`
-  );
-}
-
-function toInsertSql(row) {
-  const esc = (s) => `'${String(s).replace(/'/g, "''")}'`;
-  return (
-    `INSERT INTO flight_schedules (flight_no, leg_seq, origin, dest, dep_local, arr_local, day_offset, days_of_week, source) VALUES ` +
-    `(${esc(row.flightNo)}, ${row.legSeq}, ${esc(row.origin)}, ${esc(row.dest)}, ${esc(row.depLocal)}, ${esc(row.arrLocal)}, ${row.dayOffset}, ${esc(row.daysOfWeek)}, ${esc(row.source)}) ` +
-    `ON CONFLICT(flight_no, leg_seq) DO UPDATE SET origin=excluded.origin, dest=excluded.dest, dep_local=excluded.dep_local, arr_local=excluded.arr_local, day_offset=excluded.day_offset, days_of_week=excluded.days_of_week, source=excluded.source;`
-  );
-}
-
 /** Launch options that get past fr24's bot check. See scripts/lib/fr24-live.mjs. */
 function contextOptions() {
   return {
@@ -254,7 +235,6 @@ async function main() {
 
   if (!ctx) ({ ctx, page } = await newPrimedContext());
 
-  const sqlStatements = [];
   const tally = { found: 0, notFound: 0, blocked: 0, written: 0 };
   const retried = new Map();
   // Flights whose SQL is built but not yet in D1. They are only marked done once written -
@@ -269,31 +249,36 @@ async function main() {
    * if it still fails, keep the batch queued for the next flush rather than losing an hour of
    * fetching. Nothing is marked done until it is actually in D1.
    */
+  /**
+   * Ships a batch to the Worker, retrying transient failures.
+   *
+   * Nothing is marked done until the server has it: a kill mid-sweep used to leave 62 flights
+   * recorded as done with nothing written, because progress was per-flight while the write was
+   * one batch at the very end.
+   */
   const flush = async () => {
     if (!args.apply || !unflushed.length) return;
-    const sql = unflushed.flatMap((f) => f.sql);
-    mkdirSync(path.dirname(TMP_SQL_FILE), { recursive: true });
-    writeFileSync(TMP_SQL_FILE, sql.join("\n") + "\n");
-    console.log(`  flushing ${sql.length} statement(s) for ${unflushed.length} flight(s) to D1`);
+    const payload = {
+      airports: dedupeAirports(unflushed.flatMap((f) => f.airports)),
+      flights: unflushed.map((f) => ({ flightNo: f.flight, legs: f.legs })),
+    };
+    console.log(
+      `  posting ${payload.flights.length} flight(s), ${payload.airports.length} airport(s) to ingest`
+    );
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        // npx, not a bare `wrangler`: it's a devDependency here, not a global install.
-        execFileSync(
-          "npx",
-          ["wrangler", "d1", "execute", "roaster-me-db", "--remote", "--file", TMP_SQL_FILE],
-          { stdio: ["ignore", "ignore", "inherit"], cwd: path.join(__dirname, "..") }
-        );
-        tally.written += sql.length;
+        const result = await postSchedules(payload);
+        tally.written += result.legs ?? 0;
         for (const f of unflushed) progress.done.add(f.flight);
         saveProgress(progress);
         unflushed = [];
         return;
-      } catch {
-        console.log(`  flush attempt ${attempt}/3 failed`);
+      } catch (e) {
+        console.log(`  ingest attempt ${attempt}/3 failed: ${String(e).slice(0, 120)}`);
         if (attempt < 3) await sleep(5000 * attempt);
       }
     }
-    console.log(`  flush FAILED - ${unflushed.length} flight(s) stay queued for the next flush`);
+    console.log(`  ingest FAILED - ${unflushed.length} flight(s) stay queued for the next flush`);
   };
 
   for (let i = 0; i < queue.length; i++) {
@@ -350,24 +335,19 @@ async function main() {
       `${flight}: found - ${legs.length} leg(s) from ${res.items.length} sampled flight(s)` +
         `, ${airports.length} airport(s)`
     );
-    const flightSql = airports.map(toAirportSql);
+    const flightLegs = [];
     for (const leg of legs) {
-      flightSql.push(
-        toInsertSql({
-          flightNo: flight,
-          legSeq: leg.legSeq,
-          origin: leg.origin,
-          dest: leg.dest,
-          depLocal: leg.depLocal,
-          arrLocal: leg.arrLocal,
-          dayOffset: leg.dayOffset,
-          daysOfWeek: leg.daysOfWeek,
-          source: "local-fetch",
-        })
-      );
+      flightLegs.push({
+        legSeq: leg.legSeq,
+        origin: leg.origin,
+        dest: leg.dest,
+        depLocal: leg.depLocal,
+        arrLocal: leg.arrLocal,
+        dayOffset: leg.dayOffset,
+        daysOfWeek: leg.daysOfWeek,
+      });
     }
-    sqlStatements.push(...flightSql);
-    unflushed.push({ flight, sql: flightSql });
+    unflushed.push({ flight, legs: flightLegs, airports });
     if (unflushed.length >= FLUSH_EVERY) await flush();
     await sleep(args.delay);
   }
@@ -376,8 +356,12 @@ async function main() {
   await ctx.close();
 
   if (!args.apply) {
-    console.log(`\n--- SQL (${sqlStatements.length} statement(s)) ---`);
-    console.log(sqlStatements.join("\n") || "(none)");
+    console.log(`\n--- dry-run: ${unflushed.length} flight(s) would be posted to ingest ---`);
+    for (const f of unflushed) {
+      for (const leg of f.legs) {
+        console.log(`  ${f.flight} leg ${leg.legSeq}  ${leg.origin}->${leg.dest}  ${leg.depLocal}-${leg.arrLocal}  +${leg.dayOffset}d  ${leg.daysOfWeek}`);
+      }
+    }
   }
 
   console.log(

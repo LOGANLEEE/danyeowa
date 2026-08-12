@@ -21,7 +21,12 @@ export const flightSchedules = sqliteTable(
      * Nullable only for legacy rows pre-dating this column; the Plan 10 purge migration
      * either assigns a source to every surviving row or deletes it, so post-purge this is
      * effectively always set. */
-    source: text("source", { enum: ["live-scrape", "live-api", "seed-verified", "crowd"] }),
+    /** 'local-fetch' = harvested by scripts/fetch-schedules.mjs and posted to /api/ingest.
+     * It was already in production before it was in this enum, because the harvester wrote raw
+     * SQL and nothing type-checked the value — which is exactly why that write path is gone. */
+    source: text("source", {
+      enum: ["live-scrape", "live-api", "seed-verified", "crowd", "local-fetch"],
+    }),
     /** Epoch ms when this row's data was fetched/written by its `source`. Used to decide
      * staleness (>90d && confirm_count=0 -> background refresh on next hit). */
     fetchedAt: integer("fetched_at", { mode: "number" }),
