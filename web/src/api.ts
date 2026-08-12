@@ -3,7 +3,6 @@ import type {
   CrewInviteCreateInput,
   CrewResponse,
   Flight,
-  LegPatch,
   NotificationPrefsInput,
   PushConfig,
   PushSubscribeInput,
@@ -49,18 +48,6 @@ export async function getAirport(iata: string): Promise<Airport | null> {
   return parseJson<Airport>(res);
 }
 
-export async function patchFlight(id: string, patch: LegPatch): Promise<Flight> {
-  const res = await fetch(`/api/flights/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-  if (!res.ok) {
-    const body = await parseJson<{ error?: string }>(res).catch(() => ({}) as { error?: string });
-    throw new Error(body.error ?? "Failed to update flight");
-  }
-  return parseJson<Flight>(res);
-}
 
 export async function deleteTrip(id: string): Promise<void> {
   const res = await fetch(`/api/trips/${id}`, { method: "DELETE" });

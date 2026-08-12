@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import type { HealthResponse, Me } from "@roaster/shared";
-import type { TripWithFlights } from "./api";
 import { authClient } from "./auth-client";
 import CalendarHome from "./CalendarHome";
 import InstallBanner from "./InstallBanner";
@@ -10,9 +9,7 @@ import ShareView from "./ShareView";
 import SharedViewer from "./SharedViewer";
 import TabBar from "./TabBar";
 import type { TabName } from "./TabBar";
-import TripDetail from "./TripDetail";
 import TripForm from "./TripForm";
-import TripsView from "./TripsView";
 
 const SHARE_PATH_PREFIX = "/share/";
 
@@ -50,7 +47,6 @@ function SignedInApp() {
   const [me, setMe] = useState<Me | null | "loading">("loading");
   const [activeTab, setActiveTab] = useState<TabName>("calendar");
   const [showTripForm, setShowTripForm] = useState(false);
-  const [selectedTrip, setSelectedTrip] = useState<TripWithFlights | null>(null);
   const [tripsVersion, setTripsVersion] = useState(0);
   // Bumped to ask CalendarHome to open the day sheet for today (or the next trip-free day) -
   // fired by the tab bar's center + button, from any tab.
@@ -124,30 +120,15 @@ function SignedInApp() {
               setTripsVersion((v) => v + 1);
             }}
           />
-        ) : selectedTrip ? (
-          <TripDetail
-            trip={selectedTrip}
-            onBack={() => setSelectedTrip(null)}
-            onDone={() => {
-              setSelectedTrip(null);
-              setTripsVersion((v) => v + 1);
-            }}
-          />
         ) : activeTab === "share" ? (
           <ShareView />
         ) : activeTab === "settings" ? (
           <SettingsView email={me.email} onSignOut={handleSignOut} />
-        ) : activeTab === "trips" ? (
-          <TripsView
-            key={tripsVersion}
-            onAddTrip={() => setShowTripForm(true)}
-            onOpenTrip={setSelectedTrip}
-            now={now}
-          />
         ) : (
-          // Calendar tab: month grid + next-duty card. Day taps select a day, showing its
-          // detail card (CalendarHome owns it) — view/edit/delete an existing trip inline, or
-          // add one on an empty day via the inline add-trip form. No bottom sheet.
+          // The calendar is the roster. A separate Trips tab listed the same duties a second
+          // time — one row per leg, which read as a chart of unranked things — and was the only
+          // way into a full-screen trip detail. Both are gone; the day card owns view, edit and
+          // delete, and the month grid owns the overview.
           <CalendarHome key={tripsVersion} now={now} openTodayToken={openTodayToken} />
         )}
       </main>
@@ -157,14 +138,12 @@ function SignedInApp() {
           active={activeTab}
           onSelect={(tab) => {
             setShowTripForm(false);
-            setSelectedTrip(null);
             setActiveTab(tab);
           }}
           // Opens the day sheet for today (or the next trip-free day) on the calendar tab,
           // regardless of which tab was active when + was tapped.
           onAdd={() => {
             setShowTripForm(false);
-            setSelectedTrip(null);
             setActiveTab("calendar");
             setOpenTodayToken((v) => v + 1);
           }}

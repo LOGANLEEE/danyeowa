@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { EK412, openAddForm, signOutThroughUi } from "./helpers";
+import { EK412, clearRoster, openAddForm, signOutThroughUi } from "./helpers";
 
 /**
  * Family share lifecycle, end to end against a real `wrangler dev` (local D1):
@@ -29,21 +29,6 @@ import { EK412, openAddForm, signOutThroughUi } from "./helpers";
  */
 const LABEL = "For Mom";
 
-async function cleanUpAllTrips(page: import("@playwright/test").Page) {
-  await page.getByTestId("tab-trips").click();
-  const existingRow = page.getByTestId("upcoming-row").first();
-  const emptyState = page.getByText(/no trips yet/i);
-  await Promise.race([existingRow.waitFor(), emptyState.waitFor()]).catch(() => {});
-  for (let i = 0; i < 5; i++) {
-    if (!(await existingRow.isVisible().catch(() => false))) break;
-    await existingRow.click();
-    await page.getByTestId("delete-trip").click();
-    await page.getByTestId("confirm-delete").click();
-    await Promise.race([emptyState.waitFor(), existingRow.waitFor()]).catch(() => {});
-  }
-  await page.getByTestId("tab-calendar").click();
-}
-
 test("crew shares a link, family views it cookie-less, crew revokes, family sees inactive", async ({
   page,
   browser,
@@ -51,7 +36,7 @@ test("crew shares a link, family views it cookie-less, crew revokes, family sees
   // Already signed in via the shared storageState (auth.setup.ts).
   await page.goto("/");
   await expect(page.getByTestId("tab-calendar")).toBeVisible();
-  await cleanUpAllTrips(page);
+  await clearRoster(page);
 
   // --- Create a trip via the EK412 autofill fast path (same fixture as roster.spec.ts). ---
   await page.getByTestId("tab-calendar").click();
@@ -129,8 +114,7 @@ test("crew shares a link, family views it cookie-less, crew revokes, family sees
   await familyContext2.close();
 
   // --- Cleanup: delete the trip. ---
-  await cleanUpAllTrips(page);
-  await page.getByTestId("tab-trips").click();
+  await clearRoster(page);
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 
   // --- Sign out (real UI) -> back to landing. Safe here because this is the last spec file

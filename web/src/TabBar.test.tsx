@@ -4,14 +4,16 @@ import { describe, expect, it, vi } from "vitest";
 import TabBar from "./TabBar";
 
 describe("TabBar", () => {
-  it("renders all five tabs", () => {
+  it("renders the four controls, and no Trips tab", () => {
     render(<TabBar active="calendar" onSelect={vi.fn()} onAdd={vi.fn()} />);
 
     expect(screen.getByTestId("tab-calendar")).toBeInTheDocument();
-    expect(screen.getByTestId("tab-trips")).toBeInTheDocument();
     expect(screen.getByTestId("tab-add")).toBeInTheDocument();
     expect(screen.getByTestId("tab-share")).toBeInTheDocument();
     expect(screen.getByTestId("tab-settings")).toBeInTheDocument();
+    // The Trips tab listed the same duties the calendar already shows; it was deleted along
+    // with the full-screen trip detail it was the only way into.
+    expect(screen.queryByTestId("tab-trips")).not.toBeInTheDocument();
   });
 
   it("is pinned to the viewport bottom (fixed, not an in-flow flex child)", () => {
@@ -24,9 +26,9 @@ describe("TabBar", () => {
   });
 
   it("marks the active tab with accent styling", () => {
-    render(<TabBar active="trips" onSelect={vi.fn()} onAdd={vi.fn()} />);
+    render(<TabBar active="share" onSelect={vi.fn()} onAdd={vi.fn()} />);
 
-    expect(screen.getByTestId("tab-trips").className).toContain("text-accent");
+    expect(screen.getByTestId("tab-share").className).toContain("text-accent");
     expect(screen.getByTestId("tab-calendar").className).not.toContain("text-accent");
   });
 
@@ -34,9 +36,6 @@ describe("TabBar", () => {
     const onSelect = vi.fn();
     const user = userEvent.setup();
     render(<TabBar active="calendar" onSelect={onSelect} onAdd={vi.fn()} />);
-
-    await user.click(screen.getByTestId("tab-trips"));
-    expect(onSelect).toHaveBeenCalledWith("trips");
 
     await user.click(screen.getByTestId("tab-share"));
     expect(onSelect).toHaveBeenCalledWith("share");

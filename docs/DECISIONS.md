@@ -8,6 +8,39 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-13
+
+### The Trips tab is gone, and the trip detail screen with it
+
+The tab listed every upcoming duty as **one row per leg**, so a two-leg pairing was two rows and a
+roster of three trips read as a ranked chart of things that have no ranking. Everything on it —
+next duty, the legs, report time, edit, delete — the calendar already showed, one tap away.
+
+Deleted: `TripsView.tsx`, `TripDetail.tsx`, both test files, the tab itself. The calendar is now
+the only roster surface: the month grid is the overview, the day card is the detail.
+
+**What went with it, deliberately:** `TripDetail` was the only entry point to leg-level time
+editing, so editing one leg's departure by hand is gone. The day card's pencil re-runs the whole
+lookup-and-create pipeline instead, which replaces the trip rather than nudging one leg. If
+per-leg editing is wanted again, it belongs on the day card, not on a resurrected screen.
+
+`PATCH /api/flights/:id` survives with its worker tests but has no caller in the app. Left in
+place rather than deleted in the same change — removing a working, tested endpoint is its own
+decision, and the harvester's arrival corrections go through `/api/ingest/*`, not this route.
+
+**What this cost the e2e suite, and what it bought.** Three specs used the Trips tab to count
+duties and to clear leftovers between runs. Counting rendered rows could never tell one four-leg
+trip from two two-leg trips — precisely the distinction the turnaround tests exist to prove — so
+those assertions now read `/api/trips` directly (`rosterTrips` in `e2e/helpers.ts`). Cleanup was a
+loop that clicked a row, a delete and a confirm up to five times with every timeout swallowed; a
+cleanup that quietly failed surfaced later as an unrelated assertion failing. `clearRoster` deletes
+through the API and throws if the roster is not actually empty.
+
+Edit coverage would otherwise have dropped to zero — the deleted leg edit was the only edit path
+under test — so `roster.spec.ts` now drives the day card's pencil instead.
+
+---
+
 ## 2026-08-12
 
 ### Crew sharing: one table, and read-only by construction
