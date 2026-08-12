@@ -1,5 +1,7 @@
 import type {
   Airport,
+  CrewInviteCreateInput,
+  CrewResponse,
   Flight,
   LegPatch,
   NotificationPrefsInput,
@@ -175,4 +177,53 @@ export async function updateNotificationPrefs(input: NotificationPrefsInput): Pr
     body: JSON.stringify(input),
   });
   if (!res.ok) throw new Error("Failed to update notification preferences");
+}
+
+/** The crew you share rosters with, plus invites in either direction. */
+export async function getCrew(): Promise<CrewResponse> {
+  const res = await fetch("/api/crew");
+  if (!res.ok) throw new Error("Failed to load crew");
+  return parseJson<CrewResponse>(res);
+}
+
+/** A crew member's roster. Read-only by construction — there is no write counterpart to this
+ * call, and the API resolves the owner of any mutation from the session, never from an id. */
+export async function getCrewTrips(userId: string): Promise<TripWithFlights[]> {
+  const res = await fetch(`/api/crew/${encodeURIComponent(userId)}/trips`);
+  if (!res.ok) throw new Error("Failed to load crew roster");
+  const body = await parseJson<{ trips: TripWithFlights[] }>(res);
+  return body.trips;
+}
+
+export async function inviteCrew(input: CrewInviteCreateInput): Promise<{ id: string; email: string }> {
+  const res = await fetch("/api/crew/invites", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await parseJson<{ error?: string }>(res).catch(() => ({}) as { error?: string });
+    throw new Error(crewInviteError(res.status, body.error));
+  }
+  return parseJson<{ id: string; email: string }>(res);
+}
+
+/** The API's error codes are terse on purpose; the wording a crew member should read lives
+ * here, in the one place that knows it is talking to a person. */
+function crewInviteError(status: number, code: string | undefined): string {
+  if (code === "cannot_invite_self") return "That's your own address";
+  if (status === 409) return "You've already invited them";
+  if (status === 400) return "That doesn't look like an email address";
+  return "Couldn't send the invite";
+}
+
+export async function acceptCrewInvite(id: string): Promise<void> {
+  const res = await fetch(`/api/crew/invites/${encodeURIComponent(id)}/accept`, { method: "POST" });
+  if (!res.ok) throw new Error("Couldn't accept the invite");
+}
+
+/** Ends a pairing, or withdraws an invite that hasn't been accepted. Either side may do it. */
+export async function revokeCrewInvite(id: string): Promise<void> {
+  const res = await fetch(`/api/crew/invites/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+  if (!res.ok) throw new Error("Couldn't stop sharing");
 }

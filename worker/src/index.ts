@@ -6,6 +6,7 @@ import { pushRouter } from "./push";
 import { ingestRouter } from "./ingest";
 import { runArrivalScan, runReportScan } from "./report-scan";
 import { scheduleRouter } from "./schedule";
+import { crewRouter } from "./crew";
 import { shareRouter } from "./share";
 import { tripsRouter } from "./trips";
 
@@ -118,6 +119,7 @@ app.get("/api/__e2e/last-otp", (c) => {
 app.route("/api", tripsRouter);
 app.route("/api", scheduleRouter);
 app.route("/api", shareRouter);
+app.route("/api", crewRouter);
 app.route("/api", pushRouter);
 app.route("/api", ingestRouter);
 

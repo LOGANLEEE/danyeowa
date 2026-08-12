@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Airport } from "@roaster/shared";
 import CalendarHome from "./CalendarHome";
-import { confirmSchedule, createTrip, deleteTrip, getAirport, getTrips, lookupSchedule } from "./api";
+import { confirmSchedule, createTrip, deleteTrip, getAirport, getCrew, getCrewTrips, getTrips, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";
 
 vi.mock("./api", () => ({
@@ -18,6 +18,10 @@ vi.mock("./api", () => ({
   confirmSchedule: vi.fn(),
   deleteTrip: vi.fn(),
   patchFlight: vi.fn(),
+  // No crew by default — the badge row renders nothing, which is what every test below but
+  // the crew ones expects to see above the calendar.
+  getCrew: vi.fn().mockResolvedValue({ members: [], sent: [], received: [] }),
+  getCrewTrips: vi.fn(),
 }));
 
 // AKL 2-leg trip fixture: DXB -> SIN -> AKL, "now" fixed well before the first report time.
@@ -666,6 +670,170 @@ describe("CalendarHome", () => {
       // NRT (the Lands row, further down) hasn't resolved yet - still the bare code, and a
       // failed/pending lookup for it never breaks the rest of the card.
       expect(timeline).toHaveTextContent("NRT");
+    });
+  });
+
+  // --- Crew: reading a paired member's roster. Read-only is enforced by the API (no write route
+  // takes a user id); these cover the UI half — the switch, and keeping controls that would
+  // always fail off the screen.
+  describe("crew rosters", () => {
+    const crewMember = { userId: "u-fo", email: "fo@example.com", name: "Sam Reyes", inviteId: "inv-1" };
+    const crewTrip: TripWithFlights = {
+      ...citySampleTrip,
+      id: "trip-crew",
+      userId: "u-fo",
+      flights: [{ ...citySampleTrip.flights[0]!, id: "crew-f1", tripId: "trip-crew", userId: "u-fo" }],
+    };
+
+    it("renders no badge row at all when you have no crew", async () => {
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+
+      render(<CalendarHome now={now} />);
+
+      expect(await screen.findByTestId("next-duty-card")).toBeInTheDocument();
+      expect(screen.queryByTestId("crew-badges")).not.toBeInTheDocument();
+    });
+
+    it("switches to a crew member's roster and back, fetching each from its own route", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getCrew).mockResolvedValue({ members: [crewMember], sent: [], received: [] });
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+      vi.mocked(getCrewTrips).mockResolvedValue([crewTrip]);
+
+      render(<CalendarHome now={now} />);
+
+      await user.click(await screen.findByTestId("crew-badge-u-fo"));
+
+      expect(getCrewTrips).toHaveBeenCalledWith("u-fo");
+      // Their duty, not yours: the fixture's SYD leg, and none of your own AKL trip.
+      const card = await screen.findByTestId("next-duty-card");
+      expect(card).toHaveTextContent("SYD → NRT");
+      expect(card).not.toHaveTextContent("AKL");
+      expect(screen.getByTestId("crew-badge-u-fo")).toHaveAttribute("aria-pressed", "true");
+
+      vi.mocked(getTrips).mockClear();
+      await user.click(screen.getByTestId("crew-badge-self"));
+
+      expect(getTrips).toHaveBeenCalled();
+      expect(await screen.findByTestId("next-duty-card")).toHaveTextContent("DXB → SIN → AKL");
+    });
+
+    it("offers no edit or delete on a crew member's trip day", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getCrew).mockResolvedValue({ members: [crewMember], sent: [], received: [] });
+      vi.mocked(getTrips).mockResolvedValue([]);
+      vi.mocked(getCrewTrips).mockResolvedValue([crewTrip]);
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("crew-badge-u-fo"));
+      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+
+      expect(await screen.findByTestId("day-detail-card")).toBeInTheDocument();
+      expect(screen.queryByTestId("day-detail-action")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("delete-trip")).not.toBeInTheDocument();
+    });
+
+    it("offers no add form on an empty day of a crew member's roster", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getCrew).mockResolvedValue({ members: [crewMember], sent: [], received: [] });
+      vi.mocked(getTrips).mockResolvedValue([]);
+      vi.mocked(getCrewTrips).mockResolvedValue([crewTrip]);
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("crew-badge-u-fo"));
+      await user.click(await screen.findByTestId("calendar-day-2026-08-20"));
+
+      expect(await screen.findByTestId("day-detail-card")).toHaveTextContent(/no duty/i);
+      expect(screen.queryByTestId("flightno-input")).not.toBeInTheDocument();
+    });
+
+    // The no-upcoming-duty branch renders its own calendar and its own detail card, and is the
+    // one that has regressed repeatedly in this file. A crew member with nothing ahead of them
+    // lands here, so read-only has to hold on this path too — the first mutation test of the
+    // other branch passed while this one was wired wrong.
+    it("stays read-only on a crew roster with nothing upcoming", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getCrew).mockResolvedValue({ members: [crewMember], sent: [], received: [] });
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+      vi.mocked(getCrewTrips).mockResolvedValue([]);
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("crew-badge-u-fo"));
+
+      // No "add your first trip" CTA on someone else's empty roster.
+      expect(await screen.findByText(/nothing on this roster yet/i)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /add your first trip/i })).not.toBeInTheDocument();
+
+      await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+      expect(await screen.findByTestId("day-detail-card")).toHaveTextContent(/no duty/i);
+      expect(screen.queryByTestId("flightno-input")).not.toBeInTheDocument();
+    });
+
+    // Three failure modes an adversarial review surfaced, all invisible on the happy path.
+    it("ignores a slow own-roster response that lands after you switched to a crew member", async () => {
+      const user = userEvent.setup();
+      let resolveOwn!: (trips: TripWithFlights[]) => void;
+      vi.mocked(getCrew).mockResolvedValue({ members: [crewMember], sent: [], received: [] });
+      vi.mocked(getTrips).mockImplementation(() => new Promise((resolve) => (resolveOwn = resolve)));
+      vi.mocked(getCrewTrips).mockResolvedValue([crewTrip]);
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("crew-badge-u-fo"));
+      expect(await screen.findByTestId("next-duty-card")).toHaveTextContent("SYD → NRT");
+
+      // The mount's own-roster fetch finally answers — under their badge. It must be dropped.
+      resolveOwn([aklTrip]);
+      await waitFor(() => expect(screen.getByTestId("crew-badge-u-fo")).toHaveAttribute("aria-pressed", "true"));
+      expect(screen.getByTestId("next-duty-card")).toHaveTextContent("SYD → NRT");
+    });
+
+    it("falls back to your own roster when a pairing is revoked while you're reading it", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getCrew)
+        .mockResolvedValueOnce({ members: [crewMember], sent: [], received: [] })
+        .mockResolvedValue({ members: [], sent: [], received: [] });
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+      // They revoked between the badge rendering and the tap: the crew read 404s from here on.
+      vi.mocked(getCrewTrips).mockRejectedValue(new Error("Failed to load crew roster"));
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("crew-badge-u-fo"));
+
+      // Not stuck on the skeleton: your own roster is back, and the stale badge is gone.
+      expect(await screen.findByTestId("next-duty-card")).toHaveTextContent("DXB → SIN → AKL");
+      await waitFor(() => expect(screen.queryByTestId("crew-badges")).not.toBeInTheDocument());
+    });
+
+    it("sends the tab bar's + back to your own roster instead of no-opping", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getCrew).mockResolvedValue({ members: [crewMember], sent: [], received: [] });
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+      vi.mocked(getCrewTrips).mockResolvedValue([crewTrip]);
+
+      const { rerender } = render(<CalendarHome now={now} openTodayToken={0} />);
+      await user.click(await screen.findByTestId("crew-badge-u-fo"));
+      expect(await screen.findByTestId("next-duty-card")).toHaveTextContent("SYD → NRT");
+
+      // + means "add a trip", which only exists on your own roster.
+      rerender(<CalendarHome now={now} openTodayToken={1} />);
+
+      await waitFor(() => expect(screen.getByTestId("crew-badge-self")).toHaveAttribute("aria-pressed", "true"));
+      expect(await screen.findByTestId("next-duty-card")).toHaveTextContent("DXB → SIN → AKL");
+    });
+
+    it("drops the selected day when switching rosters, so nobody's day carries over", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getCrew).mockResolvedValue({ members: [crewMember], sent: [], received: [] });
+      vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+      vi.mocked(getCrewTrips).mockResolvedValue([crewTrip]);
+
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+      expect(await screen.findByTestId("day-detail-card")).toBeInTheDocument();
+
+      await user.click(screen.getByTestId("crew-badge-u-fo"));
+
+      await waitFor(() => expect(screen.queryByTestId("day-detail-card")).not.toBeInTheDocument());
     });
   });
 });

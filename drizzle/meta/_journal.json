@@ -71,6 +71,13 @@
       "when": 1786284471958,
       "tag": "0009_add_schedule_lookup_misses",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1786558704491,
+      "tag": "0012_crew_invites",
+      "breakpoints": true
     }
   ]
 }

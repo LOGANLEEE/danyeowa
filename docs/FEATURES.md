@@ -17,7 +17,7 @@ codebase to find out. Status words mean exactly one thing:
 | Feature | Status | Notes |
 |---|---|---|
 | Month calendar with duty markers | Live | Glyph + station per day: `↗BKK` out, `↙AKL` back, `⇄BKK` turnaround, `→` sector, `·` layover |
-| Swipe between months | **Unmerged** | Built in PR #31 with tests, never merged — so it is not in production. Pointer events, 50px threshold, cancels on vertical intent |
+| Swipe between months | Live | Finger-following carousel (PR #40): prev/next months render either side, the track follows the drag and settles on release. 50px threshold, cancels on vertical intent |
 | Tap a day to see the trip | Live | One tap. No bottom sheet — it was deleted, see DECISIONS |
 | Add a trip inline on an empty day | Live | Flight-code input appears immediately; airline prefix is a setting, digits only |
 | Turnarounds in one save | Live | Second flight appends to the same preview before saving |
@@ -53,7 +53,7 @@ codebase to find out. Status words mean exactly one thing:
 | Email OTP sign-in | Live | Fixed dev code locally; unreachable in production |
 | Google sign-in | Live in prod only | Cannot work on localhost or preview URLs — Google needs exact redirect URIs |
 | Share a roster by link | Built | `/share/:token`, public link, no account needed |
-| Per-person sharing | Not built | A different data model. Needs a design conversation first |
+| Crew sharing (per-person) | **Unmerged** | Invite by email on the Share tab; once accepted, both sides read each other's calendar through the badge row. Read-only in both directions — no write route takes a user id |
 
 ## App shell
 
@@ -64,6 +64,7 @@ codebase to find out. Status words mean exactly one thing:
 | Dark / light theme | Live | Semantic tokens only, no raw hex outside `tokens.css` |
 | Zoom disabled app-wide | Live | Requested explicitly; 16px floor on controls is what actually fixes the iOS layout bug |
 | Offline / service worker | Built | Push delivery depends on it |
+| Boot splash | Live | Boarding-pass stub in `index.html`, dismissed by `#root:not(:empty)` alone — one DOM node from first paint to first view |
 
 ## Deliberately not built
 
