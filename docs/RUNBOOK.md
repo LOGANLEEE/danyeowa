@@ -115,6 +115,11 @@ estimate, and the stage reset from 30 to NULL.
 If fr24 tightens the check, the fallback is the API at $9/month, which removes the browser
 entirely — for this and for the harvester.
 
+**Cloudflare answers a concurrent D1 request with 7403 "account is not valid or is not
+authorized".** It reads like a dead credential and is not — the same command works moments later,
+and the harvester writing at the same time is enough to cause it. Both scripts retry; don't go
+looking for a broken token when this appears in a log.
+
 ## Push notifications
 
 ```bash
