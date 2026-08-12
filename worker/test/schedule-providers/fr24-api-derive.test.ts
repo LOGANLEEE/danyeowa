@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error - plain .mjs helper shared with scripts/, no type declarations
-import { deriveLegSchedule, groupServices, toLeg } from "../../../scripts/lib/fr24-api.mjs";
+import { deriveAirports, deriveLegSchedule, groupServices, toLeg } from "../../../scripts/lib/fr24-api.mjs";
 import fixture from "../fixtures/fr24-api-ek247.json";
 
 /**
@@ -79,5 +79,47 @@ describe("groupServices", () => {
         expect(service[i].origin).toBe(service[i - 1].dest);
       }
     }
+  });
+});
+
+describe("deriveAirports", () => {
+  it("returns a row per airport the flight touches, with a real IANA timezone", () => {
+    const airports = deriveAirports(fixture.ek247);
+    const byIata = Object.fromEntries(airports.map((a: any) => [a.iata, a]));
+    expect(Object.keys(byIata).sort()).toEqual(["DXB", "EZE", "GIG"]);
+    expect(byIata.GIG).toMatchObject({ city: "Rio de Janeiro", tz: "America/Sao_Paulo" });
+  });
+
+  it("skips an airport with no timezone rather than inventing one", () => {
+    // A fabricated tz silently computes wrong report times everywhere downstream, so a missing
+    // one has to drop the airport — the lookup already degrades gracefully when a code is absent.
+    const items = [
+      {
+        airport: {
+          origin: { code: { iata: "AAA" }, name: "No Timezone", timezone: {} },
+          destination: {
+            code: { iata: "BBB" },
+            name: "Has One",
+            position: { region: { city: "Bee" } },
+            timezone: { name: "Europe/Paris" },
+          },
+        },
+        time: { scheduled: { departure: 1, arrival: 2 } },
+      },
+    ];
+    expect(deriveAirports(items).map((a: any) => a.iata)).toEqual(["BBB"]);
+  });
+
+  it("falls back to the airport name when the feed carries no city", () => {
+    const items = [
+      {
+        airport: {
+          origin: { code: { iata: "CCC" }, name: "Lone Field", timezone: { name: "UTC" } },
+          destination: { code: { iata: "DDD" }, timezone: {} },
+        },
+        time: { scheduled: { departure: 1, arrival: 2 } },
+      },
+    ];
+    expect(deriveAirports(items)[0]).toMatchObject({ iata: "CCC", city: "Lone Field", tz: "UTC" });
   });
 });

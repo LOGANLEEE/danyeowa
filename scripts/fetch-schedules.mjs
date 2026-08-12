@@ -17,6 +17,7 @@
  * stays in place as a fallback for the cache-miss path - it isn't touched by this script.
  *
  * Usage:
+ *   node scripts/fetch-schedules.mjs --live-roster --limit 20    # the cron mode
  *   node scripts/fetch-schedules.mjs --flights EK247,EK49        # dry-run (default: prints
  *                                                                 # SQL, writes nothing)
  *   node scripts/fetch-schedules.mjs --range 0-999 --limit 50    # first 50 not-yet-done of
@@ -25,6 +26,8 @@
  *   node scripts/fetch-schedules.mjs --range 0-999 --force       # ignore progress file, redo
  *
  * Flags:
+ *   --live-roster           work from the flight numbers fr24 shows airborne, accumulated across
+ *                           runs, instead of guessing at a numeric range
  *   --flights EK247,EK49   explicit comma-separated flight numbers
  *   --range 0-999           EK0..EK999 (numeric range, always EK-prefixed)
  *   --limit N               cap on how many not-yet-done flights this run attempts
@@ -52,11 +55,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { normaliseFlightNo } from "../shared/src/flight.ts";
-import { deriveLegSchedule } from "./lib/fr24-api.mjs";
+import os from "node:os";
+import { deriveAirports, deriveLegSchedule } from "./lib/fr24-api.mjs";
+import { borrowChromeProfile, fetchAirlineFlightNumbers } from "./lib/fr24-live.mjs";
+import { expandFlights, parseArgs } from "./lib/harvest-args.mjs";
+
+export { expandFlights, parseArgs };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROGRESS_FILE = path.join(__dirname, ".fetch-progress.json");
 const TMP_SQL_FILE = path.join(__dirname, ".fetch-schedules-tmp.sql");
+const PROFILE_SCRATCH = path.join(os.tmpdir(), "roaster-chrome-profile");
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 // ponytail: fixed context-refresh cadence, not measured against a real block threshold - lower
@@ -67,35 +76,6 @@ const CONTEXT_REFRESH_EVERY = 25;
 // background sweeps died, one after only 12 flights, and at 20 that one banked nothing.
 const FLUSH_EVERY = 5;
 
-export function parseArgs(argv) {
-  const args = { delay: 8000, limit: Infinity, apply: false, force: false };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--flights") args.flights = argv[++i];
-    else if (a === "--range") args.range = argv[++i];
-    else if (a === "--limit") args.limit = Number(argv[++i]);
-    else if (a === "--delay") args.delay = Number(argv[++i]);
-    else if (a === "--apply") args.apply = true;
-    else if (a === "--retry-missing") args.retryMissing = true;
-    else if (a === "--force") args.force = true;
-    else if (a === "--dry-run") void 0; // no-op: dry-run is already the default without --apply
-  }
-  if (!args.flights && !args.range) throw new Error("pass --flights EK247,EK49 or --range 0-999");
-  return args;
-}
-
-export function expandFlights(args) {
-  if (args.flights)
-    return args.flights
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  const [lo, hi] = args.range.split("-").map(Number);
-  const out = [];
-  for (let n = lo; n <= hi; n++) out.push(`EK${n}`);
-  return out;
-}
-
 /**
  * Progress is {done, missing}. `missing` is separate because fr24 returning zero rows is NOT
  * proof a flight doesn't exist: EK245 came back empty here, yet vradarserver/standing-data has
@@ -103,12 +83,17 @@ export function expandFlights(args) {
  * --force, which would also throw away the flights that did resolve.
  */
 function loadProgress() {
-  const empty = { done: new Set(), missing: new Set() };
+  const empty = { done: new Set(), missing: new Set(), roster: new Set() };
   if (!existsSync(PROGRESS_FILE)) return empty;
   try {
     const raw = JSON.parse(readFileSync(PROGRESS_FILE, "utf8"));
-    if (Array.isArray(raw)) return { done: new Set(raw), missing: new Set() }; // pre-split format
-    return { done: new Set(raw.done ?? []), missing: new Set(raw.missing ?? []) };
+    if (Array.isArray(raw)) return { ...empty, done: new Set(raw) }; // pre-split format
+    return {
+      done: new Set(raw.done ?? []),
+      missing: new Set(raw.missing ?? []),
+      // Flight numbers seen airborne, accumulated across runs. This is the sweep's work list.
+      roster: new Set(raw.roster ?? []),
+    };
   } catch {
     return empty;
   }
@@ -117,7 +102,11 @@ function loadProgress() {
 function saveProgress(progress) {
   writeFileSync(
     PROGRESS_FILE,
-    JSON.stringify({ done: [...progress.done], missing: [...progress.missing] })
+    JSON.stringify({
+      done: [...progress.done],
+      missing: [...progress.missing],
+      roster: [...progress.roster],
+    })
   );
 }
 
@@ -162,6 +151,25 @@ async function fetchFlight(page, flight) {
   }, flight);
 }
 
+/**
+ * Upserts an airport the way the lookup route needs it.
+ *
+ * Written BEFORE the schedule rows in the same batch, because a schedule row whose airport is
+ * missing is not merely incomplete — the lookup 404s the whole flight over it.
+ *
+ * `source='live-api'` is the existing marker for a row learned from a provider response. It was
+ * documented as AeroDataBox-only on the grounds that nothing else returned a real IANA name; the
+ * fr24 JSON API does (the old HTML scraper did not), so that premise no longer holds.
+ */
+function toAirportSql(airport) {
+  const esc = (s) => `'${String(s).replace(/'/g, "''")}'`;
+  return (
+    `INSERT INTO airports (iata, city, name, tz, source) VALUES ` +
+    `(${esc(airport.iata)}, ${esc(airport.city)}, ${esc(airport.name)}, ${esc(airport.tz)}, 'live-api') ` +
+    `ON CONFLICT(iata) DO UPDATE SET tz=excluded.tz;`
+  );
+}
+
 function toInsertSql(row) {
   const esc = (s) => `'${String(s).replace(/'/g, "''")}'`;
   return (
@@ -171,27 +179,80 @@ function toInsertSql(row) {
   );
 }
 
+/** Launch options that get past fr24's bot check. See scripts/lib/fr24-live.mjs. */
+function contextOptions() {
+  return {
+    headless: true,
+    channel: "chrome",
+    userAgent: UA,
+    locale: "en-GB",
+    args: ["--disable-blink-features=AutomationControlled"],
+    ignoreDefaultArgs: ["--enable-automation"],
+  };
+}
+
+async function newPrimedContext() {
+  const ctx = await chromium.launchPersistentContext(
+    borrowChromeProfile(PROFILE_SCRATCH),
+    contextOptions()
+  );
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
+  const page = ctx.pages()[0] ?? (await ctx.newPage());
+  await primePage(page);
+  return { ctx, page };
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const candidates = [...new Set(expandFlights(args).map(normaliseFlightNo))];
-  const progress = args.force ? { done: new Set(), missing: new Set() } : loadProgress();
-  const skip = args.retryMissing ? progress.done : new Set([...progress.done, ...progress.missing]);
+  const progress = loadProgress();
+
+  let ctx = null;
+  let page = null;
+
+  // The roster comes from the browser, so with --live-roster the browser has to start before
+  // there is a queue to justify it.
+  if (args.liveRoster) {
+    ({ ctx, page } = await newPrimedContext());
+    const live = await fetchAirlineFlightNumbers(page, "UAE");
+    if (live.blocked) {
+      console.log(`live roster: BLOCKED (http ${live.status}) - falling back to what is stored`);
+    } else {
+      const before = progress.roster.size;
+      for (const no of live.numbers) progress.roster.add(normaliseFlightNo(no));
+      saveProgress(progress);
+      console.log(
+        `live roster: ${live.numbers.length} airborne, ${progress.roster.size - before} new, ` +
+          `${progress.roster.size} known total`
+      );
+    }
+  }
+
+  const candidates = args.liveRoster
+    ? [...progress.roster]
+    : [...new Set(expandFlights(args).map(normaliseFlightNo))];
+
+  // --force re-does flights, it does NOT wipe the file. It used to start from empty sets and
+  // save over the top, which silently threw away the whole resume bookmark: a --force run on two
+  // flights erased a 36-flight sweep.
+  const skip = args.force
+    ? new Set()
+    : args.retryMissing
+      ? progress.done
+      : new Set([...progress.done, ...progress.missing]);
   const queue = candidates.filter((f) => !skip.has(f)).slice(0, args.limit);
 
   if (!queue.length) {
     console.log("nothing to do (all flights already in progress file - use --force to redo)");
+    if (ctx) await ctx.close();
     return;
   }
   console.log(
     `${queue.length} flight(s) to fetch, ${args.apply ? "WILL WRITE to prod D1" : "dry-run (pass --apply to write)"}`
   );
 
-  const browser = await chromium
-    .launch({ headless: false, channel: "chrome" })
-    .catch(() => chromium.launch({ headless: false }));
-  let ctx = await browser.newContext({ userAgent: UA, locale: "en-GB" });
-  let page = await ctx.newPage();
-  await primePage(page);
+  if (!ctx) ({ ctx, page } = await newPrimedContext());
 
   const sqlStatements = [];
   const tally = { found: 0, notFound: 0, blocked: 0, written: 0 };
@@ -239,9 +300,7 @@ async function main() {
     const flight = queue[i];
     if (i > 0 && i % CONTEXT_REFRESH_EVERY === 0) {
       await ctx.close();
-      ctx = await browser.newContext({ userAgent: UA, locale: "en-GB" });
-      page = await ctx.newPage();
-      await primePage(page);
+      ({ ctx, page } = await newPrimedContext());
     }
 
     const res = await fetchFlight(page, flight);
@@ -253,9 +312,7 @@ async function main() {
         retried.set(flight, 1);
         console.log(`${flight}: BLOCKED (${res.reason}) - fresh context, retrying once`);
         await ctx.close();
-        ctx = await browser.newContext({ userAgent: UA, locale: "en-GB" });
-        page = await ctx.newPage();
-        await primePage(page);
+        ({ ctx, page } = await newPrimedContext());
         await sleep(args.delay * 3);
         i--; // retry the same flight
         continue;
@@ -287,8 +344,13 @@ async function main() {
       continue;
     }
     tally.found++;
-    console.log(`${flight}: found - ${legs.length} leg(s) from ${res.items.length} sampled flight(s)`);
-    const flightSql = [];
+    // Airports first: a schedule row pointing at an unknown IATA makes the lookup 404 the flight.
+    const airports = deriveAirports(res.items);
+    console.log(
+      `${flight}: found - ${legs.length} leg(s) from ${res.items.length} sampled flight(s)` +
+        `, ${airports.length} airport(s)`
+    );
+    const flightSql = airports.map(toAirportSql);
     for (const leg of legs) {
       flightSql.push(
         toInsertSql({
@@ -311,7 +373,7 @@ async function main() {
   }
 
   await flush();
-  await browser.close();
+  await ctx.close();
 
   if (!args.apply) {
     console.log(`\n--- SQL (${sqlStatements.length} statement(s)) ---`);

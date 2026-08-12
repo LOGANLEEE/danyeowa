@@ -42,15 +42,36 @@ export function parseArgs(argv) {
   return args;
 }
 
-function d1(sql) {
-  const out = execFileSync(
-    "npx",
-    ["wrangler", "d1", "execute", "roaster-me-db", "--remote", "--json", "--command", sql],
-    { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
-  );
-  // wrangler prefixes the JSON with progress lines on some versions; take the array.
-  const start = out.indexOf("[");
-  return JSON.parse(out.slice(start))[0]?.results ?? [];
+/**
+ * Runs one statement against production D1, retrying transient API failures.
+ *
+ * Cloudflare answers a concurrent or rate-limited request with 7403 "account is not valid or is
+ * not authorized", which reads like a broken credential but is not: the same command succeeds
+ * moments later, and the harvester writing at the same time is enough to provoke it. Without a
+ * retry a single one of those killed the whole run — four occurrences, two dead runs, while the
+ * schedule harvester carried on fine because its writes already retried.
+ */
+function d1(sql, attempts = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const out = execFileSync(
+        "npx",
+        ["wrangler", "d1", "execute", "roaster-me-db", "--remote", "--json", "--command", sql],
+        { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+      );
+      // wrangler prefixes the JSON with progress lines on some versions; take the array.
+      const start = out.indexOf("[");
+      return JSON.parse(out.slice(start))[0]?.results ?? [];
+    } catch (e) {
+      lastError = e;
+      if (attempt < attempts) {
+        console.log(`  D1 attempt ${attempt}/${attempts} failed, retrying`);
+        execFileSync("sleep", [String(5 * attempt)]);
+      }
+    }
+  }
+  throw lastError;
 }
 
 function esc(value) {
@@ -147,5 +168,12 @@ async function main() {
 
 // Importing this module for parseArgs in tests must not launch a browser.
 if (process.argv[1] && process.argv[1].endsWith("refresh-arrivals.mjs")) {
-  await main();
+  try {
+    await main();
+  } catch (e) {
+    // A cron log full of stack traces hides the one line that matters. Fail loudly but briefly;
+    // the next run is fifteen minutes away and nothing was half-written.
+    console.log(`${new Date().toISOString()} FAILED: ${String(e).split("\n")[0].slice(0, 200)}`);
+    process.exitCode = 1;
+  }
 }

@@ -56,9 +56,9 @@ export const airports = sqliteTable("airports", {
    * column and is never re-migrated to backfill it - "seeded, no marker" is itself
    * meaningful and left alone). 'live-api' = self-warmed from a live provider's response
    * when a resolved flight touched an IATA outside the seed (see schedule.ts
-   * `learnAirportsForLegs`) - ONLY AeroDataBox ever writes this, since it's the only
-   * provider whose response carries a genuine IANA tz name; the fr24 scraper never
-   * learns an airport (see ProviderLeg.originAirport doc comment for why). */
+   * `learnAirportsForLegs`). Written by AeroDataBox, and since 2026-08-12 also by the local
+   * harvester: the fr24 JSON API carries a genuine IANA tz name where the old HTML scraper
+   * did not, which was the only reason that path never learned an airport. */
   source: text("source", { enum: ["live-api"] }),
 });
 

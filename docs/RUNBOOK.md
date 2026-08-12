@@ -40,21 +40,46 @@ The preview environment **shares production's D1**. Trips added through a previe
 Fills `flight_schedules` from flightradar24's JSON API, driven by a real Chrome (a direct request
 gets a Cloudflare 403).
 
+**On cron already**, at :05 and :35, capped at 15 flights a run:
+
+```
+5,35 * * * * <node> <repo>/scripts/fetch-schedules.mjs --live-roster --limit 15 --apply
+```
+
+`--live-roster` reads the flight numbers fr24 shows airborne and accumulates them in the progress
+file, instead of guessing at EK0..EK999 where ~94% of the numbers were never assigned. One sample
+returns about 148 Emirates numbers; repeated runs converge on the network.
+
+Manual forms still work:
+
 ```bash
-node scripts/fetch-schedules.mjs --flights EK247,EK373         # dry-run, prints SQL
-node scripts/fetch-schedules.mjs --flights EK247 --apply       # writes to prod D1
-node scripts/fetch-schedules.mjs --range 1-300 --apply         # sweep, resumable
-node scripts/fetch-schedules.mjs --range 1-300 --retry-missing # re-check flights that came back empty
+node scripts/fetch-schedules.mjs --live-roster --limit 5              # dry-run
+node scripts/fetch-schedules.mjs --flights EK247,EK373                # specific flights
+node scripts/fetch-schedules.mjs --range 1-300 --apply                # numeric sweep
+node scripts/fetch-schedules.mjs --live-roster --retry-missing        # re-check empties
 ```
 
 - Dry-run records no progress; only `--apply` marks a flight done.
-- Writes flush every 5 flights, so an interrupted sweep keeps what it got.
-- Progress lives in `scripts/.fetch-progress.json`, split into `done` and `missing`. **`missing`
-  is not proof a flight doesn't exist** — fr24 has genuine coverage gaps (EK41 is a real daily
-  A380 to Heathrow and fr24 has nothing for it).
-- Expect ~15s per flight: roughly every second request gets a Cloudflare challenge, which costs a
+- `--force` re-does flights **without** wiping the file. It used to erase the whole bookmark.
+- Writes flush every 5 flights, so an interrupted run keeps what it got.
+- Progress is `scripts/.fetch-progress.json` — `done`, `missing`, and `roster`. **`missing` is not
+  proof a flight doesn't exist**: fr24 has real coverage gaps (EK41 is a daily A380 to Heathrow
+  and fr24 has nothing for it).
+- **The live feed rate-limits rapid repeats, and its refusal looks like success** — zero rows,
+  HTTP 200, non-zero `full_count`. That is treated as throttled and retried; don't "fix" it by
+  reading zero rows as an empty sky.
+- Expect ~15s per flight: roughly every second request gets a Cloudflare challenge, costing a
   retry behind a fresh context.
-- Long runs get killed in a background shell. Run a sweep in a terminal you own.
+- **It writes airports too, and must.** The lookup route 404s a flight whose leg references an
+  IATA the `airports` table has no row for, because it will not guess a timezone. Harvesting
+  schedules alone put 14 flights in the database that the app could not serve, EK247 among them.
+  Check for a recurrence with:
+
+```bash
+npx wrangler d1 execute roaster-me-db --remote --command \
+  "WITH codes AS (SELECT origin AS iata FROM flight_schedules UNION SELECT dest FROM flight_schedules)
+   SELECT count(*) AS unseeded FROM codes WHERE iata NOT IN (SELECT iata FROM airports);"
+```
 
 ## Refreshing arrival times against reality
 
@@ -89,6 +114,11 @@ estimate, and the stage reset from 30 to NULL.
 
 If fr24 tightens the check, the fallback is the API at $9/month, which removes the browser
 entirely — for this and for the harvester.
+
+**Cloudflare answers a concurrent D1 request with 7403 "account is not valid or is not
+authorized".** It reads like a dead credential and is not — the same command works moments later,
+and the harvester writing at the same time is enough to cause it. Both scripts retry; don't go
+looking for a broken token when this appears in a log.
 
 ## Push notifications
 
