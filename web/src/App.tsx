@@ -85,12 +85,17 @@ function SignedInApp() {
     setMe(null);
   }
 
+  // Hold the boot splash until /api/me answers. index.html paints the same thing before any
+  // JS runs, so this keeps one continuous screen from first paint to first real view instead of
+  // flashing the header band over a bare "loading…" line for the length of one fetch.
+  if (me === "loading") return <Splash />;
+
   // Landing is the only signed-out screen (sign-in form inline, no separate login view) and
   // renders its own hero h1 ("roaster·me") as the page heading, with no sign-out control to
   // show — skip rendering the header band entirely there so it doesn't leave an empty,
   // bordered strip above the hero (a11y bonus: no duplicate h1s).
   const isLanding = me === null;
-  const isSignedIn = me !== "loading" && me !== null;
+  const isSignedIn = me !== null;
 
   return (
     <div className="flex min-h-screen flex-col bg-ground text-ink">
@@ -108,9 +113,7 @@ function SignedInApp() {
       >
         {isSignedIn && <InstallBanner />}
 
-        {me === "loading" ? (
-          <p className="text-ink-muted">loading…</p>
-        ) : me === null ? (
+        {me === null ? (
           <Landing onSignedIn={loadMe} />
         ) : showTripForm ? (
           <TripForm
@@ -176,6 +179,28 @@ function SignedInApp() {
           {health === null ? "checking…" : health.ok ? "API: online" : "API: offline"}
         </footer>
       )}
+    </div>
+  );
+}
+
+/** Same markup, colours and geometry as the pre-JS splash in index.html — it stands in for that
+ * one after React clears #root, so the handoff is invisible. Tokens here (rather than the inline
+ * hex index.html has to use) so a stored theme override wins over prefers-color-scheme. */
+function Splash() {
+  return (
+    <div
+      className="fixed inset-0 flex flex-col items-center justify-center gap-3 bg-ground text-ink"
+      role="status"
+    >
+      {/* letter-spacing matches index.html's inline splash exactly; tracking-tight would nudge it. */}
+      <span className="text-xl font-semibold" style={{ letterSpacing: "-0.01em" }}>
+        roaster·me
+      </span>
+      <span
+        aria-hidden
+        className="size-6 animate-spin rounded-full border-2 border-current border-t-transparent opacity-50 motion-reduce:animate-none"
+      />
+      <span className="sr-only">Loading</span>
     </div>
   );
 }

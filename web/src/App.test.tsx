@@ -94,11 +94,29 @@ describe("App", () => {
     expect(getSharedView).toHaveBeenCalledWith("100%");
   });
 
+  it("holds the boot splash — no header band, no bare loading line — until /api/me answers", async () => {
+    // /api/me never settles, so the app stays in its loading state for the whole assertion.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/health")) return Promise.resolve(jsonResponse({ ok: true, d1: true }));
+        return new Promise<Response>(() => {});
+      })
+    );
+    render(<App />);
+
+    expect(screen.getByRole("status")).toHaveTextContent(/roaster·me/);
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+    expect(screen.queryByText(/loading…/i)).not.toBeInTheDocument();
+  });
+
   it("shows title, API status, and the inline sign-in form (one surface, no login screen) when signed out", async () => {
     stubSignedOutFetch();
     render(<App />);
     // Exactly one h1 on the page — the Landing hero — no duplicate with the header chrome.
-    expect(screen.getAllByRole("heading", { name: /roaster/i, level: 1 })).toHaveLength(1);
+    // Awaited: the boot splash holds the screen (and owns no h1) until /api/me answers.
+    expect(await screen.findAllByRole("heading", { name: /roaster/i, level: 1 })).toHaveLength(1);
     expect(await screen.findByText(/api: online/i)).toBeInTheDocument();
     // Email is visible up front, no separate CTA/navigation needed to reach it.
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
