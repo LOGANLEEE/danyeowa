@@ -30,6 +30,35 @@ project. Ignore it. `docs/superpowers/plans/*` is accurate but stops at Plan 10 
 Do not skip step 2 because the tests are green. Green tests have never once caught the class of
 bug that actually shipped here.
 
+## Production safety — non-negotiable
+
+These are rules, not preferences. Each one exists because breaking it already cost something here.
+
+- **Never write to production D1 by hand.** No `wrangler d1 execute --remote` with INSERT, UPDATE
+  or DELETE, from a script or a terminal. Writes go through `/api/ingest/*`, which validates with
+  the same schema the app reads and is covered by tests. Read-only `SELECT` for diagnosis is fine.
+  *Why:* raw SQL wrote a `source` value the schema did not define, left schedule rows whose
+  airports were never inserted (14 flights sat in the table and 404'd), and put a probe row in a
+  real user's roster.
+
+- **Schema ships before code, through CI.** Write the migration into `drizzle/`, let the deploy
+  job apply it. Never apply by hand and let the code catch up.
+  *Why:* three migrations went in by hand this week and were only safe because they were additive.
+  Reversed, production breaks the moment the Worker deploys.
+
+- **A row in the database is not a working feature.** Verify through the API the app actually
+  calls. `SELECT` proves storage, not behaviour.
+  *Why:* EK247 was reported fixed with its rows confirmed in D1. The lookup route still answered
+  `unknown_flight` for it, and for 13 other flights, because their airports were missing.
+
+- **Never negative-cache a non-answer.** Blocked, timed out and unconfigured are not evidence a
+  thing does not exist. Only cache an answer.
+  *Why:* a bot-challenge page counted as "no such flight" and hid a real daily A380 service for a
+  whole TTL.
+
+- **Test data never goes in a real user's roster.** Use an account with no push subscription, and
+  delete the rows in the same session.
+
 ## Verification discipline
 
 - **Measure, don't eyeball.** Assert widths, computed styles, counts. A screenshot is how the
