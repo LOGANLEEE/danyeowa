@@ -56,7 +56,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { normaliseFlightNo } from "../shared/src/flight.ts";
 import os from "node:os";
-import { deriveLegSchedule } from "./lib/fr24-api.mjs";
+import { deriveAirports, deriveLegSchedule } from "./lib/fr24-api.mjs";
 import { borrowChromeProfile, fetchAirlineFlightNumbers } from "./lib/fr24-live.mjs";
 import { expandFlights, parseArgs } from "./lib/harvest-args.mjs";
 
@@ -149,6 +149,25 @@ async function fetchFlight(page, flight) {
       return { blocked: true, reason: String(e).slice(0, 60), items: [] };
     }
   }, flight);
+}
+
+/**
+ * Upserts an airport the way the lookup route needs it.
+ *
+ * Written BEFORE the schedule rows in the same batch, because a schedule row whose airport is
+ * missing is not merely incomplete — the lookup 404s the whole flight over it.
+ *
+ * `source='live-api'` is the existing marker for a row learned from a provider response. It was
+ * documented as AeroDataBox-only on the grounds that nothing else returned a real IANA name; the
+ * fr24 JSON API does (the old HTML scraper did not), so that premise no longer holds.
+ */
+function toAirportSql(airport) {
+  const esc = (s) => `'${String(s).replace(/'/g, "''")}'`;
+  return (
+    `INSERT INTO airports (iata, city, name, tz, source) VALUES ` +
+    `(${esc(airport.iata)}, ${esc(airport.city)}, ${esc(airport.name)}, ${esc(airport.tz)}, 'live-api') ` +
+    `ON CONFLICT(iata) DO UPDATE SET tz=excluded.tz;`
+  );
 }
 
 function toInsertSql(row) {
@@ -325,8 +344,13 @@ async function main() {
       continue;
     }
     tally.found++;
-    console.log(`${flight}: found - ${legs.length} leg(s) from ${res.items.length} sampled flight(s)`);
-    const flightSql = [];
+    // Airports first: a schedule row pointing at an unknown IATA makes the lookup 404 the flight.
+    const airports = deriveAirports(res.items);
+    console.log(
+      `${flight}: found - ${legs.length} leg(s) from ${res.items.length} sampled flight(s)` +
+        `, ${airports.length} airport(s)`
+    );
+    const flightSql = airports.map(toAirportSql);
     for (const leg of legs) {
       flightSql.push(
         toInsertSql({

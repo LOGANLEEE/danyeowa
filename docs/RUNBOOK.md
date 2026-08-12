@@ -70,6 +70,16 @@ node scripts/fetch-schedules.mjs --live-roster --retry-missing        # re-check
   reading zero rows as an empty sky.
 - Expect ~15s per flight: roughly every second request gets a Cloudflare challenge, costing a
   retry behind a fresh context.
+- **It writes airports too, and must.** The lookup route 404s a flight whose leg references an
+  IATA the `airports` table has no row for, because it will not guess a timezone. Harvesting
+  schedules alone put 14 flights in the database that the app could not serve, EK247 among them.
+  Check for a recurrence with:
+
+```bash
+npx wrangler d1 execute roaster-me-db --remote --command \
+  "WITH codes AS (SELECT origin AS iata FROM flight_schedules UNION SELECT dest FROM flight_schedules)
+   SELECT count(*) AS unseeded FROM codes WHERE iata NOT IN (SELECT iata FROM airports);"
+```
 
 ## Refreshing arrival times against reality
 

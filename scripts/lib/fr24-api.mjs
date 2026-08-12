@@ -12,6 +12,40 @@
  * the caller still drives Chrome. See scripts/fetch-schedules.mjs.
  */
 
+/**
+ * Every airport the response touches, as rows for the `airports` table.
+ *
+ * Harvesting schedules without this is pointless: the lookup route 404s a flight whose leg
+ * references an IATA it has no row for, because it cannot compute a report time without a real
+ * timezone and refuses to guess one. Measured on production — 10 unseeded codes made 14 harvested
+ * flights unreachable, EK247 among them, while their schedule rows sat in the table looking fine.
+ *
+ * The tz here is a genuine IANA name straight from the provider, not a derived offset, which is
+ * exactly the bar that table sets for a self-warmed row.
+ */
+export function deriveAirports(items) {
+  const byIata = new Map();
+  for (const item of items) {
+    for (const side of ["origin", "destination"]) {
+      const airport = item?.airport?.[side];
+      const iata = airport?.code?.iata;
+      const tz = airport?.timezone?.name;
+      // Skip rather than invent: a row with a fabricated tz silently computes wrong report times
+      // everywhere downstream.
+      if (!iata || !tz) continue;
+      if (!byIata.has(iata)) {
+        byIata.set(iata, {
+          iata,
+          name: airport.name ?? iata,
+          city: airport.position?.region?.city ?? airport.name ?? iata,
+          tz,
+        });
+      }
+    }
+  }
+  return [...byIata.values()];
+}
+
 /** Local wall-clock parts for a UTC epoch at a fixed offset. */
 function localParts(epochSeconds, offsetSeconds) {
   const d = new Date((epochSeconds + offsetSeconds) * 1000);
