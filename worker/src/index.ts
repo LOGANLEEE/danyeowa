@@ -3,6 +3,7 @@ import type { HealthResponse, Me } from "@roaster/shared";
 import { createAuth } from "./auth";
 import { getLastDevOtp } from "./email";
 import { pushRouter } from "./push";
+import { ingestRouter } from "./ingest";
 import { runArrivalScan, runReportScan } from "./report-scan";
 import { scheduleRouter } from "./schedule";
 import { shareRouter } from "./share";
@@ -19,6 +20,12 @@ export type Env = {
   BETTER_AUTH_URL?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /**
+   * Bearer token the local harvester and arrival refresher present to /api/ingest/*. A Worker
+   * secret, never a var — it is the only thing between a stranger and the shared schedule cache.
+   * Unset makes the ingest routes refuse everything, which is the safe direction to fail.
+   */
+  INGEST_TOKEN?: string;
   /**
    * Public half of the VAPID keypair used to sign Web Push subscriptions. Safe to expose
    * to clients (returned by GET /api/push/config) and committed as a wrangler.jsonc var —
@@ -112,6 +119,7 @@ app.route("/api", tripsRouter);
 app.route("/api", scheduleRouter);
 app.route("/api", shareRouter);
 app.route("/api", pushRouter);
+app.route("/api", ingestRouter);
 
 async function scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
   const now = Date.now();

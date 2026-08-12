@@ -1,0 +1,11 @@
+import { chromium } from "@playwright/test";
+import { writeFileSync } from "node:fs";
+const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
+const browser = await chromium.launch({ headless: false, channel: "chrome" }).catch(() => chromium.launch({ headless: false }));
+const page = await (await browser.newContext({ userAgent: UA, locale: "en-GB" })).newPage();
+await page.goto("https://www.flightradar24.com/data/flights/ek247", { waitUntil: "domcontentloaded", timeout: 45000 });
+await page.waitForTimeout(4000);
+const html = await page.content();
+writeFileSync("worker/test/fixtures/fr24-ek247.html", html);
+console.log("saved bytes:", html.length, "| <tr> count:", (html.match(/<tr/g) || []).length);
+await browser.close();
