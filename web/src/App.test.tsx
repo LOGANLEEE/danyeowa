@@ -94,7 +94,7 @@ describe("App", () => {
     expect(getSharedView).toHaveBeenCalledWith("100%");
   });
 
-  it("holds the boot splash — no header band, no bare loading line — until /api/me answers", async () => {
+  it("renders nothing until /api/me answers, leaving the boot splash up", async () => {
     // /api/me never settles, so the app stays in its loading state for the whole assertion.
     vi.stubGlobal(
       "fetch",
@@ -104,11 +104,11 @@ describe("App", () => {
         return new Promise<Response>(() => {});
       })
     );
-    render(<App />);
+    const { container } = render(<App />);
 
-    expect(screen.getByRole("status")).toHaveTextContent(/roaster·me/);
-    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
-    expect(screen.queryByText(/loading…/i)).not.toBeInTheDocument();
+    // Nothing at all — an empty #root is what keeps index.html's boot splash on screen
+    // (`#root:not(:empty) + #boot-splash` dismisses it). See boot-splash.test.ts.
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("shows title, API status, and the inline sign-in form (one surface, no login screen) when signed out", async () => {

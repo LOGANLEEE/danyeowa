@@ -27,60 +27,219 @@
         padding-top: env(safe-area-inset-top);
         padding-bottom: env(safe-area-inset-bottom);
       }
-    </style>
-  </head>
-  <body>
-    <!-- Pre-JS splash: React's createRoot().render() clears #root's children on first render,
-         so this markup is replaced automatically — nothing to remove by hand. Styles are inline
-         (not in styles.css) so this paints on the first frame, before any stylesheet round trip.
-         Colours are copied from tokens.css's --color-ground light/dark values rather than reading
-         the CSS variable, since tokens.css hasn't loaded yet either. -->
-    <div id="root">
-      <div
-        style="
-          position: fixed;
-          inset: 0;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          background: #fafafa;
-          color: #1b1d22;
-        "
-      >
-        <span style="font-size: 20px; font-weight: 600; letter-spacing: -0.01em">roaster·me</span>
-        <span
-          style="
-            width: 24px;
-            height: 24px;
-            border-radius: 999px;
-            border: 2px solid currentColor;
-            border-top-color: transparent;
-            opacity: 0.5;
-            animation: splash-spin 0.9s linear infinite;
-          "
-        ></span>
-      </div>
-    </div>
-    <style>
+
+      /* Boot splash: a boarding-pass stub, painted on the first frame — before main.tsx, before
+         tokens.css. Colours are therefore the literal values from tokens.css rather than var()
+         references, kept in sync by hand (web/src/boot-splash.test.ts fails if they drift).
+
+         It lives OUTSIDE #root and is dismissed purely by `#root:not(:empty)`: App renders null
+         while /api/me is in flight, so #root stays empty until there is a real view to show.
+         One DOM node owns the whole boot — there is no React copy to keep pixel-identical, and
+         nothing to remove by hand. If the bundle never loads, the splash stays up, exactly as
+         the old one did. */
+      #boot-splash {
+        --bp-ground: #fafafa;
+        --bp-card: #ffffff;
+        --bp-ink: #1b1d22;
+        --bp-muted: #6a7078;
+        --bp-edge: #ececea;
+        --bp-accent: #2f6fed;
+        --bp-shadow: 0 1px 2px rgba(20, 24, 33, 0.05), 0 10px 28px rgba(20, 24, 33, 0.07);
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bp-ground);
+        color: var(--bp-ink);
+        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        transition: opacity 260ms ease, visibility 0s linear 260ms;
+      }
+      #root:not(:empty) + #boot-splash {
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      /* Dark: same two mechanisms tokens.css uses — prefers-color-scheme only when no explicit
+         choice is stored, plus [data-theme="dark"] for the manual override. applyTheme() sets
+         that attribute before React's first render, so a forced theme catches the splash too. */
       @media (prefers-color-scheme: dark) {
-        #root > div {
-          background: #15171c !important;
-          color: #e8ebf1 !important;
+        :root:not([data-theme="light"]):not([data-theme="dark"]) #boot-splash {
+          --bp-ground: #15171c;
+          --bp-card: #1d2027;
+          --bp-ink: #e8ebf1;
+          --bp-muted: #8b93a3;
+          --bp-edge: #2a2e37;
+          --bp-accent: #7ea6f5;
+          --bp-shadow: none;
+        }
+      }
+      :root[data-theme="dark"] #boot-splash {
+        --bp-ground: #15171c;
+        --bp-card: #1d2027;
+        --bp-ink: #e8ebf1;
+        --bp-muted: #8b93a3;
+        --bp-edge: #2a2e37;
+        --bp-accent: #7ea6f5;
+        --bp-shadow: none;
+      }
+
+      .bp-card {
+        position: relative;
+        display: flex;
+        width: min(300px, calc(100vw - 48px));
+        border: 1px solid var(--bp-edge);
+        border-radius: 12px;
+        background: var(--bp-card);
+        box-shadow: var(--bp-shadow);
+      }
+      /* The two punch-holes the tear line runs between, centred on the stub divider. */
+      .bp-card::before,
+      .bp-card::after {
+        content: "";
+        position: absolute;
+        right: 84px;
+        width: 12px;
+        height: 12px;
+        margin-right: -6px;
+        border-radius: 999px;
+        background: var(--bp-ground);
+        border: 1px solid var(--bp-edge);
+      }
+      .bp-card::before {
+        top: -7px;
+      }
+      .bp-card::after {
+        bottom: -7px;
+      }
+
+      .bp-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 14px 16px;
+        min-width: 0;
+      }
+      .bp-stub {
+        display: flex;
+        width: 84px;
+        flex-direction: column;
+        gap: 6px;
+        padding: 14px 0 14px 14px;
+        border-left: 1px dashed var(--bp-edge);
+      }
+      .bp-label {
+        margin: 0;
+        font-size: 9px;
+        font-weight: 500;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--bp-muted);
+      }
+      .bp-wordmark {
+        margin: 0;
+        font-size: 19px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .bp-wordmark span {
+        color: var(--bp-accent);
+      }
+      .bp-route,
+      .bp-seat {
+        margin: 0;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+      }
+      .bp-seat {
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      /* Barcode + scanner sweep: the loading affordance. The sweep is one translated gradient
+         rather than 18 staggered bar animations — transform only, no per-frame layout. */
+      .bp-code {
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 22px;
+        margin-top: 4px;
+        overflow: hidden;
+      }
+      .bp-code i {
+        width: 2px;
+        height: 100%;
+        background: currentColor;
+        opacity: 0.32;
+      }
+      .bp-code i:nth-child(3n) {
+        width: 4px;
+      }
+      .bp-code i:nth-child(4n) {
+        height: 78%;
+      }
+      .bp-code::after {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 20%;
+        background: linear-gradient(90deg, transparent, var(--bp-accent) 45%, var(--bp-accent) 55%, transparent);
+        opacity: 0.85;
+        animation: bp-sweep 1.6s ease-in-out infinite;
+      }
+      @keyframes bp-sweep {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(520%);
         }
       }
       @media (prefers-reduced-motion: reduce) {
-        #root > div span[style*="animation"] {
-          animation: none !important;
+        #boot-splash {
+          transition: none;
+        }
+        .bp-code::after {
+          animation: none;
+          opacity: 0.35;
         }
       }
-      @keyframes splash-spin {
-        to {
-          transform: rotate(360deg);
-        }
+
+      .bp-sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
       }
     </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- Dismissed by CSS the moment #root gets its first child — see the #boot-splash rules above. -->
+    <div id="boot-splash" role="status">
+      <div class="bp-card">
+        <div class="bp-main">
+          <p class="bp-label">Boarding pass</p>
+          <p class="bp-wordmark">roaster<span>·</span>me</p>
+          <p class="bp-route">DXB → LHR</p>
+          <div class="bp-code" aria-hidden="true">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+        </div>
+        <div class="bp-stub">
+          <p class="bp-label">Seat</p>
+          <p class="bp-seat">12A</p>
+        </div>
+      </div>
+      <span class="bp-sr">Loading</span>
+    </div>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

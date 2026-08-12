@@ -85,10 +85,10 @@ function SignedInApp() {
     setMe(null);
   }
 
-  // Hold the boot splash until /api/me answers. index.html paints the same thing before any
-  // JS runs, so this keeps one continuous screen from first paint to first real view instead of
-  // flashing the header band over a bare "loading…" line for the length of one fetch.
-  if (me === "loading") return <Splash />;
+  // Render nothing until /api/me answers: index.html's boot splash is dismissed by
+  // `#root:not(:empty)`, so an empty #root is what holds it on screen. Returning a React
+  // loading state here would drop the splash and replace it with a bare "loading…" line.
+  if (me === "loading") return null;
 
   // Landing is the only signed-out screen (sign-in form inline, no separate login view) and
   // renders its own hero h1 ("roaster·me") as the page heading, with no sign-out control to
@@ -179,28 +179,6 @@ function SignedInApp() {
           {health === null ? "checking…" : health.ok ? "API: online" : "API: offline"}
         </footer>
       )}
-    </div>
-  );
-}
-
-/** Same markup, colours and geometry as the pre-JS splash in index.html — it stands in for that
- * one after React clears #root, so the handoff is invisible. Tokens here (rather than the inline
- * hex index.html has to use) so a stored theme override wins over prefers-color-scheme. */
-function Splash() {
-  return (
-    <div
-      className="fixed inset-0 flex flex-col items-center justify-center gap-3 bg-ground text-ink"
-      role="status"
-    >
-      {/* letter-spacing matches index.html's inline splash exactly; tracking-tight would nudge it. */}
-      <span className="text-xl font-semibold" style={{ letterSpacing: "-0.01em" }}>
-        roaster·me
-      </span>
-      <span
-        aria-hidden
-        className="size-6 animate-spin rounded-full border-2 border-current border-t-transparent opacity-50 motion-reduce:animate-none"
-      />
-      <span className="sr-only">Loading</span>
     </div>
   );
 }
