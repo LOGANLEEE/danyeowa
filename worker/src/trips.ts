@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
-import { LegPatchSchema, TripInputSchema, reportDefault } from "@roaster/shared";
+import { TripInputSchema, reportDefault } from "@roaster/shared";
 import * as schema from "./db/schema";
 import type { Env } from "./index";
 
@@ -176,51 +176,6 @@ tripsRouter.delete("/trips/:id", async (c) => {
   await database.delete(schema.trips).where(eq(schema.trips.id, c.req.param("id")));
 
   return c.body(null, 204);
-});
-
-tripsRouter.patch("/flights/:id", async (c) => {
-  const user = c.var.user;
-  if (!user) return c.json({ error: "unauthenticated" }, 401);
-
-  const database = db(c.env);
-  const flightId = c.req.param("id");
-  const existing = await requireOwn(database, schema.flights, flightId, user.id);
-  if (!existing) return c.json({ error: "not found" }, 404);
-
-  const parsed = LegPatchSchema.safeParse(await c.req.json());
-  if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
-  const patch = parsed.data;
-
-  const update: Partial<typeof schema.flights.$inferInsert> = {};
-  if (patch.flightNo !== undefined) update.flightNo = patch.flightNo.toUpperCase();
-  if (patch.origin !== undefined) update.origin = patch.origin.toUpperCase();
-  if (patch.dest !== undefined) update.dest = patch.dest.toUpperCase();
-  if (patch.arrUtc !== undefined) update.arrUtc = patch.arrUtc;
-  if (patch.depTz !== undefined) update.depTz = patch.depTz;
-  if (patch.arrTz !== undefined) update.arrTz = patch.arrTz;
-
-  if (patch.depUtc !== undefined) {
-    update.depUtc = patch.depUtc;
-    // Product behavior: changing dep_utc without explicitly patching report_utc
-    // recomputes report_utc from the new departure via reportDefault() (dep - 90min),
-    // so the report time stays consistent with the new schedule unless the caller
-    // deliberately overrides it in the same request.
-    update.reportUtc = patch.reportUtc ?? reportDefault(patch.depUtc);
-  } else if (patch.reportUtc !== undefined) {
-    update.reportUtc = patch.reportUtc;
-  }
-
-  if (Object.keys(update).length === 0) {
-    return c.json(existing, 200);
-  }
-
-  const [updated] = await database
-    .update(schema.flights)
-    .set(update)
-    .where(eq(schema.flights.id, flightId))
-    .returning();
-
-  return c.json(updated, 200);
 });
 
 tripsRouter.get("/airports/:iata", async (c) => {

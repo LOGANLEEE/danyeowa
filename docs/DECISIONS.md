@@ -24,9 +24,10 @@ editing, so editing one leg's departure by hand is gone. The day card's pencil r
 lookup-and-create pipeline instead, which replaces the trip rather than nudging one leg. If
 per-leg editing is wanted again, it belongs on the day card, not on a resurrected screen.
 
-`PATCH /api/flights/:id` survives with its worker tests but has no caller in the app. Left in
-place rather than deleted in the same change — removing a working, tested endpoint is its own
-decision, and the harvester's arrival corrections go through `/api/ingest/*`, not this route.
+`PATCH /api/flights/:id` was left in place at first, then deleted the same day once it was clear
+nothing called it — the app never did again, and the harvester's arrival corrections go through
+`/api/ingest/*`. `LegPatchSchema` went with it. Reinstating per-leg editing means a new route and
+a new schema; that is the right cost for a feature nobody is asking for yet.
 
 **What this cost the e2e suite, and what it bought.** Three specs used the Trips tab to count
 duties and to clear leftovers between runs. Counting rendered rows could never tell one four-leg

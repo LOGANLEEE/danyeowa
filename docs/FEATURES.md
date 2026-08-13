@@ -76,8 +76,8 @@ D1 for previews · a leg chooser for multi-leg flights. Reasons in `DECISIONS.md
 - **Trips tab** — a second list of the duties the calendar already shows, one row per leg, which
   read as a chart of unranked things. Deleted 2026-08-13 along with the full-screen trip detail it
   was the only way into.
-- **Leg-level time editing** — went with that detail screen. `PATCH /api/flights/:id` still exists
-  and is still tested, but nothing in the app calls it.
+- **Leg-level time editing** — went with that detail screen, and `PATCH /api/flights/:id` went with
+  it on 2026-08-13 once nothing called it. `LegPatchSchema` went too.
 - **Scroll-to-expand duty timeline** and the **DaySheet**. See `DECISIONS.md`.
 
 ---

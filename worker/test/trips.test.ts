@@ -56,13 +56,6 @@ describe("trips API", () => {
     });
     expect(postRes.status).toBe(401);
 
-    const patchRes = await SELF.fetch("https://example.com/api/flights/does-not-exist", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: "x" }),
-    });
-    expect(patchRes.status).toBe(401);
-
     const deleteRes = await SELF.fetch("https://example.com/api/trips/does-not-exist", {
       method: "DELETE",
     });
@@ -132,22 +125,6 @@ describe("trips API", () => {
       expect(body.error).toContain("ZZZ");
     });
 
-    it("PATCHes a flight's dep_utc and recomputes report_utc when not explicitly provided", async () => {
-      const postRes = await createTrip(cookie);
-      const created = (await postRes.json()) as TripWithFlights;
-      const flightId = created.flights[0]?.id;
-
-      const patchRes = await SELF.fetch(`https://example.com/api/flights/${flightId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Cookie: cookie },
-        body: JSON.stringify({ depUtc: "2026-09-01T04:00:00.000Z" }),
-      });
-      expect(patchRes.status).toBe(200);
-      const updated = (await patchRes.json()) as Flight;
-      expect(updated.depUtc).toBe("2026-09-01T04:00:00.000Z");
-      expect(updated.reportUtc).toBe("2026-09-01T02:30:00.000Z");
-    });
-
     it("deletes a trip and cascades to its flights (204)", async () => {
       const postRes = await createTrip(cookie);
       const created = (await postRes.json()) as TripWithFlights;
@@ -178,19 +155,6 @@ describe("trips API", () => {
     beforeAll(async () => {
       ownerCookie = await signInAs("owner@example.com");
       intruderCookie = await signInAs("intruder@example.com");
-    });
-
-    it("404s when PATCHing another user's flight (no existence leak)", async () => {
-      const postRes = await createTrip(ownerCookie);
-      const created = (await postRes.json()) as TripWithFlights;
-      const flightId = created.flights[0]?.id;
-
-      const patchRes = await SELF.fetch(`https://example.com/api/flights/${flightId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Cookie: intruderCookie },
-        body: JSON.stringify({ notes: "hijacked" }),
-      });
-      expect(patchRes.status).toBe(404);
     });
 
     it("404s when DELETEing another user's trip (no existence leak)", async () => {

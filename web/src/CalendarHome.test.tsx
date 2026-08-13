@@ -17,7 +17,6 @@ vi.mock("./api", () => ({
   lookupSchedule: vi.fn(),
   confirmSchedule: vi.fn(),
   deleteTrip: vi.fn(),
-  patchFlight: vi.fn(),
   // No crew by default — the badge row renders nothing, which is what every test below but
   // the crew ones expects to see above the calendar.
   getCrew: vi.fn().mockResolvedValue({ members: [], sent: [], received: [] }),
