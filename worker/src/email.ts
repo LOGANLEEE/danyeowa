@@ -2,7 +2,7 @@ type EmailEnv = { RESEND_API_KEY?: string; DEV_OTP_FALLBACK?: string; EMAIL_FROM
 
 // Resend test mode (no verified domain) only accepts this sender and only
 // delivers to the Resend account owner's own address.
-const DEFAULT_FROM = "Roaster Me <onboarding@resend.dev>";
+const DEFAULT_FROM = "danyeowa <onboarding@resend.dev>";
 
 let lastDevOtp: string | null = null;
 export const getLastDevOtp = () => lastDevOtp;

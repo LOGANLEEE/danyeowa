@@ -27,7 +27,7 @@ const momLink: ShareLink = {
 
 describe("ShareView", () => {
   beforeEach(() => {
-    vi.stubGlobal("location", { origin: "https://roaster.example" });
+    vi.stubGlobal("location", { origin: "https://danyeowa.example" });
   });
 
   afterEach(() => {
@@ -73,7 +73,7 @@ describe("ShareView", () => {
 
     await user.click(await screen.findByTestId("copy-link"));
 
-    expect(writeText).toHaveBeenCalledWith("https://roaster.example/share/tok-abc123");
+    expect(writeText).toHaveBeenCalledWith("https://danyeowa.example/share/tok-abc123");
     expect(await screen.findByTestId("copy-link")).toHaveTextContent(/copied/i);
   });
 
@@ -88,7 +88,7 @@ describe("ShareView", () => {
 
     await user.click(await screen.findByTestId("share-link"));
 
-    expect(share).toHaveBeenCalledWith({ url: "https://roaster.example/share/tok-abc123" });
+    expect(share).toHaveBeenCalledWith({ url: "https://danyeowa.example/share/tok-abc123" });
     expect(writeText).not.toHaveBeenCalled();
   });
 
@@ -102,7 +102,7 @@ describe("ShareView", () => {
 
     await user.click(await screen.findByTestId("share-link"));
 
-    expect(writeText).toHaveBeenCalledWith("https://roaster.example/share/tok-abc123");
+    expect(writeText).toHaveBeenCalledWith("https://danyeowa.example/share/tok-abc123");
   });
 
   it("revokes a link after inline confirmation and shows revoked state", async () => {

@@ -116,7 +116,7 @@ describe("App", () => {
     render(<App />);
     // Exactly one h1 on the page — the Landing hero — no duplicate with the header chrome.
     // Awaited: the boot splash holds the screen (and owns no h1) until /api/me answers.
-    expect(await screen.findAllByRole("heading", { name: /roaster/i, level: 1 })).toHaveLength(1);
+    expect(await screen.findAllByRole("heading", { name: /danyeowa/i, level: 1 })).toHaveLength(1);
     expect(await screen.findByText(/api: online/i)).toBeInTheDocument();
     // Email is visible up front, no separate CTA/navigation needed to reach it.
     expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
@@ -166,6 +166,6 @@ describe("App", () => {
     await user.click(await screen.findByTestId("tab-settings"));
 
     await user.click(await screen.findByRole("button", { name: /sign out/i }));
-    expect(await screen.findByRole("heading", { name: /roaster/i, level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /danyeowa/i, level: 1 })).toBeInTheDocument();
   });
 });

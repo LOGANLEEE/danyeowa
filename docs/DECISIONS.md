@@ -8,6 +8,43 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-13 (later)
+
+### The app is called danyeowa
+
+`roaster·me` was a misspelling. The word for a cabin-crew monthly schedule is **roster**; a
+roaster roasts coffee. Fixing the spelling was considered and rejected: `rosterme.com` is taken,
+and **RosterMe** (rosterme.au) is a live Australian security-guard rostering product — moving to
+the correct spelling meant moving into a more crowded name, not out of one.
+
+**danyeowa** (다녀와) is the Korean send-off to someone leaving: *go, and come back*. English
+"goodbye" carries no promise of return; 다녀와 does. That is the whole product — the partner of a
+cabin crew member, tracking when she goes and when she is back.
+
+Checked before buying: no app, service or company of that name (Korean or English search, both
+app stores), all of `danyeowa.com/.kr/.co.kr` unregistered, and Revised Romanisation gives exactly
+one spelling, so the name survives being heard and typed. `danyeowa.com` registered 2026-08-13.
+
+**Rejected, with reasons worth keeping:**
+- `vaivem.app` — "vai e vem" describes the product exactly, but Brazil already has 8+ ride-hailing
+  and taxi apps called Vaivem / Vai Vem, in the same app stores our first users browse.
+- `pouso.app` — landing, and a resting place. Clean on the stores, but "Pouso Alegre" (a city in
+  Minas Gerais) owns 70-80% of search results for the word.
+- `saudade` — every good TLD taken, and it names absence where this app is about return.
+
+**Renamed:** wordmark, `<title>`, PWA manifest name/short_name, the push fallback title, the
+share-view footer, the install banner, and the email From. **Not renamed:** the repo, the Worker
+(`roaster-me`), the D1 database (`roaster-me-db`), and the `@roaster/*` package names — internal
+identifiers whose rename would break the deployment URL, Google's registered redirect URI, and
+every installed PWA, for zero user-visible gain.
+
+**The wordmark is one text node.** It was briefly `danyeo<span>wa</span>` to keep the old two-tone
+treatment, which made the accessible name compute as "danyeo wa" — two words to a screen reader.
+Splitting a word mid-token is not the same as splitting `roaster` / `·me` at a boundary. Do not
+reintroduce it.
+
+---
+
 ## 2026-08-13
 
 ### The Trips tab is gone, and the trip detail screen with it

@@ -58,7 +58,7 @@ export default function SharedViewer({ token, now }: Props) {
   return (
     <div className="flex w-full max-w-xl flex-col gap-6 px-4 py-6">
       <header className="flex flex-col gap-1">
-        <p className="text-xs uppercase tracking-wide text-ink-muted">roaster·me</p>
+        <p className="text-xs uppercase tracking-wide text-ink-muted">danyeowa</p>
         <h1 className="text-lg font-semibold text-ink">{view.crewName}'s schedule</h1>
       </header>
 
@@ -113,7 +113,7 @@ export default function SharedViewer({ token, now }: Props) {
         </div>
       )}
 
-      <footer className="pt-2 text-center text-xs text-ink-muted">Shared via Roaster Me</footer>
+      <footer className="pt-2 text-center text-xs text-ink-muted">Shared via danyeowa</footer>
     </div>
   );
 }

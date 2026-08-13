@@ -87,7 +87,7 @@ function SignedInApp() {
   if (me === "loading") return null;
 
   // Landing is the only signed-out screen (sign-in form inline, no separate login view) and
-  // renders its own hero h1 ("roaster·me") as the page heading, with no sign-out control to
+  // renders its own hero h1 ("danyeowa") as the page heading, with no sign-out control to
   // show — skip rendering the header band entirely there so it doesn't leave an empty,
   // bordered strip above the hero (a11y bonus: no duplicate h1s).
   const isLanding = me === null;
@@ -98,7 +98,7 @@ function SignedInApp() {
       {!isLanding && (
         <header className="border-b border-edge px-4 py-2">
           <h1 className="text-lg font-semibold text-ink">
-            roaster<span className="text-accent">·me</span>
+            danyeowa
           </h1>
         </header>
       )}
