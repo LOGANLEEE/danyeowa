@@ -1,4 +1,4 @@
-import type { ProviderLeg } from "@roaster/shared";
+import type { ProviderLeg } from "@danyeowa/shared";
 import type { ProviderOutcome, ScheduleProvider } from "./index";
 
 /**
@@ -41,7 +41,7 @@ export class Fr24ScrapeProvider implements ScheduleProvider {
         signal,
         headers: {
           "User-Agent":
-            "RoasterMeBot/1.0 (+schedule cache warm-up; one request per resolved flight, then cached; misses re-tried at most once per 24h via schedule_lookup_misses)",
+            "DanyeowaBot/1.0 (+schedule cache warm-up; one request per resolved flight, then cached; misses re-tried at most once per 24h via schedule_lookup_misses)",
         },
       });
     } catch (e) {
@@ -161,7 +161,7 @@ function epochToLocalHHMM(epochSec: number, offsetSec: number): string {
 
 /** Local calendar day, as a UTC-midnight epoch-seconds marker (day granularity only),
  * used to derive `dayOffset` (arrival day minus departure day) without importing
- * `@roaster/shared`'s tz-aware helpers, which need an IANA name rather than a raw
+ * `@danyeowa/shared`'s tz-aware helpers, which need an IANA name rather than a raw
  * offset. */
 function epochToLocalDateKey(epochSec: number, offsetSec: number): number {
   const localMs = (epochSec + offsetSec) * 1000;

@@ -1,14 +1,14 @@
 {
-  "name": "roaster-me",
+  "name": "danyeowa",
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "pnpm --filter @roaster/web build && wrangler dev",
-    "build": "pnpm --filter @roaster/web build",
+    "dev": "pnpm --filter @danyeowa/web build && wrangler dev",
+    "build": "pnpm --filter @danyeowa/web build",
     "test": "pnpm -r test",
     "test:e2e": "playwright test -c e2e",
     "typecheck": "pnpm -r typecheck",
-    "deploy": "pnpm --filter @roaster/web build && wrangler deploy"
+    "deploy": "pnpm --filter @danyeowa/web build && wrangler deploy"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

@@ -14,7 +14,7 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm --filter @roaster/web build
+      - run: pnpm --filter @danyeowa/web build
       - run: pnpm test
 
   e2e:
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @roaster/web build
+      - run: pnpm --filter @danyeowa/web build
       - name: Upload preview version
         id: upload
         env:

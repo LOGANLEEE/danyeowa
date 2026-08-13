@@ -10,10 +10,12 @@
  * schema the app reads and is covered by tests.
  *
  * Config comes from the environment so a run can be pointed at a local Worker instead:
- *   ROASTER_API    default https://roaster-me.logan-lee.workers.dev
+ *   DANYEOWA_API   default https://roaster-me.logan-lee.workers.dev
+ *                  (ROASTER_API is still read, so an existing ~/.config env keeps working)
  *   INGEST_TOKEN   required; matches the Worker secret of the same name
  */
-const BASE = process.env.ROASTER_API ?? "https://roaster-me.logan-lee.workers.dev";
+const BASE =
+  process.env.DANYEOWA_API ?? process.env.ROASTER_API ?? "https://roaster-me.logan-lee.workers.dev";
 
 function token() {
   const value = process.env.INGEST_TOKEN;

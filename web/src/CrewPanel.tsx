@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { CrewResponse } from "@roaster/shared";
+import type { CrewResponse } from "@danyeowa/shared";
 import { acceptCrewInvite, getCrew, inviteCrew, revokeCrewInvite } from "./api";
 
 const EMPTY: CrewResponse = { members: [], sent: [], received: [] };

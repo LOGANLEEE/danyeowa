@@ -1,6 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import type { HealthResponse } from "@roaster/shared";
+import type { HealthResponse } from "@danyeowa/shared";
 
 describe("GET /api/health", () => {
   it("returns ok with live D1", async () => {

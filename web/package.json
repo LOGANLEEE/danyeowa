@@ -1,5 +1,5 @@
 {
-  "name": "@roaster/web",
+  "name": "@danyeowa/web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@roaster/shared": "workspace:*",
+    "@danyeowa/shared": "workspace:*",
     "better-auth": "^1.6.26",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

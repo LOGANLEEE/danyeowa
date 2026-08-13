@@ -1,4 +1,4 @@
-import type { ProviderLeg } from "@roaster/shared";
+import type { ProviderLeg } from "@danyeowa/shared";
 import type { Env } from "../index";
 import type { ProviderOutcome, ScheduleProvider } from "./index";
 

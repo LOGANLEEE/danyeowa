@@ -1,7 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { Flight, Trip } from "@roaster/shared";
+import type { Flight, Trip } from "@danyeowa/shared";
 import * as schema from "../src/db/schema";
 import { seedAirports } from "../src/db/seed-airports";
 import { signInAs } from "./helpers";

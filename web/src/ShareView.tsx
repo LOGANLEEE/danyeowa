@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ShareLink } from "@roaster/shared";
+import type { ShareLink } from "@danyeowa/shared";
 import { createShareLink, getShareLinks, revokeShareLink } from "./api";
 import CrewPanel from "./CrewPanel";
 

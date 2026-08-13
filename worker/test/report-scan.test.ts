@@ -309,7 +309,7 @@ describe("runReportScan", () => {
     const plaintext = await decryptPushBody(init.body as Uint8Array, receiver);
     const payload = JSON.parse(plaintext);
 
-    const { formatLocal } = await import("@roaster/shared");
+    const { formatLocal } = await import("@danyeowa/shared");
     const expectedReportLocal = formatLocal(reportUtc, "Asia/Dubai");
     const expectedLeaveBy = formatLocal(
       new Date(Date.parse(reportUtc) - 120 * 60_000).toISOString(), // default lead: 120min

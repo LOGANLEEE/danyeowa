@@ -8,8 +8,8 @@ import {
   addDaysIso,
   wallToUtc,
   normaliseFlightNo,
-} from "@roaster/shared";
-import type { ScheduleLookupResponse, ScheduleLeg, ScheduleSuggestion, ProviderLeg } from "@roaster/shared";
+} from "@danyeowa/shared";
+import type { ScheduleLookupResponse, ScheduleLeg, ScheduleSuggestion, ProviderLeg } from "@danyeowa/shared";
 import * as schema from "./db/schema";
 import type { Env } from "./index";
 import { resolveFromProviders } from "./schedule-providers";

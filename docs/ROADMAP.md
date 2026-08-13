@@ -25,7 +25,7 @@ promised — do not build for it yet.
 
 ---
 
-## 1. Email that actually reaches people — IN PROGRESS
+## 1. Email that actually reaches people — DONE 2026-08-13
 
 **Why it matters:** crew sharing is live, but an invited person cannot sign in unless they use
 Google. Production OTP mail only ever reached the Resend account owner's own address, because the
@@ -37,10 +37,15 @@ sender was `onboarding@resend.dev` (Resend test mode). Verified: a code sent to
 | Buy a domain | ✅ `danyeowa.com`, Cloudflare Registrar, $10.46/yr |
 | Resend account for this app | ✅ separate free account (hellogenietour.com occupies the other one — free tier is 1 domain, 3,000/mo, 100/day) |
 | DNS records | ✅ auto-added by the Resend↔Cloudflare integration. Confirmed live by `dig`: DKIM `resend._domainkey`, SPF + MX on `send` |
-| Resend domain status | ⏳ was "Pending" at hand-off — confirm it flipped to Verified |
+| Resend domain status | ✅ **Verified** (region Tokyo `ap-northeast-1`) |
 | `RESEND_API_KEY` secret | ✅ set as version `67833aa2` (not deployed — see the versions trap below) |
-| `EMAIL_FROM` secret | ❌ set to `danyeowa <noreply@danyeowa.com>` |
-| Deploy + prove delivery | ❌ send to a `+alias` address and read it in Gmail |
+| `EMAIL_FROM` secret | ✅ `danyeowa <noreply@danyeowa.com>`, version `e69c5f84` |
+| Deploy + prove delivery | ✅ PR #46 merged (`c43bafa`), CI deployed. OTP to `korlogan94+danyeowa1@gmail.com` arrived from `noreply@danyeowa.com` — the alias that got nothing for 7 days |
+
+**A plain `wrangler deploy` keeps the secrets.** `versions secret put` writes the secret into a
+new, undeployed version; the CI deploy that follows uploads its own version from source and
+inherits every existing secret. Confirmed: `wrangler secret list` shows all six, and the OTP mail
+sent after the deploy used the `EMAIL_FROM` value.
 
 **The versions trap.** `wrangler secret put` fails with *"the latest version of your Worker isn't
 currently deployed"* whenever a PR preview has uploaded a newer version (our CI does this on every

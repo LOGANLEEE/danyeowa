@@ -67,7 +67,7 @@ export { expandFlights, parseArgs };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROGRESS_FILE = path.join(__dirname, ".fetch-progress.json");
-const PROFILE_SCRATCH = path.join(os.tmpdir(), "roaster-chrome-profile");
+const PROFILE_SCRATCH = path.join(os.tmpdir(), "danyeowa-chrome-profile");
 
 /** One row per IATA across a batch — the same airport shows up on every flight that touches it. */
 function dedupeAirports(airports) {

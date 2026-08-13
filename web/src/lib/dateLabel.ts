@@ -1,4 +1,4 @@
-import { formatLocal } from "@roaster/shared";
+import { formatLocal } from "@danyeowa/shared";
 
 /** Humanizes a local ISO calendar date ("YYYY-MM-DD") as "Wed 20 Aug" (weekday short + day
  * + month short) using the home tz's own calendar — reuses formatLocal's withDate branch

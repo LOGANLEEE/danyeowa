@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CrewResponse } from "@roaster/shared";
+import type { CrewResponse } from "@danyeowa/shared";
 import CrewPanel from "./CrewPanel";
 import { acceptCrewInvite, getCrew, inviteCrew, revokeCrewInvite } from "./api";
 

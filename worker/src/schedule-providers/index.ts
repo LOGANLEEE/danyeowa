@@ -1,4 +1,4 @@
-import type { ProviderLeg } from "@roaster/shared";
+import type { ProviderLeg } from "@danyeowa/shared";
 import type { Env } from "../index";
 import { Fr24ScrapeProvider } from "./scrape-fr24";
 import { AeroDataBoxProvider } from "./aerodatabox";
