@@ -54,17 +54,24 @@ undeployed version, and the next CI deploy carries it.
 
 ---
 
-## 2. Stop storing OTPs in plaintext — NOT STARTED
+## 2. Stop storing OTPs in plaintext — DONE 2026-08-13
 
 `verification.value` holds the OTP as `616087:0`. Anyone with read access to production D1 can
 sign in as any user. This is how the production crew test in this session was run at all, so treat
 it as proven, not theoretical.
 
-Fix: `emailOTP({ storeOTP: "hashed" })` — a first-class better-auth option (`plain` is the
-default; `encrypted` and custom hashers also exist).
+Fixed by `emailOTP({ storeOTP: "hashed" })` in `worker/src/auth.ts` — a first-class better-auth
+option (`plain` is the default; `encrypted` and custom hashers also exist), available in the
+1.6.26 already installed.
 
-**Do this AFTER §1 delivers mail.** With hashed OTPs and no working email, nobody can sign in to
-production at all except via Google.
+Guarded by a test that was **proven failing first**: it read `verification.value` straight out of
+D1 and asserted the plaintext code was not in it — `expected '981077:0' not to contain '981077'`
+before the change, green after. The same test signs in with the plain-text code afterwards,
+because hashed storage is only worth having if verification still works.
+
+Ordering held: §1 delivered mail before this landed, so email sign-in was never the only casualty.
+Nothing reads `verification.value` outside better-auth — the dev and e2e OTP paths read
+`getLastDevOtp()` from Worker memory, not the database, so both still work.
 
 ---
 
