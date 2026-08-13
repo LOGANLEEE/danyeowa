@@ -1,4 +1,4 @@
-export type TabName = "calendar" | "trips" | "share" | "settings";
+export type TabName = "calendar" | "share" | "settings";
 
 type Props = {
   active: TabName;
@@ -26,14 +26,6 @@ function CalendarIcon() {
   );
 }
 
-function SuitcaseIcon() {
-  return (
-    <svg {...ICON_PROPS} aria-hidden="true">
-      <rect x="3" y="7" width="18" height="13" rx="2" />
-      <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18" />
-    </svg>
-  );
-}
 
 function PlusIcon() {
   return (
@@ -78,10 +70,6 @@ export default function TabBar({ active, onSelect, onAdd }: Props) {
       <button type="button" data-testid="tab-calendar" onClick={() => onSelect("calendar")} className={tabClass("calendar")}>
         <CalendarIcon />
         Calendar
-      </button>
-      <button type="button" data-testid="tab-trips" onClick={() => onSelect("trips")} className={tabClass("trips")}>
-        <SuitcaseIcon />
-        Trips
       </button>
       <button
         type="button"

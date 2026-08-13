@@ -120,3 +120,39 @@ export async function signOutThroughUi(page: Page): Promise<void> {
   await page.getByTestId("tab-settings").click();
   await page.getByRole("button", { name: /sign out/i }).click();
 }
+
+/** One trip as /api/trips returns it — enough to count trips and their legs. */
+type RosterTrip = { id: string; flights: { id: string; flightNo: string }[] };
+
+/**
+ * The signed-in account's roster, straight from the API the app itself calls.
+ *
+ * Counting duties used to mean opening the Trips tab and counting rendered rows. That tab is
+ * gone (the calendar is the only roster surface now), and asserting against the API is the
+ * better check anyway: "one trip with two legs" and "two trips with one leg each" look
+ * identical in a flat list of rows, and it was the flat list these specs were counting.
+ */
+export async function rosterTrips(page: Page): Promise<RosterTrip[]> {
+  const res = await page.request.get("/api/trips");
+  if (!res.ok()) throw new Error(`GET /api/trips failed: ${res.status()}`);
+  return ((await res.json()) as { trips: RosterTrip[] }).trips;
+}
+
+/**
+ * Empties the account's roster through the API, then reloads so the UI reflects it.
+ *
+ * Deliberately not driven through the UI: the old version clicked a row, a delete and a
+ * confirm up to five times and swallowed every timeout, so a cleanup that silently failed
+ * left the next spec's assertions to fail somewhere unrelated. This either empties the
+ * roster or throws here.
+ */
+export async function clearRoster(page: Page): Promise<void> {
+  for (const trip of await rosterTrips(page)) {
+    const res = await page.request.delete(`/api/trips/${trip.id}`);
+    if (!res.ok()) throw new Error(`DELETE /api/trips/${trip.id} failed: ${res.status()}`);
+  }
+  const left = await rosterTrips(page);
+  if (left.length > 0) throw new Error(`roster not empty after cleanup: ${left.length} trip(s) left`);
+  await page.reload();
+  await page.getByTestId("calendar-grid").waitFor({ timeout: 20_000 });
+}

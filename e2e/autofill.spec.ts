@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { UNKNOWN_FLIGHT_NO, openAddForm } from "./helpers";
+import { UNKNOWN_FLIGHT_NO, clearRoster, openAddForm, rosterTrips } from "./helpers";
 
 /**
  * Manual-fallback + multi-leg coverage for the inline add-trip form, complementing
- * roster.spec.ts's primary EK412-autofill + sequential-add + Trips-tab + edit/delete flow:
+ * roster.spec.ts's primary EK412-autofill + sequential-add + edit/delete flow:
  *   1. Unknown flight (EK999, no flight_schedules row) - lookup miss falls through to the
  *      full manual-entry path. The form clears and the day flips to the trip view on save, so
  *      a second manual add happens via a fresh empty-day form on the next day.
@@ -31,9 +31,8 @@ const PICKED_DATE = "2026-11-12";
  * DXB -> SYD -> CHC, EK412 (scripts/ek-schedules.json), picked 2026-09-10 - the SAME
  * calendar cell roster.spec.ts's own EK412 fixture uses. Both specs now run under the one
  * shared signed-in account (see auth.setup.ts), so this doesn't collide server-side only
- * because this file runs first (autofill -> roster -> share) and its own cleanup (this
- * scenario's `cleanUpAllTrips` call further down) deletes the trip before roster.spec.ts's
- * leading cleanup even starts.
+ * because this file runs first (autofill -> roster -> share) and its own `clearRoster` call
+ * further down deletes the trip before roster.spec.ts's leading cleanup even starts.
  *
  * Leg0 DXB dep 10:15 Asia/Dubai (no DST) on 2026-09-10 = 2026-09-10T06:15:00.000Z.
  * Leg0 arr SYD 06:00 Australia/Sydney, dayOffset 1 -> local date 2026-09-11 =
@@ -86,18 +85,6 @@ const TURNAROUND = {
   spanEndDate: "2026-09-16",
 };
 
-async function cleanUpAllTrips(page: import("@playwright/test").Page) {
-  await page.getByTestId("tab-trips").click();
-  const existingRow = page.getByTestId("upcoming-row").first();
-  for (let i = 0; i < 5; i++) {
-    if (!(await existingRow.isVisible().catch(() => false))) break;
-    await existingRow.click();
-    await page.getByTestId("delete-trip").click();
-    await page.getByTestId("confirm-delete").click();
-    await page.getByText(/no trips yet/i).or(existingRow).first().waitFor().catch(() => {});
-  }
-  await page.getByTestId("tab-calendar").click();
-}
 
 test.describe.configure({ mode: "serial" });
 
@@ -105,10 +92,7 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   // Already signed in via the shared storageState (auth.setup.ts).
   await page.goto("/");
   await expect(page.getByTestId("tab-calendar")).toBeVisible();
-  await cleanUpAllTrips(page);
-  await page.getByTestId("tab-trips").click();
-  await expect(page.getByText(/no trips yet/i)).toBeVisible();
-  await page.getByTestId("tab-calendar").click();
+  await clearRoster(page);
 
   const autofillCard = page.getByTestId("autofill-card");
   const dayCard = page.getByTestId("day-detail-card");
@@ -148,19 +132,17 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   );
   await expect(page.getByTestId(`calendar-day-${EK412_RETURN.ret.dateIso}`)).toHaveClass(/bg-accent-soft/);
 
-  // Trips tab: one row per LEG (TripsView.tsx), not per trip - EK412 (2 legs) + EK413
-  // (2 legs) = 4 rows across the two saved trips.
-  await page.getByTestId("tab-trips").click();
-  await expect(page.getByTestId("upcoming-row")).toHaveCount(4);
-  await cleanUpAllTrips(page);
-  await page.getByTestId("tab-trips").click();
-  await expect(page.getByText(/no trips yet/i)).toBeVisible();
-  await page.getByTestId("tab-calendar").click();
+  // Two separate trips, two legs each — the shape a flat row count could never tell apart
+  // from one four-leg trip.
+  const bothPairings = await rosterTrips(page);
+  expect(bothPairings).toHaveLength(2);
+  expect(bothPairings.flatMap((t) => t.flights)).toHaveLength(4);
+  await clearRoster(page);
 
   // --- Scenario B: turnaround - "+ add flight" chains EK9998 onto EK9997's preview as ONE
   // combined trip (leg_seq continues), before any save. The appended card renders alongside
   // the outbound card; saving posts a single trip with both legs, which the Trips tab shows
-  // as one round trip (DXB->BCN->DXB) worth of rows. The form clears immediately on save -
+  // as one round trip (DXB->BCN->DXB). The form clears immediately on save -
   // both legs are already combined into the one preview, so there's nothing left to chain. ---
   await openAddForm(page, TURNAROUND.pickedDate);
   await page.getByTestId("flightno-input").fill(TURNAROUND.outbound.flightNo.slice(2));
@@ -185,14 +167,12 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await expect(page.getByTestId(`calendar-day-${TURNAROUND.pickedDate}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${TURNAROUND.spanEndDate}`)).toHaveClass(/bg-accent-soft/);
 
-  // One combined trip (EK9997 + EK9998, 2 legs) -> 2 rows, not two separate trips.
-  await page.getByTestId("tab-trips").click();
-  await expect(page.getByTestId("upcoming-row")).toHaveCount(2);
+  // ONE trip carrying both legs, not two trips — the whole point of appending before saving.
+  const turnaround = await rosterTrips(page);
+  expect(turnaround).toHaveLength(1);
+  expect(turnaround[0]!.flights).toHaveLength(2);
 
-  await cleanUpAllTrips(page);
-  await page.getByTestId("tab-trips").click();
-  await expect(page.getByText(/no trips yet/i)).toBeVisible();
-  await page.getByTestId("tab-calendar").click();
+  await clearRoster(page);
 
   // --- Scenario 1: unknown flight -> lookup miss -> manual expand -> full save. The form
   // clears on save (rapid-entry chaining is gone), so a second manual add happens via a fresh
@@ -245,12 +225,11 @@ test("manual-entry fallback (sequential adds), then EK384 multi-leg smoke", asyn
   await expect(page.getByTestId(`calendar-day-${PICKED_DATE}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${nextIso}`)).toHaveClass(/bg-accent-soft/);
 
-  await page.getByTestId("tab-trips").click();
-  await expect(page.getByTestId("upcoming-row")).toHaveCount(2);
-  await cleanUpAllTrips(page);
-  await page.getByTestId("tab-trips").click();
-  await expect(page.getByText(/no trips yet/i)).toBeVisible();
-  await page.getByTestId("tab-calendar").click();
+  // Two separate manual trips, one leg each.
+  const manualTrips = await rosterTrips(page);
+  expect(manualTrips).toHaveLength(2);
+  expect(manualTrips.flatMap((t) => t.flights)).toHaveLength(2);
+  await clearRoster(page);
 
   // --- Scenario 2: multi-leg smoke - EK384 lookup renders both legs in the autofill card. ---
   await openAddForm(page, PICKED_DATE);

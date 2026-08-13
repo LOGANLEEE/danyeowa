@@ -22,7 +22,7 @@ codebase to find out. Status words mean exactly one thing:
 | Add a trip inline on an empty day | Live | Flight-code input appears immediately; airline prefix is a setting, digits only |
 | Turnarounds in one save | Live | Second flight appends to the same preview before saving |
 | Edit / delete on the card | Live | Pencil and bin. Editing is create-then-delete, never the reverse |
-| Trip detail with leg timeline | Live | Report → depart → land, with layovers between sectors |
+| Trip detail with leg timeline | Live | Report → depart → land, with layovers between sectors — on the day card, which is the only trip surface now |
 | Manual entry when a lookup misses | Live | Only appears after a lookup actually returns empty |
 
 ## Notifications
@@ -70,6 +70,15 @@ codebase to find out. Status words mean exactly one thing:
 
 Weather and sunset at destination · destination news · async schedule reconciliation · a second
 D1 for previews · a leg chooser for multi-leg flights. Reasons in `DECISIONS.md`.
+
+## Deliberately removed
+
+- **Trips tab** — a second list of the duties the calendar already shows, one row per leg, which
+  read as a chart of unranked things. Deleted 2026-08-13 along with the full-screen trip detail it
+  was the only way into.
+- **Leg-level time editing** — went with that detail screen. `PATCH /api/flights/:id` still exists
+  and is still tested, but nothing in the app calls it.
+- **Scroll-to-expand duty timeline** and the **DaySheet**. See `DECISIONS.md`.
 
 ---
 

@@ -511,7 +511,8 @@ function CalendarSkeleton() {
  * trip spans `now`) + a compact next-duty card. Single tap on any day SELECTS it, showing its
  * detail in place of the next-duty card: a trip day expands to its legs + Edit/Delete, an
  * empty day shows the add-trip form (AddTripForm) inline — no "Add trip" button, no bottom
- * sheet, one tap fewer. The upcoming list lives on the Trips tab (see TripsView.tsx). */
+ * sheet, one tap fewer. There is no second list of the same duties — the grid is the
+ * overview, and this card is the detail. */
 export default function CalendarHome({ now, openTodayToken }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
   const [selectedIso, setSelectedIso] = useState<string | null>(null);

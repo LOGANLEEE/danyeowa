@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { E2E_EMAIL, EK412, openAddForm } from "./helpers";
+import { E2E_EMAIL, EK412, FIXTURE, clearRoster, openAddForm, pickCalendarDay, rosterTrips } from "./helpers";
 
 /**
  * Full e2e coverage of the Plan 6 tabbed, calendar-first UX against a real `wrangler dev`
@@ -16,7 +16,7 @@ import { E2E_EMAIL, EK412, openAddForm } from "./helpers";
  * Full flow covered: calendar home, the inline add-trip form on an empty day's detail card,
  * autofill add (a save clears the form and refetches, flipping the card to the trip view - no
  * bottom sheet), a second EK412 pairing added the same way on a later free day, both days
- * marked on the calendar, the Trips tab listing both, a detail edit, and both deletes.
+ * marked on the calendar, both pairings on the roster, an edit on the day card, and the deletes.
  *
  * Idempotent by construction: any trip left over from a prior failed run is deleted by the
  * cleanup loop below before assertions begin, so re-running never accumulates state.
@@ -26,7 +26,7 @@ import { E2E_EMAIL, EK412, openAddForm } from "./helpers";
  * with Google" button through Playwright. That path is covered by unit tests (Landing.test.tsx)
  * that assert authClient.signIn.social is called correctly, plus manual verification.
  */
-test("calendar home -> inline add-trip form -> autofill add -> sequential add -> Trips tab -> edit -> delete both", async ({
+test("calendar home -> inline add-trip form -> autofill add -> sequential add -> edit on the day card -> delete both", async ({
   page,
 }) => {
   // Already signed in via the shared storageState (auth.setup.ts) — go straight to the app.
@@ -34,27 +34,16 @@ test("calendar home -> inline add-trip form -> autofill add -> sequential add ->
   await expect(page.getByTestId("tab-calendar")).toBeVisible();
   await expect(page.getByTestId("calendar-next")).toBeVisible();
 
-  // Clean slate: delete any trip(s) left over from a previous failed run.
-  await page.getByTestId("tab-trips").click();
-  const existingRow = page.getByTestId("upcoming-row").first();
+  // Clean slate: delete any trip(s) left over from a previous failed run — through the API,
+  // not by clicking through a list. The Trips tab that list lived on is gone, and the loop
+  // that drove it swallowed every timeout, so a cleanup that quietly failed used to surface
+  // as an unrelated assertion failing later.
+  await clearRoster(page);
   const emptyState = page.getByText(/no trips yet/i);
-  // The Trips tab's own getTrips() fetch resolves after the tab switch renders - wait for
-  // it to settle (a row or the empty state) before checking, so a still-loading tab isn't
-  // mistaken for an already-empty one (this loop's own delete cycle handles waiting between
-  // iterations already; this is only the FIRST check, before anything has been deleted yet).
-  await Promise.race([existingRow.waitFor(), emptyState.waitFor()]).catch(() => {});
-  for (let i = 0; i < 5; i++) {
-    if (!(await existingRow.isVisible().catch(() => false))) break;
-    await existingRow.click();
-    await page.getByTestId("delete-trip").click();
-    await page.getByTestId("confirm-delete").click();
-    await Promise.race([emptyState.waitFor(), existingRow.waitFor()]).catch(() => {});
-  }
   await expect(emptyState).toBeVisible();
 
   // --- Tap a day on the calendar home: single tap selects it and, since it's empty, its
   // detail card IS the add-trip form (openAddForm selects + waits for the form). ---
-  await page.getByTestId("tab-calendar").click();
   const firstIso = EK412.pickedDate;
   await openAddForm(page, firstIso);
 
@@ -95,35 +84,33 @@ test("calendar home -> inline add-trip form -> autofill add -> sequential add ->
   await expect(page.getByTestId(`calendar-day-${secondPickedDate}`)).toHaveClass(/bg-accent-soft/);
   await expect(page.getByTestId(`calendar-day-${EK412.secondPairingSpanEndDate}`)).toHaveClass(/bg-accent-soft/);
 
-  // --- Trips tab lists both pairings - one row PER LEG (TripsView.tsx renders a row per
-  // flight, not per trip), and EK412 is 2 legs each, so 2 trips = 4 rows. ---
-  await page.getByTestId("tab-trips").click();
-  await expect(page.getByTestId("upcoming-row")).toHaveCount(4);
+  // --- Both pairings are on the roster: two trips, two legs each. Asserted through the API
+  // rather than by counting rendered rows — a flat row count cannot tell two two-leg trips
+  // apart from one four-leg trip, which is exactly the distinction that matters here. ---
+  const saved = await rosterTrips(page);
+  expect(saved).toHaveLength(2);
+  expect(saved.flatMap((t) => t.flights)).toHaveLength(4);
 
-  // --- Detail: edit one trip's departure, save, see the report time change. ---
-  // Sets the departure clock time to 12:00 local (DXB / Asia/Dubai, no DST) so the recomputed
-  // report time (dep - 90min, shared/src/time.ts reportDefault) is deterministically 10:30.
-  // EK412 is a 2-leg trip - "first()" edits leg 0 (DXB->SYD, Asia/Dubai origin).
-  await page.getByTestId("upcoming-row").first().click();
-  await page.getByTestId("edit-leg").first().click();
-  const depInput = page.getByLabel(/departure \(local\)/i);
-  const currentDep = await depInput.inputValue();
-  const editedDep = currentDep.replace(/T\d{2}:\d{2}/, "T12:00");
-  await depInput.fill(editedDep);
-  await page.getByTestId("save-leg").click();
-  await expect(page.getByText(/report 10:30/i)).toBeVisible();
+  // --- Edit on the day card itself: the pencil re-runs the same lookup pipeline as adding,
+  // and saving is create-then-delete, so the day ends up carrying the NEW flight and the old
+  // trip is gone. This is the only edit path left now that the full-screen detail is
+  // deleted — the leg-level time edit went with it. ---
+  await pickCalendarDay(page, firstIso);
+  await page.getByTestId("day-detail-action").click();
+  await page.getByTestId("card-edit-flightno").fill(FIXTURE.flightNo.slice(2));
+  const saveEdit = page.getByTestId("card-edit-save");
+  await expect(saveEdit).toBeEnabled({ timeout: 20_000 });
+  await saveEdit.click();
 
-  // Back to the Trips list, delete both trips.
-  await page.getByRole("button", { name: /back/i }).click();
-  for (let i = 0; i < 5; i++) {
-    const firstRow = page.getByTestId("upcoming-row").first();
-    const emptyState = page.getByText(/no trips yet/i);
-    await Promise.race([firstRow.waitFor(), emptyState.waitFor()]);
-    if (await emptyState.isVisible().catch(() => false)) break;
-    await firstRow.click();
-    await page.getByTestId("delete-trip").click();
-    await page.getByTestId("confirm-delete").click();
-  }
+  const dayCard = page.getByTestId("day-detail-card");
+  await expect(dayCard).toContainText(`${FIXTURE.origin} → ${FIXTURE.dest}`, { timeout: 20_000 });
+  await expect(dayCard).not.toContainText(EK412.flightNo);
+  // Still two trips: the edit replaced one, it did not add a third.
+  expect(await rosterTrips(page)).toHaveLength(2);
+
+  // --- Delete both, and confirm the roster really is empty (not just the screen). ---
+  await clearRoster(page);
+  expect(await rosterTrips(page)).toHaveLength(0);
   await expect(page.getByText(/no trips yet/i)).toBeVisible();
 });
 
