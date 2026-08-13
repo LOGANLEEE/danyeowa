@@ -53,7 +53,7 @@ codebase to find out. Status words mean exactly one thing:
 | Email OTP sign-in | Live | Fixed dev code locally; unreachable in production |
 | Google sign-in | Live in prod only | Cannot work on localhost or preview URLs — Google needs exact redirect URIs |
 | Share a roster by link | Built | `/share/:token`, public link, no account needed |
-| Crew sharing (per-person) | Built | Invite by email on the Share tab; once accepted, both sides read each other's calendar through the badge row. Read-only in both directions — no write route takes a user id. Schema and routes verified in production (PR #41); the invite→accept flow itself has only been run against a local server, since exercising it on production would leave two throwaway accounts in the real database |
+| Crew sharing (per-person) | Live | Invite by email on the Share tab; once accepted, both sides read each other's calendar through the badge row. Read-only in both directions — no write route takes a user id. Verified in production 2026-08-13 with two throwaway accounts: invite → accept → cross-read → revoke, zero mutation controls on the other roster, rows cleaned up after |
 
 ## App shell
 
