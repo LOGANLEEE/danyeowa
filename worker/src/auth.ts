@@ -77,6 +77,12 @@ export const createAuth = (env: AuthEnv) => {
       emailOTP({
         otpLength: 6,
         expiresIn: 300,
+        // The OTP is a bearer credential for any account, and better-auth's default is to
+        // store it verbatim in `verification.value` (`616087:0`). Read access to D1 was
+        // therefore enough to sign in as anyone. Hashed storage keeps verification working —
+        // better-auth hashes what the user typed and compares — while making the stored row
+        // useless on its own.
+        storeOTP: "hashed",
         allowedAttempts: 3,
         rateLimit: { window: 60, max: 3 },
         // Returning undefined falls through to better-auth's own generator
