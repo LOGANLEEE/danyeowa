@@ -120,7 +120,7 @@ test("crew shares a link, family views it cookie-less, crew revokes, family sees
   // --- Sign out (real UI) -> back to landing. Safe here because this is the last spec file
   // in the run order — no later file depends on the shared session staying valid. ---
   await signOutThroughUi(page);
-  await expect(page.getByRole("heading", { name: /roaster/i, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /danyeowa/i, level: 1 })).toBeVisible();
   // Single-surface landing: email field is inline, no separate "Sign in" CTA to navigate through.
   await expect(page.getByLabel(/email/i)).toBeVisible();
 });

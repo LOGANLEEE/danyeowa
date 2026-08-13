@@ -74,7 +74,7 @@ pushRouter.get("/push/test", async (c) => {
   }
 
   const payload = {
-    title: "roaster-me test",
+    title: "danyeowa test",
     body: "Push is working on this device.",
     tag: "push-test",
   };

@@ -139,6 +139,6 @@ describe("SharedViewer", () => {
 
     render(<SharedViewer token="tok123" now={new Date("2026-09-03T12:00:00.000Z")} />);
 
-    expect(await screen.findByText(/shared via roaster me/i)).toBeInTheDocument();
+    expect(await screen.findByText(/shared via danyeowa/i)).toBeInTheDocument();
   });
 });

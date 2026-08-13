@@ -20,7 +20,7 @@ describe("Landing", () => {
 
   it("renders the wordmark and the departure-board sample", () => {
     render(<Landing onSignedIn={() => {}} />);
-    expect(screen.getByRole("heading", { name: /roaster/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /danyeowa/i })).toBeInTheDocument();
     expect(screen.getByText(/next duty/i)).toBeInTheDocument();
     expect(screen.getByText("EK448")).toBeInTheDocument();
     expect(screen.getByText(/dxb.*akl/i)).toBeInTheDocument();

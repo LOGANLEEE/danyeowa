@@ -1,4 +1,4 @@
-# What roaster-me does
+# What danyeowa does
 
 A running inventory of what is actually built, so a new session doesn't have to re-read the
 codebase to find out. Status words mean exactly one thing:
