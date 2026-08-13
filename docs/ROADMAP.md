@@ -122,9 +122,45 @@ tasks above.
 old share links and installed PWAs) or is deleted outright. Delete the old D1 only after the new
 one is verified through the API, not by looking at row counts.
 
-A backup of production D1 taken before any of this is in the session scratchpad
-(`d1-backup-20260813-1933.sql`, 233 kB, 787 inserts, all 13 tables). Take a fresh one at cutover —
-that one is a rehearsal artifact, not the cutover snapshot.
+### Prep done 2026-08-13 (no downtime, nothing cut over)
+
+Backups now live in `~/.local/share/danyeowa-backups/`, not a session scratchpad — the previous
+one was written somewhere a later session could not reach. Current: `d1-prod-20260813-2030.sql`,
+233 kB, 788 inserts, 13 app tables plus `d1_migrations`. **Still take a fresh one at cutover.**
+
+`danyeowa-db` exists in the danyeowa account, id `2569ddab-ffe2-4734-931e-234a294e6a07`, loaded
+from that export and verified against production by row count — `user=8 account=3 session=16
+trips=10 flights=12 flight_schedules=568 airports=149 crew_invites=3 share_links=1
+push_subscriptions=1`, identical on both sides.
+
+**A D1 export does not import back into D1 as-is.** Three things bite, all found by doing it:
+
+1. The export orders `account` before `user` and `flights` before `trips`, and D1 ignores the
+   `PRAGMA defer_foreign_keys=TRUE` the export writes on line 1. A straight
+   `d1 execute --file <export>` dies with `no such table: main.user`, then with
+   `FOREIGN KEY constraint failed` once the tables exist. Split the file into schema and data,
+   then load the data parents-first: `user` before `account`/`session`/`trips`/`share_links`/
+   `notification_prefs`/`push_subscriptions`/`crew_invites`, and `trips` before `flights`.
+2. `d1 execute --json --file` returns `{"error":{"text":"{\"D1_RESET_DO\":true}"}}`. Use
+   `--file` for bulk load, `--command` for anything whose output you want to read.
+3. D1 caps compound SELECT terms: a ten-way `UNION ALL` of `COUNT(*)` fails with
+   `too many terms in compound SELECT [code: 7500]`. Use scalar subqueries in one SELECT instead.
+
+### The secrets are write-only — this is the real cutover blocker
+
+A new Worker in a new account needs all five secrets re-supplied, and Cloudflare will not read
+them back. Where each one actually comes from:
+
+| Secret | Source | Who |
+|---|---|---|
+| `RESEND_API_KEY` | **nowhere on disk.** Must be re-created in the Resend dashboard | **user** |
+| `GOOGLE_CLIENT_SECRET` | `.dev.vars` (same OAuth client as production) | either |
+| `INGEST_TOKEN` | `~/.config/roaster-me/env` — must keep the same value or the harvester breaks | either |
+| `BETTER_AUTH_SECRET` | regenerate; sessions die in the move anyway | either |
+| `VAPID_PRIVATE_KEY` | regenerate via `scripts/generate-vapid.mjs --put`; the public half goes in `wrangler.jsonc`, and push subscriptions die in the move anyway | either |
+
+Plus the two GitHub secrets: `CLOUDFLARE_API_TOKEN` (a danyeowa-account token, **user**) and
+`CLOUDFLARE_ACCOUNT_ID` → `08d39249abaa892047690aa4c0c34b3a`.
 
 ---
 
