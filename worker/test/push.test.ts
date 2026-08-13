@@ -2,7 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { PushConfig } from "@roaster/shared";
+import type { PushConfig } from "@danyeowa/shared";
 import * as schema from "../src/db/schema";
 import { signInAs } from "./helpers";
 

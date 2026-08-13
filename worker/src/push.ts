@@ -5,8 +5,8 @@ import {
   NotificationPrefsSchema,
   PushSubscribeSchema,
   PushUnsubscribeSchema,
-} from "@roaster/shared";
-import type { PushConfig } from "@roaster/shared";
+} from "@danyeowa/shared";
+import type { PushConfig } from "@danyeowa/shared";
 import * as schema from "./db/schema";
 import { sendPush } from "./webpush";
 import type { Env } from "./index";

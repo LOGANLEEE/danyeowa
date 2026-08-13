@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ShareLink } from "@roaster/shared";
+import type { ShareLink } from "@danyeowa/shared";
 import ShareView from "./ShareView";
 import { createShareLink, getShareLinks, revokeShareLink } from "./api";
 

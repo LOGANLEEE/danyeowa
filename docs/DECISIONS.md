@@ -8,6 +8,34 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-13 (latest)
+
+### The internal identifiers get the new name too
+
+The rename entry below drew the line at user-visible strings and left `@roaster/*`, the repo, the
+Worker and the D1 database alone, on the grounds that renaming them breaks the deployment URL and
+Google's redirect URI for no user-visible gain. That line was moved deliberately: a codebase whose
+every import reads `@roaster/shared` keeps teaching the wrong name to whoever opens it next, and
+the breakage it avoids is breakage §3 of `ROADMAP.md` was going to cause anyway.
+
+**Renamed with no runtime effect** (this change): `@roaster/{web,worker,shared}` →
+`@danyeowa/*` across 50 files, the root package name, the README and CLAUDE.md headings, and the
+fr24 scraper's user-agent (`RoasterMeBot/1.0` → `DanyeowaBot/1.0`).
+
+`ROASTER_API` became `DANYEOWA_API`, but the old name is **still read as a fallback** — that
+variable is set in `~/.config/roaster-me/env` on a machine this repo cannot edit, and a rename
+that silently repoints the harvester at the default URL is worse than an alias that never expires.
+
+**Deliberately still `roaster`:** `docs/rules/*` and `docs/superpowers/{plans,specs}/*` are a
+frozen archive. Rewriting a historical document to say something it did not say makes it useless
+as a record.
+
+The user-agent was previously left alone because changing it changes the fingerprint fr24 sees.
+That is still true; it was accepted because the string is self-identifying either way, and a
+scraper announcing a name the project no longer uses is its own kind of wrong.
+
+---
+
 ## 2026-08-13 (later)
 
 ### The app is called danyeowa

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Airport } from "@roaster/shared";
+import type { Airport } from "@danyeowa/shared";
 import CalendarHome from "./CalendarHome";
 import { confirmSchedule, createTrip, deleteTrip, getAirport, getCrew, getCrewTrips, getTrips, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";

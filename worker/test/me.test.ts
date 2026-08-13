@@ -1,6 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import type { Me } from "@roaster/shared";
+import type { Me } from "@danyeowa/shared";
 import { signInAs } from "./helpers";
 
 describe("GET /api/me", () => {

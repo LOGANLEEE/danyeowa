@@ -2,7 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { ShareLink, SharedView } from "@roaster/shared";
+import type { ShareLink, SharedView } from "@danyeowa/shared";
 import * as schema from "../src/db/schema";
 import { seedAirports } from "../src/db/seed-airports";
 import { signInAs } from "./helpers";

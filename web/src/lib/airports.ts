@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Airport } from "@roaster/shared";
+import type { Airport } from "@danyeowa/shared";
 import { getAirport } from "../api";
 
 /** Session-lived cache of airport lookups, keyed by IATA code. The timeline card looks up

@@ -1,8 +1,8 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
-import { ShareLinkCreateSchema, localDateKey } from "@roaster/shared";
-import type { SharedView, SharedViewTrip } from "@roaster/shared";
+import { ShareLinkCreateSchema, localDateKey } from "@danyeowa/shared";
+import type { SharedView, SharedViewTrip } from "@danyeowa/shared";
 import * as schema from "./db/schema";
 import type { Env } from "./index";
 

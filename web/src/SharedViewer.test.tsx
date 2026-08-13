@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SharedView } from "@roaster/shared";
+import type { SharedView } from "@danyeowa/shared";
 import SharedViewer from "./SharedViewer";
 import { getSharedView } from "./api";
 

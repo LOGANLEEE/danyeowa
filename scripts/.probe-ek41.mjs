@@ -6,7 +6,7 @@ import { borrowChromeProfile, fetchLiveArrival } from "./lib/fr24-live.mjs";
 // Does a borrowed-cookie profile get past the 403 that a fresh Playwright context hits?
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
-const scratch = path.join(os.tmpdir(), "roaster-chrome-profile");
+const scratch = path.join(os.tmpdir(), "danyeowa-chrome-profile");
 borrowChromeProfile(scratch);
 
 const ctx = await chromium.launchPersistentContext(scratch, {

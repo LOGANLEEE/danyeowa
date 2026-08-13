@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { HealthResponse, Me } from "@roaster/shared";
+import type { HealthResponse, Me } from "@danyeowa/shared";
 import { authClient } from "./auth-client";
 import CalendarHome from "./CalendarHome";
 import InstallBanner from "./InstallBanner";

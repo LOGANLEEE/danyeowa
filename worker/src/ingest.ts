@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, isNull, lte, or, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
-import { IngestArrivalSchema, IngestScheduleSchema } from "@roaster/shared";
+import { IngestArrivalSchema, IngestScheduleSchema } from "@danyeowa/shared";
 import * as schema from "./db/schema";
 import type { Env } from "./index";
 

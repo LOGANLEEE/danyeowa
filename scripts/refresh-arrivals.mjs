@@ -32,7 +32,7 @@ import { getUpcomingArrivals, postArrivalCorrections } from "./lib/ingest-client
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..");
-const PROFILE_SCRATCH = path.join(os.tmpdir(), "roaster-chrome-profile");
+const PROFILE_SCRATCH = path.join(os.tmpdir(), "danyeowa-chrome-profile");
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 

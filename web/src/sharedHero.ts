@@ -1,5 +1,5 @@
-import { addDaysIso, localDateKey } from "@roaster/shared";
-import type { SharedViewTrip } from "@roaster/shared";
+import { addDaysIso, localDateKey } from "@danyeowa/shared";
+import type { SharedViewTrip } from "@danyeowa/shared";
 
 export type HeroStatus =
   | { kind: "away"; awayCity: string; homeWeekday: string; daysUntilHome: number }

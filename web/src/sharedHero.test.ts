@@ -6,7 +6,7 @@ import {
   tripLengthDays,
   upcomingTrips,
 } from "./sharedHero";
-import type { SharedViewTrip } from "@roaster/shared";
+import type { SharedViewTrip } from "@danyeowa/shared";
 
 const aklTrip: SharedViewTrip = {
   fromIso: "2026-09-01",

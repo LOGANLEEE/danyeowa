@@ -1,8 +1,8 @@
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
-import { CrewInviteCreateSchema } from "@roaster/shared";
-import type { CrewMember, CrewResponse } from "@roaster/shared";
+import { CrewInviteCreateSchema } from "@danyeowa/shared";
+import type { CrewMember, CrewResponse } from "@danyeowa/shared";
 import * as schema from "./db/schema";
 import { loadTripsWithFlights } from "./trips";
 import type { Env } from "./index";

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { HealthResponse, Me } from "@roaster/shared";
+import type { HealthResponse, Me } from "@danyeowa/shared";
 import { createAuth } from "./auth";
 import { getLastDevOtp } from "./email";
 import { pushRouter } from "./push";

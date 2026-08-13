@@ -13,7 +13,7 @@ import type {
   SharedView,
   Trip,
   TripInput,
-} from "@roaster/shared";
+} from "@danyeowa/shared";
 
 export type TripWithFlights = Trip & { flights: Flight[] };
 

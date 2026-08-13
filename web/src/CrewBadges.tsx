@@ -1,4 +1,4 @@
-import type { CrewMember } from "@roaster/shared";
+import type { CrewMember } from "@danyeowa/shared";
 
 type Props = {
   members: CrewMember[];

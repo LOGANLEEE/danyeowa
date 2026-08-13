@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
-import { TripInputSchema, reportDefault } from "@roaster/shared";
+import { TripInputSchema, reportDefault } from "@danyeowa/shared";
 import * as schema from "./db/schema";
 import type { Env } from "./index";
 

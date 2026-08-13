@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { SharedView } from "@roaster/shared";
+import type { SharedView } from "@danyeowa/shared";
 import { getSharedView } from "./api";
 import { deriveHeroStatus, formatDate, formatDateRange, tripLengthDays, upcomingTrips } from "./sharedHero";
 

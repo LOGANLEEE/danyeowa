@@ -1,5 +1,5 @@
 {
-  "name": "@roaster/worker",
+  "name": "@danyeowa/worker",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@roaster/shared": "workspace:*",
+    "@danyeowa/shared": "workspace:*",
     "better-auth": "^1.6.26",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.6.0"

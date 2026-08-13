@@ -6,7 +6,7 @@ at least once — where one hasn't, it says so.
 ## Deploy
 
 ```bash
-pnpm --filter @roaster/web build     # MUST come first: wrangler ships whatever is in web/dist
+pnpm --filter @danyeowa/web build     # MUST come first: wrangler ships whatever is in web/dist
 npx wrangler deploy
 ```
 

@@ -1,6 +1,6 @@
 import { and, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { formatLocal } from "@roaster/shared";
+import { formatLocal } from "@danyeowa/shared";
 import * as schema from "./db/schema";
 import { sendPush } from "./webpush";
 import type { Env } from "./index";

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { localDateKey, monthGrid, tripDaysInMonth } from "@roaster/shared";
+import { localDateKey, monthGrid, tripDaysInMonth } from "@danyeowa/shared";
 import type { TripWithFlights } from "./api";
 import { dutyDayMarks, type DayKind } from "./lib/dayMarks";
 import { HOME_BASE_IATA } from "./lib/homeBase";
