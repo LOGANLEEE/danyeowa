@@ -83,14 +83,16 @@ ever wants the apex, the app moves to a subdomain and URLs break again — accep
 2. **All push subscriptions die** — subscriptions are origin-bound. Rows in `push_subscriptions`
    become dead; everyone re-subscribes on the new origin.
 3. **Every share link already sent breaks** — the token survives in D1, the host does not.
-4. **Google sign-in breaks until the redirect URI is added** in Google Cloud Console:
-   `https://danyeowa.com/api/auth/callback/google`. **User task.**
+4. ~~Google sign-in breaks until the redirect URI is added~~ — **done 2026-08-13.** The OAuth
+   client now lists all three: the workers.dev URL, `http://localhost:8787`, and
+   `https://danyeowa.com/api/auth/callback/google`. The old workers.dev entry was kept on
+   purpose, so the old Worker can stay up as a redirector and so a failed cutover has a way back.
 5. **CI deploy breaks until `CLOUDFLARE_API_TOKEN`** in GitHub is swapped for a danyeowa-account
    token. **User task.**
 6. **The local harvester breaks** — `~/.config/roaster-me/env` and the launchd plists point at
    `roaster-me.logan-lee.workers.dev`. **User task.**
-7. **wrangler CLI cannot see the danyeowa account** — needs `wrangler login` re-run granting it.
-   **User task.**
+7. ~~wrangler CLI cannot see the danyeowa account~~ — **done 2026-08-13**, `wrangler login`
+   re-run with that account granted. Confirm with `wrangler whoami` before relying on it.
 
 ### Sequence
 
