@@ -23,10 +23,6 @@ export const LegInputSchema = z.object({
 
 export type LegInput = z.infer<typeof LegInputSchema>;
 
-export const LegPatchSchema = LegInputSchema.partial();
-
-export type LegPatch = z.infer<typeof LegPatchSchema>;
-
 export const TripInputSchema = z.object({
   label: z.string().optional(),
   legs: z.array(LegInputSchema).min(1),
