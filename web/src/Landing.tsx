@@ -63,7 +63,7 @@ export default function Landing({ onSignedIn }: Props) {
 
   return (
     <div className="entrance flex w-full max-w-sm flex-col items-center gap-6 text-center">
-      <h1 className="text-3xl font-semibold text-ink">
+      <h1 className="stagger-1 text-3xl font-semibold text-ink">
         danyeowa
       </h1>
 
@@ -71,7 +71,7 @@ export default function Landing({ onSignedIn }: Props) {
           visually dark in both the light and dark app themes on purpose — it's meant to read
           as a physical airport board, not as themed app chrome — so it uses fixed color values
           instead of the ink/card/edge tokens, which flip between themes. */}
-      <div className="flex w-full flex-col gap-1 rounded-lg border border-white/10 bg-[#0b0d12] p-4 text-left shadow-sm">
+      <div className="stagger-2 flex w-full flex-col gap-1 rounded-lg border border-white/10 bg-[#0b0d12] p-4 text-left shadow-sm">
         <p className="text-xs uppercase tracking-[0.2em] text-white/50">Next duty</p>
         <dl className="num flex flex-col text-sm text-white/90">
           <div className="flex items-baseline justify-between border-b border-dashed border-white/15 py-1.5">
@@ -97,7 +97,7 @@ export default function Landing({ onSignedIn }: Props) {
         </dl>
       </div>
 
-      <form onSubmit={codeSent ? handleSignIn : handleSendCode} className="flex w-full flex-col gap-3 text-left">
+      <form onSubmit={codeSent ? handleSignIn : handleSendCode} className="stagger-3 flex w-full flex-col gap-3 text-left">
         <label htmlFor="landing-email" className="text-sm text-ink-muted">
           Email
         </label>

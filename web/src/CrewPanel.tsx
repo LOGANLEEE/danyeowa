@@ -59,7 +59,7 @@ export default function CrewPanel() {
   if (crew === null) return null;
 
   return (
-    <section data-testid="crew-panel" className="flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
+    <section data-testid="crew-panel" className="entrance flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
       <div>
         <h2 className="text-base font-semibold text-ink">Crew</h2>
         <p className="text-sm text-ink-muted">

@@ -74,7 +74,7 @@ export default function InstallBanner() {
   return (
     <div
       data-testid="install-banner"
-      className="flex w-full max-w-xl items-center gap-3 rounded-lg border border-accent bg-accent-soft p-3"
+      className="entrance flex w-full max-w-xl items-center gap-3 rounded-lg border border-accent bg-accent-soft p-3"
     >
       <div className="flex flex-1 flex-col gap-0.5 text-left">
         <p className="text-sm font-medium text-ink">Add danyeowa to your home screen</p>
