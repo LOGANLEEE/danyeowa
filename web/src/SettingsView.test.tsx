@@ -94,8 +94,7 @@ describe("SettingsView", () => {
 
     it("subscribes on toggle-on: requests permission, subscribes pushManager, and POSTs the subscription", async () => {
       // userEvent.setup() must run BEFORE stubbing Notification/serviceWorker: it attaches
-      // internal state to the current globals at setup time (see ShareView.test.tsx's
-      // navigator-stub note for the same pitfall).
+      // internal state to the current globals at setup time.
       const user = userEvent.setup();
 
       const requestPermission = vi.fn().mockResolvedValue("granted");

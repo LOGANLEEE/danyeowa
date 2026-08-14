@@ -5,44 +5,12 @@ import CalendarHome from "./CalendarHome";
 import InstallBanner from "./InstallBanner";
 import Landing from "./Landing";
 import SettingsView from "./SettingsView";
-import ShareView from "./ShareView";
-import SharedViewer from "./SharedViewer";
+import CrewPanel from "./CrewPanel";
 import TabBar from "./TabBar";
 import type { TabName } from "./TabBar";
 import TripForm from "./TripForm";
 
-const SHARE_PATH_PREFIX = "/share/";
-
-/** Extracts the token from a `/share/:token` path, or `null` when the current path isn't a
- * share link. Public family links must be reachable with zero app/auth chrome, so this check
- * happens before any of App's signed-in/signed-out state or effects come into play.
- *
- * Deliberately does NOT decodeURIComponent: tokens are base64url (RFC 4648 §5, alphabet
- * `[A-Za-z0-9_-]`), which never contains a byte that needs percent-encoding, so decoding
- * would only add risk — a hand-mangled URL like `/share/100%` has a lone `%` that isn't a
- * valid percent-escape and throws a URIError. The raw path slice is passed straight through;
- * an unrecognized/malformed token simply 404s from the API like any other unknown token,
- * which SharedViewer already renders as the friendly inactive card. */
-function sharedTokenFromPath(pathname: string): string | null {
-  if (!pathname.startsWith(SHARE_PATH_PREFIX)) return null;
-  const token = pathname.slice(SHARE_PATH_PREFIX.length);
-  return token.length > 0 ? token : null;
-}
-
 export default function App() {
-  // Checked once at module-eval-adjacent render time (not in an effect) so that a /share/:token
-  // load never mounts the rest of App's state or fires its effects (health/me fetches) at all -
-  // family members opening a shared link have no account and must see zero auth-related network
-  // activity, not just a hidden login form.
-  const sharedToken = sharedTokenFromPath(location.pathname);
-  if (sharedToken !== null) {
-    return <SharedViewer token={sharedToken} />;
-  }
-
-  return <SignedInApp />;
-}
-
-function SignedInApp() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
   const [activeTab, setActiveTab] = useState<TabName>("calendar");
@@ -121,7 +89,7 @@ function SignedInApp() {
             }}
           />
         ) : activeTab === "share" ? (
-          <ShareView />
+          <CrewPanel />
         ) : activeTab === "settings" ? (
           <SettingsView email={me.email} onSignOut={handleSignOut} />
         ) : (
