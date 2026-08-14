@@ -75,7 +75,7 @@ Nothing reads `verification.value` outside better-auth — the dev and e2e OTP p
 
 ---
 
-## 3. Move the Worker to the `danyeowa` account — DECIDED, NOT STARTED
+## 3. Move the Worker to the `danyeowa` account — DONE 2026-08-14
 
 Today the Worker + D1 sit in **Logan personal account**; `danyeowa.com` sits in a separate
 **danyeowa** account created by the domain purchase. A Workers custom domain needs the zone and
@@ -151,13 +151,32 @@ push_subscriptions=1`, identical on both sides.
 A new Worker in a new account needs all five secrets re-supplied, and Cloudflare will not read
 them back. Where each one actually comes from:
 
+**There are SIX, not five.** This list said five and the sixth cost a debugging cycle: with
+`EMAIL_FROM` unset, `sendOtpEmail` silently falls back to `DEFAULT_FROM`
+(`danyeowa <onboarding@resend.dev>`) — Resend test mode, which delivers only to the Resend
+account owner's own address. That is the §1 bug exactly, reintroduced by the move. Count the
+old Worker's `wrangler secret list` before trusting any list in a document, including this one.
+
 | Secret | Source | Who |
 |---|---|---|
 | `RESEND_API_KEY` | **nowhere on disk.** Must be re-created in the Resend dashboard | **user** |
+| `EMAIL_FROM` | `danyeowa <noreply@danyeowa.com>` — a plain string, not a credential | either |
 | `GOOGLE_CLIENT_SECRET` | `.dev.vars` (same OAuth client as production) | either |
 | `INGEST_TOKEN` | `~/.config/roaster-me/env` — must keep the same value or the harvester breaks | either |
 | `BETTER_AUTH_SECRET` | regenerate; sessions die in the move anyway | either |
 | `VAPID_PRIVATE_KEY` | regenerate via `scripts/generate-vapid.mjs --put`; the public half goes in `wrangler.jsonc`, and push subscriptions die in the move anyway | either |
+
+### Diagnosing a send that goes nowhere
+
+`POST /api/auth/email-otp/send-verification-otp` returns **200 whatever happens** — better-auth
+swallows the transport error, and `wrangler tail` shows `outcome: ok` with an empty `exceptions`
+array. Neither is evidence of delivery. Two instruments that actually see it:
+
+- **Resend → Logs.** One row per API call. *No row at all* means the Worker's request never
+  authenticated against that account — a dead or foreign key — rather than a rejected send.
+- **The recipient's inbox.** The only proof. Prove the search itself first: query
+  `from:noreply@danyeowa.com newer_than:2d` and confirm it finds a mail you know arrived, before
+  reading an empty result as a failure.
 
 Plus the two GitHub secrets: `CLOUDFLARE_API_TOKEN` (a danyeowa-account token, **user**) and
 `CLOUDFLARE_ACCOUNT_ID` → `08d39249abaa892047690aa4c0c34b3a`.

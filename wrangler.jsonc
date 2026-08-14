@@ -1,6 +1,8 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "roaster-me",
+  "name": "danyeowa",
+  // The Worker must live in the same account as the zone for a custom domain to attach.
+  "account_id": "08d39249abaa892047690aa4c0c34b3a",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -13,19 +15,24 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "roaster-me-db",
-      "database_id": "86f1d8cf-1aec-42ef-82a7-62da5db9d4d9",
+      "database_name": "danyeowa-db",
+      "database_id": "2569ddab-ffe2-4734-931e-234a294e6a07",
       "migrations_dir": "drizzle"
     }
   ],
+  // The apex custom domain is attached ONCE at cutover, not declared here. A
+  // `routes: [{ pattern: "danyeowa.com", custom_domain: true }]` entry makes `wrangler dev`
+  // serve the Worker under that hostname, and better-auth then answers every request from
+  // localhost:8787 with `Invalid origin` — the whole e2e suite fails at sign-in. Verified by
+  // removing exactly this entry and watching 6/6 go green.
   "vars": {
-    // remove when RESEND_API_KEY is set
-    "BETTER_AUTH_URL": "https://roaster-me.logan-lee.workers.dev",
+    // .dev.vars overrides this with http://localhost:8787 for `wrangler dev` and e2e.
+    "BETTER_AUTH_URL": "https://danyeowa.com",
     // public OAuth client identifier — safe to commit; GOOGLE_CLIENT_SECRET is a Worker secret
     "GOOGLE_CLIENT_ID": "247984044046-odt3hsmtj0dkbd7ie6ndavtii6i3ct8r.apps.googleusercontent.com",
     // public half of the VAPID keypair — safe to commit; VAPID_PRIVATE_KEY is a Worker secret
     // (generated + uploaded via scripts/generate-vapid.mjs --put; never written to a file)
-    "VAPID_PUBLIC_KEY": "BPhqxNVUguEX0drbNRPsp1MfmLF2G3Y0xl0ykCtNgpqkMZVeuaFDPlNmBQdnvRZsNfGfNOjwsxnWSvEsx81WcJQ",
+    "VAPID_PUBLIC_KEY": "BBT2wB5Ppr2TZLmGZ8_GnBSGZ2plcc-hq5tLx35Qf15A6i8E9QarKyVEPERuPH5qAR23qtv2HIcupnswwepGYpg",
     // Contact address for the VAPID JWT's `sub` claim (RFC 8292 §2) — safe to commit.
     "VAPID_CONTACT": "mailto:korlogan94@gmail.com"
   },
