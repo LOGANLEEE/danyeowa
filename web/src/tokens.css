@@ -193,6 +193,16 @@ body {
     animation-name: fade-rise;
   }
 
+  /* Staggered children of an .entrance container. These carry the animation themselves —
+     animation-delay alone is inert without an animation-name, which is why the delays here
+     did nothing until the rise was added. Scoped entirely inside no-preference (like
+     .tl-enter below), so under reduced motion the child is simply present, never hidden. */
+  .stagger-1,
+  .stagger-2,
+  .stagger-3 {
+    opacity: 0;
+    animation: fade-rise var(--duration-enter) var(--ease-standard) forwards;
+  }
   .stagger-1 {
     animation-delay: var(--stagger-step);
   }

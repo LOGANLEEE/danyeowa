@@ -87,7 +87,7 @@
       .bp-card {
         position: relative;
         display: flex;
-        width: min(300px, calc(100vw - 48px));
+        width: min(392px, calc(100vw - 40px));
         border: 1px solid var(--bp-edge);
         border-radius: 12px;
         background: var(--bp-card);
@@ -98,40 +98,40 @@
       .bp-card::after {
         content: "";
         position: absolute;
-        right: 84px;
-        width: 12px;
-        height: 12px;
-        margin-right: -6px;
+        right: 110px;
+        width: 14px;
+        height: 14px;
+        margin-right: -7px;
         border-radius: 999px;
         background: var(--bp-ground);
         border: 1px solid var(--bp-edge);
       }
       .bp-card::before {
-        top: -7px;
+        top: -8px;
       }
       .bp-card::after {
-        bottom: -7px;
+        bottom: -8px;
       }
 
       .bp-main {
         flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 6px;
-        padding: 14px 16px;
+        gap: 8px;
+        padding: 18px 20px;
         min-width: 0;
       }
       .bp-stub {
         display: flex;
-        width: 84px;
+        width: 110px;
         flex-direction: column;
-        gap: 6px;
-        padding: 14px 0 14px 14px;
+        gap: 8px;
+        padding: 18px 0 18px 18px;
         border-left: 1px dashed var(--bp-edge);
       }
       .bp-label {
         margin: 0;
-        font-size: 9px;
+        font-size: 11px;
         font-weight: 500;
         letter-spacing: 0.2em;
         text-transform: uppercase;
@@ -139,7 +139,7 @@
       }
       .bp-wordmark {
         margin: 0;
-        font-size: 19px;
+        font-size: 25px;
         font-weight: 600;
         letter-spacing: -0.01em;
       }
@@ -150,11 +150,11 @@
       .bp-seat {
         margin: 0;
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
-        font-size: 13px;
+        font-size: 17px;
         letter-spacing: 0.04em;
       }
       .bp-seat {
-        font-size: 15px;
+        font-size: 20px;
         font-weight: 600;
       }
 
@@ -164,19 +164,19 @@
         position: relative;
         display: flex;
         align-items: flex-end;
-        gap: 2px;
-        height: 22px;
-        margin-top: 4px;
+        gap: 3px;
+        height: 29px;
+        margin-top: 6px;
         overflow: hidden;
       }
       .bp-code i {
-        width: 2px;
+        width: 3px;
         height: 100%;
         background: currentColor;
         opacity: 0.32;
       }
       .bp-code i:nth-child(3n) {
-        width: 4px;
+        width: 5px;
       }
       .bp-code i:nth-child(4n) {
         height: 78%;

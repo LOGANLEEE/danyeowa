@@ -149,12 +149,12 @@ export default function SettingsView({ email, onSignOut }: Props) {
 
   return (
     <div className="entrance flex w-full max-w-xl flex-col gap-6">
-      <div className="flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
+      <div className="stagger-1 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
         <p className="text-xs uppercase text-ink-muted">Signed in as</p>
         <p className="text-ink">{email}</p>
       </div>
 
-      <fieldset className="flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
+      <fieldset className="stagger-2 flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
         <legend className="px-1 text-xs uppercase text-ink-muted">Theme</legend>
         {THEME_OPTIONS.map((option) => (
           <label key={option.value} className="flex items-center gap-2 text-ink">
@@ -171,7 +171,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
         ))}
       </fieldset>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
+      <div className="stagger-3 flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
         <p className="px-1 text-xs uppercase text-ink-muted">Notifications</p>
 
         {!supported ? (
