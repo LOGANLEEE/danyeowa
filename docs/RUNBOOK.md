@@ -6,7 +6,7 @@ at least once — where one hasn't, it says so.
 ## Deploy
 
 ```bash
-pnpm --filter @roaster/web build     # MUST come first: wrangler ships whatever is in web/dist
+pnpm --filter @danyeowa/web build     # MUST come first: wrangler ships whatever is in web/dist
 npx wrangler deploy
 ```
 
@@ -14,7 +14,7 @@ Then verify the deploy rather than trusting it — a mid-deploy fetch returns th
 hash, which looks exactly like a failed deploy:
 
 ```bash
-curl -s "https://roaster-me.logan-lee.workers.dev/?cb=$RANDOM" | grep -o 'index-[A-Za-z0-9_-]*\.js'
+curl -s "https://danyeowa.com/?cb=$RANDOM" | grep -o 'index-[A-Za-z0-9_-]*\.js'
 # must match the hash printed by the build
 ```
 
@@ -34,7 +34,7 @@ additive; reversed, production breaks the moment the Worker deploys. If one ever
 manually, record it in the ledger or the next automated run will try to re-apply it:
 
 ```bash
-npx wrangler d1 execute roaster-me-db --remote --command \
+npx wrangler d1 execute danyeowa-db --remote --command \
   "INSERT INTO d1_migrations (name, applied_at) SELECT '00XX_name.sql', datetime('now')
    WHERE NOT EXISTS (SELECT 1 FROM d1_migrations WHERE name='00XX_name.sql');"
 ```
@@ -101,7 +101,7 @@ node scripts/fetch-schedules.mjs --live-roster --retry-missing        # re-check
   Check for a recurrence with:
 
 ```bash
-npx wrangler d1 execute roaster-me-db --remote --command \
+npx wrangler d1 execute danyeowa-db --remote --command \
   "WITH codes AS (SELECT origin AS iata FROM flight_schedules UNION SELECT dest FROM flight_schedules)
    SELECT count(*) AS unseeded FROM codes WHERE iata NOT IN (SELECT iata FROM airports);"
 ```
@@ -168,7 +168,7 @@ no brew in it) and an absolute `WorkingDirectory`.
 
 ```bash
 # Send yourself a test push — open this in the app on the phone, signed in
-https://roaster-me.logan-lee.workers.dev/api/push/test
+https://danyeowa.com/api/push/test
 ```
 
 Returns `{"sent":1,...}` on success. `failedWithStatus` carries the push service's HTTP status;
@@ -182,7 +182,7 @@ Alerts are driven by the Worker's cron (`*/15`), which runs both scans:
 Inspect state:
 
 ```bash
-npx wrangler d1 execute roaster-me-db --remote --command \
+npx wrangler d1 execute danyeowa-db --remote --command \
   "SELECT flight_no, arr_utc, arrival_alert_stage FROM flights ORDER BY arr_utc DESC LIMIT 10;"
 ```
 

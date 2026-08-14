@@ -9,10 +9,10 @@ import {
   localDateKey,
   tripProgress,
   tripDaysInMonth,
-} from "@roaster/shared";
+} from "@danyeowa/shared";
 import { deleteTrip, getCrew, getCrewTrips, getTrips } from "./api";
 import type { TripWithFlights } from "./api";
-import type { CrewMember } from "@roaster/shared";
+import type { CrewMember } from "@danyeowa/shared";
 import AddTripForm from "./AddTripForm";
 import CrewBadges from "./CrewBadges";
 import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";

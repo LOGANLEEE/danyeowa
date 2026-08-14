@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import type { Airport, LegInput, ScheduleLeg } from "@roaster/shared";
+import type { Airport, LegInput, ScheduleLeg } from "@danyeowa/shared";
 import {
   TripInputSchema,
   addDaysIso,
   legDatesFromPicked,
   normaliseFlightNo,
   wallToUtc,
-} from "@roaster/shared";
+} from "@danyeowa/shared";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";
 

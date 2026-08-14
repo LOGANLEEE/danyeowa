@@ -64,7 +64,7 @@ export default function Landing({ onSignedIn }: Props) {
   return (
     <div className="entrance flex w-full max-w-sm flex-col items-center gap-6 text-center">
       <h1 className="text-3xl font-semibold text-ink">
-        roaster<span className="text-accent">·me</span>
+        danyeowa
       </h1>
 
       {/* Departure-board panel: static illustrative sample, not live schedule data. It stays

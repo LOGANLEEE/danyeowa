@@ -16,8 +16,8 @@ describe("PWA manifest wiring", () => {
     const manifest = JSON.parse(
       readFileSync(join(webRoot, "public", "manifest.webmanifest"), "utf-8"),
     );
-    expect(manifest.name).toBe("Roaster Me");
-    expect(manifest.short_name).toBe("Roaster");
+    expect(manifest.name).toBe("danyeowa");
+    expect(manifest.short_name).toBe("danyeowa");
     expect(manifest.start_url).toBe("/");
     expect(manifest.display).toBe("standalone");
     expect(manifest.background_color).toBe("#15171c");

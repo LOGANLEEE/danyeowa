@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { Airport, LegInput, ScheduleLeg } from "@roaster/shared";
-import { TripInputSchema, addDaysIso, legDatesFromPicked, wallToUtc } from "@roaster/shared";
+import type { Airport, LegInput, ScheduleLeg } from "@danyeowa/shared";
+import { TripInputSchema, addDaysIso, legDatesFromPicked, wallToUtc } from "@danyeowa/shared";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
 import TripsCalendar from "./TripsCalendar";
 

@@ -55,11 +55,11 @@ export default defineConfig({
     // live-source-verified seed set — this keeps the flight numbers every spec exercises
     // as pre-warmed cache-hits so the suite never depends on live provider network calls.
     command:
-      "cd .. && pnpm --filter @roaster/web build" +
-      " && wrangler d1 migrations apply roaster-me-db --local" +
-      " && wrangler d1 execute roaster-me-db --local --file ./scripts/seed-airports.sql" +
-      " && wrangler d1 execute roaster-me-db --local --file ./scripts/seed-schedules.sql" +
-      " && wrangler d1 execute roaster-me-db --local --file ./scripts/seed-e2e-fixtures.sql" +
+      "cd .. && pnpm --filter @danyeowa/web build" +
+      " && wrangler d1 migrations apply danyeowa-db --local" +
+      " && wrangler d1 execute danyeowa-db --local --file ./scripts/seed-airports.sql" +
+      " && wrangler d1 execute danyeowa-db --local --file ./scripts/seed-schedules.sql" +
+      " && wrangler d1 execute danyeowa-db --local --file ./scripts/seed-e2e-fixtures.sql" +
       " && wrangler dev --port 8787",
     url: "http://localhost:8787/api/health",
     reuseExistingServer: true,

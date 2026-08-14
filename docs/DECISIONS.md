@@ -8,6 +8,107 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-14
+
+### The family share link is deleted; the invite is the only way to share
+
+`/share/:token` gave anyone holding the URL a read-only view of dates and city names. It was
+built for the partner waiting at home, and it failed at the one job that matters: it carried **no
+clock times**, so the person collecting her could not tell when to leave for the airport.
+
+Adding times to it was considered first and rejected. The link is a bearer URL with no expiry and
+no per-person revoke — whoever it reaches, and whoever they forward it to, gets whatever it shows.
+Report and landing times are exactly the data her airline forbids her circulating, so putting them
+behind a forwardable URL is the wrong trade. The invite already solves this: it is per-person, it
+is revocable, and `GET /crew/:userId/trips` already returns the full roster with every time.
+
+**What went:** `worker/src/share.ts` (all four routes), `share-schema.ts`, `SharedViewer`,
+`sharedHero`, `ShareView`, their tests, `e2e/share.spec.ts`, the `SharedView*`/`ShareLink` types,
+and the `share_links` table (migration `0013`).
+
+**`ShareView` was not the share page.** It was a container holding `CrewPanel` *and* the
+link-management UI, so deleting it naively would have taken the invite UI with it. `CrewPanel` now
+mounts directly on that tab. The tab keeps `data-testid="tab-share"` because `e2e/crew.spec.ts`
+drives it; renaming the tab belongs with the invite redesign, not here.
+
+**`App` collapsed into `SignedInApp`.** The split existed only so a `/share/:token` load could
+return before any auth state or effect ran. With no public route left, the indirection was dead.
+
+**The cost, stated plainly:** until the invite work lands, a partner without an account can see
+nothing at all. That is a deliberate regression — a link that shows the wrong things is not better
+than no link, and keeping it alive would have meant designing around it.
+
+**Not renamed yet:** `crew_invites` names the sender's job, not the relationship — the recipient
+may be a partner or a parent, not crew. Renaming the table, routes and UI is queued with the
+invite redesign.
+
+---
+
+## 2026-08-13 (latest)
+
+### The internal identifiers get the new name too
+
+The rename entry below drew the line at user-visible strings and left `@roaster/*`, the repo, the
+Worker and the D1 database alone, on the grounds that renaming them breaks the deployment URL and
+Google's redirect URI for no user-visible gain. That line was moved deliberately: a codebase whose
+every import reads `@roaster/shared` keeps teaching the wrong name to whoever opens it next, and
+the breakage it avoids is breakage §3 of `ROADMAP.md` was going to cause anyway.
+
+**Renamed with no runtime effect** (this change): `@roaster/{web,worker,shared}` →
+`@danyeowa/*` across 50 files, the root package name, the README and CLAUDE.md headings, and the
+fr24 scraper's user-agent (`RoasterMeBot/1.0` → `DanyeowaBot/1.0`).
+
+`ROASTER_API` became `DANYEOWA_API`, but the old name is **still read as a fallback** — that
+variable is set in `~/.config/roaster-me/env` on a machine this repo cannot edit, and a rename
+that silently repoints the harvester at the default URL is worse than an alias that never expires.
+
+**Deliberately still `roaster`:** `docs/rules/*` and `docs/superpowers/{plans,specs}/*` are a
+frozen archive. Rewriting a historical document to say something it did not say makes it useless
+as a record.
+
+The user-agent was previously left alone because changing it changes the fingerprint fr24 sees.
+That is still true; it was accepted because the string is self-identifying either way, and a
+scraper announcing a name the project no longer uses is its own kind of wrong.
+
+---
+
+## 2026-08-13 (later)
+
+### The app is called danyeowa
+
+`roaster·me` was a misspelling. The word for a cabin-crew monthly schedule is **roster**; a
+roaster roasts coffee. Fixing the spelling was considered and rejected: `rosterme.com` is taken,
+and **RosterMe** (rosterme.au) is a live Australian security-guard rostering product — moving to
+the correct spelling meant moving into a more crowded name, not out of one.
+
+**danyeowa** (다녀와) is the Korean send-off to someone leaving: *go, and come back*. English
+"goodbye" carries no promise of return; 다녀와 does. That is the whole product — the partner of a
+cabin crew member, tracking when she goes and when she is back.
+
+Checked before buying: no app, service or company of that name (Korean or English search, both
+app stores), all of `danyeowa.com/.kr/.co.kr` unregistered, and Revised Romanisation gives exactly
+one spelling, so the name survives being heard and typed. `danyeowa.com` registered 2026-08-13.
+
+**Rejected, with reasons worth keeping:**
+- `vaivem.app` — "vai e vem" describes the product exactly, but Brazil already has 8+ ride-hailing
+  and taxi apps called Vaivem / Vai Vem, in the same app stores our first users browse.
+- `pouso.app` — landing, and a resting place. Clean on the stores, but "Pouso Alegre" (a city in
+  Minas Gerais) owns 70-80% of search results for the word.
+- `saudade` — every good TLD taken, and it names absence where this app is about return.
+
+**Renamed:** wordmark, `<title>`, PWA manifest name/short_name, the push fallback title, the
+share-view footer, the install banner, and the email From. **Not renamed:** the repo, the Worker
+(`roaster-me`), the D1 database (`roaster-me-db`), and the `@roaster/*` package names — internal
+identifiers whose rename would break the deployment URL, Google's registered redirect URI, and
+every installed PWA, for zero user-visible gain.
+
+**The wordmark is one text node.** It was briefly `danyeo<span>wa</span>` to keep the old two-tone
+treatment, which made the accessible name compute as "danyeo wa" — two words to a screen reader.
+Splitting a word mid-token is not the same as splitting `roaster` / `·me` at a boundary. Do not
+reintroduce it.
+
+---
+
 ## 2026-08-13
 
 ### The Trips tab is gone, and the trip detail screen with it

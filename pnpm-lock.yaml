@@ -30,7 +30,7 @@ importers:
 
   web:
     dependencies:
-      '@roaster/shared':
+      '@danyeowa/shared':
         specifier: workspace:*
         version: link:../shared
       better-auth:
@@ -85,7 +85,7 @@ importers:
 
   worker:
     dependencies:
-      '@roaster/shared':
+      '@danyeowa/shared':
         specifier: workspace:*
         version: link:../shared
       better-auth:

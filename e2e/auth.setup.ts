@@ -28,7 +28,7 @@ import { AUTH_FILE } from "./playwright.config";
  */
 setup("authenticate", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /roaster/i, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /danyeowa/i, level: 1 })).toBeVisible();
   await expect(page.locator("header")).toHaveCount(0);
 
   await signInThroughUi(page, E2E_EMAIL);

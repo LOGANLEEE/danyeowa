@@ -12,7 +12,7 @@ self.addEventListener("push", (event) => {
     // rather than letting the push event throw.
   }
 
-  const title = data.title || "Roaster Me";
+  const title = data.title || "danyeowa";
   const options = {
     body: data.body,
     tag: data.tag,

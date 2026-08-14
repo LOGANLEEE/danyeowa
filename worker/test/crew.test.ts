@@ -1,7 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { CrewResponse, Flight, Trip } from "@roaster/shared";
+import type { CrewResponse, Flight, Trip } from "@danyeowa/shared";
 
 type TripWithFlights = Trip & { flights: Flight[] };
 import * as schema from "../src/db/schema";
