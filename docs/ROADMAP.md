@@ -166,6 +166,40 @@ old Worker's `wrangler secret list` before trusting any list in a document, incl
 | `BETTER_AUTH_SECRET` | regenerate; sessions die in the move anyway | either |
 | `VAPID_PRIVATE_KEY` | regenerate via `scripts/generate-vapid.mjs --put`; the public half goes in `wrangler.jsonc`, and push subscriptions die in the move anyway | either |
 
+### Setting `RESEND_API_KEY` without breaking it
+
+Three attempts failed before this stuck, all for avoidable reasons.
+
+**The key you can see is not the key.** Resend's API-keys table shows a truncated
+`re_VMufX4Mr…`, about 15 characters. A real key is **36**. The truncated one looks plausible,
+authenticates as nothing, and produces zero rows in Resend's own log — indistinguishable from a
+Worker that never called out. The full value appears once, in the creation dialog, and is never
+shown again. Check before setting:
+
+```
+pbpaste | tr -d '[:space:]' | wc -c      # 36 = real key, ~15 = you copied the table
+```
+
+**Pipe it, never paste it into a prompt.** `pbpaste | tr -d '[:space:]' | wrangler secret put …`
+strips stray whitespace and removes the manual paste, which is where the value gets mangled.
+
+**`wrangler secret put` is refused whenever a newer undeployed version exists** —
+*"the latest version of your Worker isn't currently deployed"*. Any earlier `versions secret put`
+leaves exactly that state. The full sequence:
+
+```
+pbpaste | tr -d '[:space:]' | npx wrangler versions secret put RESEND_API_KEY --name danyeowa
+npx wrangler versions deploy <new-version-id>@100 -y
+```
+
+`versions secret put` alone is **not** enough: it creates the version but leaves it serving no
+traffic, so nothing changes until you deploy it.
+
+**A plain `wrangler deploy` inherits secrets from the LATEST version, not the deployed one.**
+This cuts both ways and has done both here: it is how `EMAIL_FROM` reached production through CI,
+and it is how a non-working key would have been dragged back in at the next merge after a
+rollback. After any rollback, check that the newest version holds a value you have tested.
+
 ### Diagnosing a send that goes nowhere
 
 `POST /api/auth/email-otp/send-verification-otp` returns **200 whatever happens** — better-auth
