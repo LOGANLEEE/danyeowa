@@ -1,14 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SharedView } from "@danyeowa/shared";
 import App from "./App";
-import { getSharedView } from "./api";
-
-vi.mock("./api", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./api")>()),
-  getSharedView: vi.fn(),
-}));
 
 vi.mock("./auth-client", () => ({
   authClient: {
@@ -45,7 +38,7 @@ function stubSignedInFetch() {
       if (url.includes("/api/health")) return Promise.resolve(jsonResponse({ ok: true, d1: true }));
       if (url.includes("/api/me")) return Promise.resolve(jsonResponse({ email: "pilot@example.com" }));
       if (url.includes("/api/trips")) return Promise.resolve(jsonResponse({ trips: [] }));
-      if (url.includes("/api/share-links")) return Promise.resolve(jsonResponse({ links: [] }));
+      if (url.includes("/api/crew")) return Promise.resolve(jsonResponse({ members: [], received: [], sent: [] }));
       return Promise.reject(new Error(`unexpected fetch: ${url}`));
     })
   );
@@ -54,44 +47,6 @@ function stubSignedInFetch() {
 describe("App", () => {
   afterEach(() => {
     window.history.pushState({}, "", "/");
-  });
-
-  it("renders the shared viewer for /share/:token with zero auth or app fetches", async () => {
-    const fetchSpy = vi.fn((_input: RequestInfo | URL) =>
-      Promise.reject(new Error("fetch should not be called on /share/ route")),
-    );
-    vi.stubGlobal("fetch", fetchSpy);
-    const view: SharedView = { crewName: "Isis", generatedAt: "2026-08-15T00:00:00.000Z", trips: [] };
-    vi.mocked(getSharedView).mockResolvedValue(view);
-
-    window.history.pushState({}, "", "/share/tok123");
-    render(<App />);
-
-    expect(await screen.findByTestId("shared-hero")).toBeInTheDocument();
-    expect(screen.queryByTestId("tab-calendar")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
-    expect(fetchSpy).not.toHaveBeenCalled();
-    const calledUrls = fetchSpy.mock.calls.map((c) => String(c[0]));
-    expect(calledUrls.some((u) => u.includes("/api/me"))).toBe(false);
-    expect(calledUrls.some((u) => u.includes("/api/auth"))).toBe(false);
-  });
-
-  it("renders the inactive card (not a crash) for a hand-mangled /share/ path with a lone %", async () => {
-    const fetchSpy = vi.fn((_input: RequestInfo | URL) =>
-      Promise.reject(new Error("fetch should not be called on /share/ route")),
-    );
-    vi.stubGlobal("fetch", fetchSpy);
-    // A raw, unencoded "%" isn't a valid percent-escape - decodeURIComponent would throw a
-    // URIError on it. getSharedView resolves null (as the real 404 does for any unrecognized
-    // token) so the malformed value flows through to the same friendly inactive state as any
-    // other bad link, rather than needing special-casing.
-    vi.mocked(getSharedView).mockResolvedValue(null);
-
-    window.history.pushState({}, "", "/share/100%");
-    expect(() => render(<App />)).not.toThrow();
-
-    expect(await screen.findByTestId("shared-inactive")).toBeInTheDocument();
-    expect(getSharedView).toHaveBeenCalledWith("100%");
   });
 
   it("renders nothing until /api/me answers, leaving the boot splash up", async () => {
@@ -145,7 +100,7 @@ describe("App", () => {
     await screen.findByTestId("tab-calendar");
 
     await user.click(screen.getByTestId("tab-share"));
-    expect(await screen.findByText(/family opens the link/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("crew-panel")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("tab-settings"));
     expect(await screen.findByText("pilot@example.com")).toBeInTheDocument();

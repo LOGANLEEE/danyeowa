@@ -185,21 +185,37 @@ Plus the two GitHub secrets: `CLOUDFLARE_API_TOKEN` (a danyeowa-account token, *
 
 ## 4. The partner cannot see times — THE ACTUAL PRODUCT GAP
 
-`/share/:token` returns crew name, dates and **city names only — no clock times**. The privacy
-design is deliberate, but it means the person waiting cannot tell when to leave for the airport,
-which is the reason this app exists.
+Still the reason this app exists, and still unsolved. **The share link was deleted on 2026-08-14**
+(see `DECISIONS.md`), so right now a partner without an account sees nothing at all — a deliberate
+regression, on the grounds that a link showing the wrong things was not worth designing around.
 
-Crew sharing (shipped) does not solve it: that is crew-to-crew, requires an account, and the
-partner is meant to be account-less.
+The invite is now the only sharing mechanism, and it already carries every time:
+`GET /crew/:userId/trips` returns the full roster. What it does not have is a shape suited to
+someone who is not crew.
 
-Three pieces, in order:
+### Decided so far
 
-1. **Times on the share view** — report time and landing time. She typed them in herself; passing
-   them to the person collecting her is not a leak of airline data.
-2. **Landing alert to the partner** — push today goes only to the crew member's own devices. The
-   partner is the one who needs "she lands in 60 minutes".
-3. **A "next days off" view** — dates get planned around free days, and free days are currently
-   something you infer by looking at gaps in a month grid.
+- **The recipient may have no account.** Invite an address; if they never sign in they still get a
+  useful view. Signing in makes the grant personal and revocable.
+- **Times render in the viewer's own timezone.** Consistent with `deriveHeroStatus`, which already
+  resolves against `viewerTz`. The payload should carry UTC instants and let the client format.
+- **`crew_invites` is misnamed.** The recipient may be a partner or a parent. Rename the table,
+  routes and UI as part of this work.
+
+### Open, and blocking a spec
+
+- **Who picks the tier.** Making "signed up" the thing that unlocks the full roster lets the
+  recipient grant themselves more access than the sender intended. The alternative is the sender
+  choosing a level per invite, with sign-in changing only revocability. Not settled.
+- **What each tier shows.** The candidate limits are: current month only, no past, no flight
+  numbers.
+
+### Still wanted, unchanged
+
+1. **Report time and landing time** wherever the partner ends up reading.
+2. **Landing alert to the partner** — the staged alerts (60 min, 30 min, touchdown) already exist
+   in `flights.arrivalAlertStage`; only the delivery to a non-account holder is missing.
+3. **A "next days off" view** — free days are currently something you infer from gaps in a grid.
 
 ---
 

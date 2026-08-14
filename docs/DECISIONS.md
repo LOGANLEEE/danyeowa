@@ -8,6 +8,42 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-14
+
+### The family share link is deleted; the invite is the only way to share
+
+`/share/:token` gave anyone holding the URL a read-only view of dates and city names. It was
+built for the partner waiting at home, and it failed at the one job that matters: it carried **no
+clock times**, so the person collecting her could not tell when to leave for the airport.
+
+Adding times to it was considered first and rejected. The link is a bearer URL with no expiry and
+no per-person revoke — whoever it reaches, and whoever they forward it to, gets whatever it shows.
+Report and landing times are exactly the data her airline forbids her circulating, so putting them
+behind a forwardable URL is the wrong trade. The invite already solves this: it is per-person, it
+is revocable, and `GET /crew/:userId/trips` already returns the full roster with every time.
+
+**What went:** `worker/src/share.ts` (all four routes), `share-schema.ts`, `SharedViewer`,
+`sharedHero`, `ShareView`, their tests, `e2e/share.spec.ts`, the `SharedView*`/`ShareLink` types,
+and the `share_links` table (migration `0013`).
+
+**`ShareView` was not the share page.** It was a container holding `CrewPanel` *and* the
+link-management UI, so deleting it naively would have taken the invite UI with it. `CrewPanel` now
+mounts directly on that tab. The tab keeps `data-testid="tab-share"` because `e2e/crew.spec.ts`
+drives it; renaming the tab belongs with the invite redesign, not here.
+
+**`App` collapsed into `SignedInApp`.** The split existed only so a `/share/:token` load could
+return before any auth state or effect ran. With no public route left, the indirection was dead.
+
+**The cost, stated plainly:** until the invite work lands, a partner without an account can see
+nothing at all. That is a deliberate regression — a link that shows the wrong things is not better
+than no link, and keeping it alive would have meant designing around it.
+
+**Not renamed yet:** `crew_invites` names the sender's job, not the relationship — the recipient
+may be a partner or a parent, not crew. Renaming the table, routes and UI is queued with the
+invite redesign.
+
+---
+
 ## 2026-08-13 (latest)
 
 ### The internal identifiers get the new name too

@@ -9,8 +9,6 @@ import type {
   ScheduleConfirmInput,
   ScheduleLookupResponse,
   ScheduleSuggestResponse,
-  ShareLink,
-  SharedView,
   Trip,
   TripInput,
 } from "@danyeowa/shared";
@@ -98,40 +96,9 @@ export async function suggestReturns(params: {
   return parseJson<ScheduleSuggestResponse>(res);
 }
 
-export async function createShareLink(label?: string): Promise<ShareLink> {
-  const res = await fetch("/api/share-links", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(label ? { label } : {}),
-  });
-  if (!res.ok) throw new Error("Failed to create share link");
-  const body = await parseJson<{ id: string; token: string; label: string | null; createdAt: number }>(
-    res,
-  );
-  return { ...body, revoked: false };
-}
 
-export async function getShareLinks(): Promise<ShareLink[]> {
-  const res = await fetch("/api/share-links");
-  if (!res.ok) throw new Error("Failed to load share links");
-  const body = await parseJson<{ links: ShareLink[] }>(res);
-  return body.links;
-}
 
-export async function revokeShareLink(id: string): Promise<void> {
-  const res = await fetch(`/api/share-links/${id}/revoke`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to revoke share link");
-}
 
-/** Public, unauthenticated fetch of a family viewer's shared roster. Returns `null` when the
- * link is unknown or has been revoked (both 404 identically server-side — no existence
- * oracle), so the viewer page can show a single friendly "no longer active" state either way. */
-export async function getSharedView(token: string): Promise<SharedView | null> {
-  const res = await fetch(`/api/shared/${encodeURIComponent(token)}`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error("Failed to load shared view");
-  return parseJson<SharedView>(res);
-}
 
 export async function getPushConfig(): Promise<PushConfig> {
   const res = await fetch("/api/push/config");
