@@ -328,6 +328,18 @@ function DayDetailCard({
     }
   }
 
+  // Native <dialog> rather than a hand-rolled overlay: showModal() gives the focus trap,
+  // Esc-to-close and an inert background for free, and there is no dependency to add. React
+  // owns `confirmingDelete`; this only mirrors it onto the element, and onClose feeds Esc
+  // (which the browser handles itself) back into state.
+  const deleteDialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = deleteDialogRef.current;
+    if (!dialog) return;
+    if (confirmingDelete && !dialog.open) dialog.showModal();
+    if (!confirmingDelete && dialog.open) dialog.close();
+  }, [confirmingDelete]);
+
   if (!trip || !firstLeg) {
     return (
       <div data-testid="day-detail-card" className="hairline flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
@@ -390,28 +402,53 @@ function DayDetailCard({
         </p>
       )}
 
+      {/* Mounted only while confirming. A closed <dialog> is display:none in a browser but is
+          still queryable text in jsdom, so leaving it mounted would leak "Delete this duty?"
+          into every assertion about the card's contents. */}
       {confirmingDelete && (
-        <div className="mt-3 flex flex-col gap-2 rounded-lg border border-edge bg-raised p-3">
-          <p className="text-ink">Delete trip? This can't be undone.</p>
-          <div className="flex gap-2">
+      <dialog
+        ref={deleteDialogRef}
+        data-testid="delete-dialog"
+        aria-labelledby="delete-dialog-title"
+        onClose={() => setConfirmingDelete(false)}
+        // Clicking the backdrop lands on the dialog element itself, never on its children.
+        onClick={(e) => {
+          if (e.target === deleteDialogRef.current) setConfirmingDelete(false);
+        }}
+        className="max-w-[calc(100vw-2rem)] rounded-lg border border-edge bg-card p-5 text-ink backdrop:bg-black/50"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <p id="delete-dialog-title" className="text-lg font-semibold text-ink">
+              Delete this duty?
+            </p>
+            {/* Names the duty: a day can now hold more than one, so "delete trip" alone is
+                ambiguous once two cards are on screen. */}
+            <p className="num text-sm text-ink-muted">
+              {firstLeg.flightNo} · {firstLeg.origin} → {legs[legs.length - 1]!.dest}
+            </p>
+            <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)}</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              className="min-h-[48px] rounded border border-edge px-4 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+            >
+              Cancel
+            </button>
             <button
               type="button"
               data-testid="confirm-delete"
               disabled={deleting}
               onClick={confirmDelete}
-              className="min-h-[48px] rounded border border-danger px-3 py-2 font-medium text-danger transition-colors duration-[120ms] hover:bg-danger/10 disabled:opacity-50"
+              className="min-h-[48px] rounded border border-danger px-4 py-2 font-medium text-danger transition-colors duration-[120ms] hover:bg-danger/10 disabled:opacity-50"
             >
               Delete
             </button>
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(false)}
-              className="min-h-[48px] rounded border border-edge px-3 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
-            >
-              Cancel
-            </button>
           </div>
         </div>
+      </dialog>
       )}
 
       {expanded && (
@@ -483,6 +520,91 @@ function DayDetailCard({
             </div>
           </form>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A day's duties. A calendar date can hold more than one — a turnaround in the morning and a
+ * standby that evening are two separate trips with their own report times, not legs of one.
+ *
+ * Each duty gets its own DayDetailCard, so edit and delete stay unambiguous: one card owns one
+ * trip, and its own expand/confirm state. That isolation is why stacking beats merging them into
+ * a single card with shared controls.
+ */
+function DayDetail({
+  isoDate,
+  trips,
+  homeTz,
+  onAdded,
+  onChanged,
+  readOnly = false,
+}: {
+  isoDate: string;
+  trips: TripWithFlights[];
+  homeTz: string;
+  onAdded: (isoDate: string) => void;
+  onChanged: () => void;
+  readOnly?: boolean;
+}) {
+  const [addingAnother, setAddingAnother] = useState(false);
+  // Picking a different day must not leave the second-duty form open on it.
+  useEffect(() => {
+    setAddingAnother(false);
+  }, [isoDate]);
+
+  // An empty day is the existing single-card case: DayDetailCard already renders the add form
+  // when `trip` is null, so there is no second add path to keep in step.
+  if (trips.length === 0) {
+    return (
+      <DayDetailCard
+        isoDate={isoDate}
+        trip={null}
+        homeTz={homeTz}
+        onAdded={onAdded}
+        onChanged={onChanged}
+        readOnly={readOnly}
+      />
+    );
+  }
+
+  return (
+    <div data-testid="day-detail" className="flex flex-col gap-3">
+      {trips.map((trip) => (
+        <DayDetailCard
+          key={trip.id}
+          isoDate={isoDate}
+          trip={trip}
+          homeTz={homeTz}
+          onAdded={onAdded}
+          onChanged={onChanged}
+          readOnly={readOnly}
+        />
+      ))}
+
+      {readOnly ? null : addingAnother ? (
+        <div className="hairline flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
+          <p className="text-sm text-ink-muted">Another duty on {humanDateLabel(isoDate, homeTz)}</p>
+          <AddTripForm
+            isoDate={isoDate}
+            homeTz={homeTz}
+            onSubmitted={() => {
+              onAdded(isoDate);
+              onChanged();
+              setAddingAnother(false);
+            }}
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          data-testid="add-another-duty"
+          onClick={() => setAddingAnother(true)}
+          className="min-h-[44px] rounded border border-dashed border-edge px-3 py-2 text-sm text-ink-muted transition-colors duration-[120ms] hover:border-accent hover:text-accent"
+        >
+          + Add another duty
+        </button>
       )}
     </div>
   );
@@ -575,23 +697,33 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
 
   const homeTz = trips?.[0]?.flights[0]?.depTz ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  // Finds the trip (if any) covering a given local calendar date, by checking every trip's
-  // away-day span for that date's month against tripDaysInMonth (mirrors TripsCalendar's own
-  // per-day lookup so the day card always matches what the grid renders).
-  function tripForDay(iso: string): TripWithFlights | null {
-    if (!trips) return null;
+  // Every trip covering a given local calendar date, by checking each trip's away-day span for
+  // that date's month against tripDaysInMonth (mirrors TripsCalendar's own per-day lookup so the
+  // day card always matches what the grid renders).
+  //
+  // Returns a LIST: a date can hold more than one duty — a turnaround in the morning and a
+  // standby that evening are separate trips, not legs of one. This used to return the first
+  // match and stop, which made any second duty on a day invisible.
+  function tripsForDay(iso: string): TripWithFlights[] {
+    if (!trips) return [];
     const [yearStr, monthStr] = iso.split("-");
     const year = Number(yearStr);
     const month = Number(monthStr);
+    const found: TripWithFlights[] = [];
     for (const trip of trips) {
       const legs = [...trip.flights].sort((a, b) => a.legSeq - b.legSeq);
       const first = legs[0];
       const last = legs[legs.length - 1];
       if (!first || !last) continue;
       const spanDays = tripDaysInMonth([{ firstDepUtc: first.depUtc, lastArrUtc: last.arrUtc }], year, month, homeTz);
-      if (spanDays.has(iso)) return trip;
+      if (spanDays.has(iso)) found.push(trip);
     }
-    return null;
+    // Earliest departure first, so the morning duty reads above the evening one.
+    return found.sort((a, b) => {
+      const aDep = [...a.flights].sort((x, y) => x.legSeq - y.legSeq)[0]?.depUtc ?? "";
+      const bDep = [...b.flights].sort((x, y) => x.legSeq - y.legSeq)[0]?.depUtc ?? "";
+      return Date.parse(aDep) - Date.parse(bDep);
+    });
   }
 
   // Selects today, or the next trip-free day after today when today already has a trip — used
@@ -608,16 +740,11 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
       showRosterOf(null);
       return;
     }
-    const today = localDateKey(now.toISOString(), homeTz);
-    let candidate = today;
-    for (let i = 0; i < 366; i++) {
-      if (!tripForDay(candidate)) {
-        setSelectedIso(candidate);
-        return;
-      }
-      const [y, m, d] = candidate.split("-").map(Number) as [number, number, number];
-      candidate = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
-    }
+    // Simply today. This used to walk forward to the next trip-free day, because a day that
+    // already had a duty could not take another one — now that it can, skipping would send you
+    // to the wrong date to add the second duty of the day you are looking at.
+    setSelectedIso(localDateKey(now.toISOString(), homeTz));
+    return;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTodayToken, trips]);
 
@@ -651,9 +778,9 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
         />
         {selectedIso ? (
           <div className="w-full text-left">
-            <DayDetailCard
+            <DayDetail
               isoDate={selectedIso}
-              trip={tripForDay(selectedIso)}
+              trips={tripsForDay(selectedIso)}
               homeTz={homeTz}
               onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
               onChanged={refetch}
@@ -756,9 +883,9 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
 
       {selectedIso ? (
         <div className="stagger-2">
-          <DayDetailCard
+          <DayDetail
             isoDate={selectedIso}
-            trip={tripForDay(selectedIso)}
+            trips={tripsForDay(selectedIso)}
             homeTz={homeTz}
             onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
             onChanged={refetch}
