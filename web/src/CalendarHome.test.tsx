@@ -67,6 +67,34 @@ const aklTrip: TripWithFlights = {
   ],
 };
 
+// A SECOND, separate duty on the same local day as aklTrip's first leg (2026-08-11 Asia/Dubai):
+// an early turnaround that lands before EK448 even reports. Two trips, two report times — not
+// legs of one, which is why the day card stacks them rather than merging.
+const secondDutySameDay: TripWithFlights = {
+  id: "trip-2",
+  userId: "u1",
+  label: null,
+  createdAt: now.getTime(),
+  flights: [
+    {
+      id: "f9",
+      tripId: "trip-2",
+      userId: "u1",
+      flightNo: "EK900",
+      origin: "DXB",
+      dest: "BAH",
+      depUtc: "2026-08-10T22:00:00.000Z",
+      arrUtc: "2026-08-10T23:10:00.000Z",
+      reportUtc: "2026-08-10T20:30:00.000Z",
+      depTz: "Asia/Dubai",
+      arrTz: "Asia/Bahrain",
+      source: "manual",
+      notes: null,
+      legSeq: 0,
+    },
+  ],
+};
+
 // 3-day DXB->AKL->DXB trip, home base Asia/Dubai (origin of the first leg).
 // first dep 2026-08-10 02:15 Dubai local; last arr 2026-08-12 18:00 Dubai local.
 const inProgressTrip: TripWithFlights = {
@@ -357,7 +385,7 @@ describe("CalendarHome", () => {
     expect(screen.getByTestId("flightno-input")).toBeInTheDocument();
   });
 
-  it("skips to the next trip-free day when today already has a trip", async () => {
+  it("selects TODAY even when today already has a duty (a day can hold more than one)", async () => {
     vi.mocked(getTrips).mockResolvedValue([inProgressTrip]);
     // now falls on inProgressTrip's away span (2026-08-09..2026-08-12 Asia/Dubai).
     const { rerender } = render(<CalendarHome now={new Date("2026-08-10T10:00:00.000Z")} openTodayToken={0} />);
@@ -365,15 +393,27 @@ describe("CalendarHome", () => {
 
     rerender(<CalendarHome now={new Date("2026-08-10T10:00:00.000Z")} openTodayToken={1} />);
 
-    const detail = await screen.findByTestId("day-detail-card");
-    // Skips past the trip's away days (through 2026-08-12) to the first free day after - this
-    // is the add flow (flight-no input), not an existing-trip summary (no delete/edit control
-    // for EK448's trip). Recent-flight chips legitimately surface past flight numbers like
-    // EK448 as one-tap suggestions, so a bare "not EK448 text anywhere" check would now be a
-    // false positive for the actual regression this guards against.
-    expect(detail).toHaveTextContent(/no duty/i);
-    expect(screen.getByTestId("flightno-input")).toBeInTheDocument();
-    expect(screen.queryByTestId("delete-trip")).not.toBeInTheDocument();
+    // The + button used to walk forward to the first trip-free day, because a day that already
+    // had a duty could not take another. Now that it can, skipping would send you to the wrong
+    // date to add the second duty of the day you are looking at. So: today, duty and all — the
+    // existing duty is shown, with the add-another affordance beneath it.
+    const detail = await screen.findByTestId("day-detail");
+    expect(detail).toHaveTextContent(/EK448/);
+    expect(screen.getByTestId("add-another-duty")).toBeInTheDocument();
+  });
+
+  it("stacks a card per duty when a day holds more than one", async () => {
+    // Two separate trips whose away spans both cover 2026-08-11.
+    vi.mocked(getTrips).mockResolvedValue([aklTrip, secondDutySameDay]);
+    const user = userEvent.setup();
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+
+    const cards = await screen.findAllByTestId("day-detail-card");
+    expect(cards).toHaveLength(2);
+    // Each card owns its own delete control, so the two duties stay independently removable.
+    expect(screen.getAllByTestId("delete-trip")).toHaveLength(2);
   });
 
   it("delete-trip -> confirm-delete on the day card deletes the trip and refetches", async () => {
@@ -388,7 +428,8 @@ describe("CalendarHome", () => {
 
     // Delete lives on the card header itself - no need to expand first.
     await user.click(screen.getByTestId("delete-trip"));
-    expect(screen.getByText(/can't be undone/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("delete-dialog")).toBeInTheDocument();
+    expect(screen.getByText(/delete this duty\?/i)).toBeInTheDocument();
 
     vi.mocked(getTrips).mockResolvedValueOnce([]);
     await user.click(screen.getByTestId("confirm-delete"));
