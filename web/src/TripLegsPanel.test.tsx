@@ -25,6 +25,7 @@ const trip: TripWithFlights = {
       source: "manual",
       notes: null,
       legSeq: 1,
+      operating: true,
     },
     {
       id: "f1",
@@ -41,6 +42,7 @@ const trip: TripWithFlights = {
       source: "manual",
       notes: null,
       legSeq: 0,
+      operating: true,
     },
   ],
 };

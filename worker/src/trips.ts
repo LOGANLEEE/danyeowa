@@ -81,8 +81,21 @@ export async function loadTripsWithFlights(
 
   // Only trips that still have a matching flight (post from/to filter) are returned,
   // ordered by their earliest flight's dep_utc ascending.
+  //
+  // `flights` carries ONLY the sectors the crew member works. The aircraft's onward routing goes
+  // to `continuation`, a separate field nothing reads by accident. That split is deliberate: six
+  // places derive times from legs (landing, report, day marks, calendar spans, alerts), and
+  // trusting all six to remember an `operating` flag is how a wrong pickup time ships quietly.
+  // Put the wrong data somewhere they do not look and forgetting yields the correct answer.
   const tripsWithFlights = trips
-    .map((trip) => ({ ...trip, flights: flightsByTrip.get(trip.id) ?? [] }))
+    .map((trip) => {
+      const all = flightsByTrip.get(trip.id) ?? [];
+      return {
+        ...trip,
+        flights: all.filter((f) => f.operating),
+        continuation: all.filter((f) => !f.operating),
+      };
+    })
     .filter((trip) => trip.flights.length > 0 || (!from && !to));
 
   tripsWithFlights.sort((a, b) => {
@@ -152,6 +165,9 @@ tripsRouter.post("/trips", async (c) => {
       depTz: airportByIata.get(origin)!.tz,
       arrTz: airportByIata.get(dest)!.tz,
       legSeq: index,
+      // Absent means operating: the harvester's ingest payloads and every existing client send
+      // no flag, and every leg they send is one the crew works.
+      operating: leg.operating ?? true,
     };
   });
 
@@ -161,7 +177,16 @@ tripsRouter.post("/trips", async (c) => {
   const flightInserts = flightRows.map((row) => database.insert(schema.flights).values(row));
   await database.batch([tripInsert, ...flightInserts]);
 
-  return c.json({ ...tripRow, createdAt: Date.now(), flights: flightRows }, 201);
+  // Same partition as the read path, so a client never sees a non-operating leg in `flights`.
+  return c.json(
+    {
+      ...tripRow,
+      createdAt: Date.now(),
+      flights: flightRows.filter((f) => f.operating),
+      continuation: flightRows.filter((f) => !f.operating),
+    },
+    201,
+  );
 });
 
 tripsRouter.delete("/trips/:id", async (c) => {

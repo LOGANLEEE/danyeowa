@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as schema from "../src/db/schema";
 import { seedAirports } from "../src/db/seed-airports";
-import { runReportScan } from "../src/report-scan";
+import { runArrivalScan, runReportScan } from "../src/report-scan";
 import { __testing } from "../src/webpush";
 
 const NOW_MS = Date.parse("2026-09-01T00:00:00.000Z");
@@ -32,6 +32,9 @@ async function insertFlight(opts: {
   reportNotifiedAt?: number | null;
   origin?: string;
   dest?: string;
+  arrUtc?: string;
+  arrivalAlertStage?: number | null;
+  operating?: boolean;
 }): Promise<string> {
   const database = db();
   const tripId = crypto.randomUUID();
@@ -45,11 +48,13 @@ async function insertFlight(opts: {
     origin: opts.origin ?? "DXB",
     dest: opts.dest ?? "SYD",
     depUtc: "2026-09-01T04:00:00.000Z",
-    arrUtc: "2026-09-01T18:00:00.000Z",
+    arrUtc: opts.arrUtc ?? "2026-09-01T18:00:00.000Z",
     reportUtc: opts.reportUtc,
     depTz: "Asia/Dubai",
     arrTz: "Australia/Sydney",
     reportNotifiedAt: opts.reportNotifiedAt ?? null,
+    arrivalAlertStage: opts.arrivalAlertStage ?? null,
+    operating: opts.operating ?? true,
   });
   return flightId;
 }
@@ -165,6 +170,56 @@ describe("runReportScan", () => {
       skippedOutsideLead: 0,
       expiredSubscriptionsRemoved: 0,
     });
+  });
+
+  // A multi-sector flight number is one aircraft routing, not one crew duty: EK205 is
+  // DXB->MXP->JFK and the crew can change at Milan. The sector she does not work is stored so
+  // the routing stays true — but report-scan queries `flights` DIRECTLY by reportUtc/arrUtc,
+  // with no trip context at all, so it never sees the API's operating/continuation split. It is
+  // the one place the safe-by-default shape does not reach, and the failure is loud: a push
+  // announcing a report time she does not have, or a landing she is not on.
+  it("does NOT send a report push for a sector the crew member does not operate", async () => {
+    const userId = await makeUser("report-scan-not-operating@example.com");
+    await addSubscription(userId, "https://push.example.com/not-operating");
+    await insertFlight({
+      userId,
+      reportUtc: new Date(NOW_MS + 60 * 60 * 1000).toISOString(), // squarely inside the lead window
+      operating: false,
+    });
+
+    const testEnv = await testVapidEnv();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runReportScan(testEnv, NOW_MS);
+
+    expect(result.notified).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
+
+  it("does NOT send an arrival push for a sector the crew member does not operate", async () => {
+    const userId = await makeUser("arrival-scan-not-operating@example.com");
+    await addSubscription(userId, "https://push.example.com/arrival-not-operating");
+    await insertFlight({
+      userId,
+      // Report far outside the window so only the arrival scan can possibly fire.
+      reportUtc: new Date(NOW_MS + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      arrUtc: new Date(NOW_MS + 30 * 60 * 1000).toISOString(), // 30 min out — a live arrival stage
+      operating: false,
+    });
+
+    const testEnv = await testVapidEnv();
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runArrivalScan(testEnv, NOW_MS);
+
+    expect(result.notified).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
   });
 
   it("sends a push and stamps report_notified_at for a due flight within the user's lead window", async () => {

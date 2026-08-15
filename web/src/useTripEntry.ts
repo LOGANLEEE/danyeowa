@@ -107,6 +107,15 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
 
   const [flightNo, setFlightNo] = useState("");
   const [autofillLegs, setAutofillLegs] = useState<AutofillLegDraft[] | null>(null);
+  /**
+   * Index of the last leg the crew member actually works, or null for "all of them".
+   *
+   * A multi-sector flight number is one aircraft routing, not one crew duty: EK205 is
+   * DXB->MXP->JFK and the crew can change at Milan. Null (not `length - 1`) is the default so
+   * appending a leg with "+ add flight" keeps meaning "all of it" without having to be kept in
+   * step with the list's length.
+   */
+  const [finalLegIndex, setFinalLegIndex] = useState<number | null>(null);
   const [autofillFlightNo, setAutofillFlightNo] = useState<string | null>(null);
   const [lookupMiss, setLookupMiss] = useState(false);
   // True while a debounced schedule lookup's fetch is in flight (not during the debounce
@@ -150,6 +159,8 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
         const result = await lookupSchedule(candidate, pickedDate);
         if (result) {
           setAutofillLegs(autofillLegsFrom(pickedDate, candidate, result.legs));
+          // A different flight number is a different routing — never carry a stale pick over.
+          setFinalLegIndex(null);
           setAutofillFlightNo(candidate);
           setLookupMiss(false);
           // A new outbound lookup replaces whatever was previewed before, including any
@@ -306,7 +317,13 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       dayOffset: number;
     }[] = [];
 
-    for (const leg of autofillLegs) {
+    // Everything after the chosen final destination is the aircraft's onward routing: stored so
+    // the routing stays true, flagged so no derived time (landing, report, day marks, alerts)
+    // counts it.
+    const lastOperating = finalLegIndex ?? autofillLegs.length - 1;
+
+    for (const [index, leg] of autofillLegs.entries()) {
+      const operating = index <= lastOperating;
       const depUtc = wallToUtc(`${leg.depDate}T${leg.depTime}:00`, leg.originTz);
       // Arrival date = this leg's own dep date + this leg's own dayOffset (arr date - dep date).
       const arrDate = addDaysIso(leg.depDate, leg.dayOffset);
@@ -319,16 +336,22 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
         dest: leg.dest,
         depUtc,
         arrUtc,
+        operating,
       });
-      confirmPayloads.push({
-        flightNo: leg.flightNo,
-        legSeq: leg.scheduleLegSeq,
-        origin: leg.origin,
-        dest: leg.dest,
-        depLocal: leg.depTime,
-        arrLocal: leg.arrTime,
-        dayOffset: leg.dayOffset,
-      });
+      // Only sectors she actually worked are reported back to the crowd layer. She can vouch
+      // for the times she flew; a sector she got off before is hearsay, and `scheduleLegSeq` is
+      // this leg's index within the flight's OWN schedule, so it is never re-indexed here.
+      if (operating) {
+        confirmPayloads.push({
+          flightNo: leg.flightNo,
+          legSeq: leg.scheduleLegSeq,
+          origin: leg.origin,
+          dest: leg.dest,
+          depLocal: leg.depTime,
+          arrLocal: leg.arrTime,
+          dayOffset: leg.dayOffset,
+        });
+      }
     }
 
     const parsed = TripInputSchema.safeParse({ legs: resolvedLegs });
@@ -410,6 +433,8 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     flightNo,
     setFlightNo,
     autofillLegs,
+    finalLegIndex,
+    setFinalLegIndex,
     autofillFlightNo,
     lookupMiss,
     resolving,

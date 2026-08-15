@@ -183,6 +183,46 @@ export default function AddTripForm({
                   </div>
                 )}
 
+                {/* A multi-sector flight number is one aircraft routing, not one crew duty — EK205
+                    is DXB→MXP→JFK and the crew can change at Milan. Only shown when there is
+                    actually a choice to make. */}
+                {preview && preview.length > 1 && (
+                  <div
+                    data-testid="final-destination"
+                    className="flex flex-col gap-2 rounded border border-edge bg-raised p-4"
+                  >
+                    <p className="text-ink">Where do you get off?</p>
+                    <div className="flex flex-wrap gap-2">
+                      {preview.map((leg, i) => {
+                        const chosen = (entry.finalLegIndex ?? preview.length - 1) === i;
+                        return (
+                          <button
+                            key={leg.legSeq}
+                            type="button"
+                            data-testid={`final-dest-${leg.dest}`}
+                            aria-pressed={chosen}
+                            onClick={() => entry.setFinalLegIndex(i)}
+                            className={[
+                              "num min-h-[44px] rounded border px-3 py-2 transition-colors duration-[120ms]",
+                              chosen
+                                ? "border-accent bg-accent-soft text-accent"
+                                : "border-edge text-ink-muted hover:border-ink-muted",
+                            ].join(" ")}
+                          >
+                            {leg.dest}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {(entry.finalLegIndex ?? preview.length - 1) < preview.length - 1 && (
+                      <p data-testid="continuation-note" className="text-sm text-ink-muted">
+                        The rest is saved as the aircraft's onward routing — it won't count as your
+                        landing time.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {appendedLegs.length > 0 && (
                   <div data-testid="appended-card" className="flex flex-col gap-3 rounded border border-edge bg-raised p-4">
                     <div className="flex items-center justify-between">

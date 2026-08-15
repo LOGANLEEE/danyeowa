@@ -36,6 +36,11 @@ export const flights = sqliteTable("flights", {
   source: text("source").notNull().default("manual"),
   notes: text("notes"),
   legSeq: integer("leg_seq").notNull().default(0),
+  /** Does the crew member actually work this sector? A multi-sector flight number is one
+   * aircraft routing, not one crew duty — EK205 is DXB->MXP->JFK and the crew can change at
+   * Milan. False marks the aircraft's onward routing: kept so the routing stays true, excluded
+   * from every derived time (landing, report, day marks, arrival alerts). */
+  operating: integer("operating", { mode: "boolean" }).notNull().default(true),
   reportNotifiedAt: integer("report_notified_at", { mode: "number" }),
   // Separate from reportNotifiedAt because the two alerts fire at different moments of the same
   // flight: report time is for the person working it, arrival is for whoever is meeting it.

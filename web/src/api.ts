@@ -13,7 +13,13 @@ import type {
   TripInput,
 } from "@danyeowa/shared";
 
-export type TripWithFlights = Trip & { flights: Flight[] };
+/**
+ * `flights` carries ONLY the sectors the crew member works. The aircraft's onward routing — the
+ * legs it flies on after she gets off — lives in `continuation`, deliberately somewhere nothing
+ * reads by accident, so a consumer that forgets this feature exists still gets the right landing
+ * time. Optional because older payloads (and fixtures) simply have no continuation.
+ */
+export type TripWithFlights = Trip & { flights: Flight[]; continuation?: Flight[] };
 
 async function parseJson<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;

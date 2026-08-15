@@ -25,6 +25,72 @@ describe("AddTripForm", () => {
     vi.useRealTimers();
   });
 
+  // EK205 is DXB->MXP->JFK and the crew can change at Milan, so the crew member may finish
+  // before the aircraft does. Picking the first destination must mark the later sector as the
+  // aircraft's onward routing — not drop it, and not leave it counting as her landing.
+  it("multi-sector: picking an earlier final destination marks the later legs not-operating", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(lookupSchedule).mockResolvedValue({
+      legs: [
+        {
+          legSeq: 0,
+          origin: "DXB",
+          dest: "MXP",
+          depLocal: "09:25",
+          arrLocal: "14:10",
+          dayOffset: 0,
+          originTz: "Asia/Dubai",
+          destTz: "Europe/Rome",
+          confirmCount: 2,
+        },
+        {
+          legSeq: 1,
+          origin: "MXP",
+          dest: "JFK",
+          depLocal: "16:10",
+          arrLocal: "18:55",
+          dayOffset: 0,
+          originTz: "Europe/Rome",
+          destTz: "America/New_York",
+          confirmCount: 2,
+        },
+      ],
+    });
+    vi.mocked(createTrip).mockResolvedValue({
+      id: "trip-205",
+      userId: "u1",
+      label: null,
+      createdAt: Date.now(),
+      flights: [],
+    });
+
+    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+
+    await user.type(screen.getByTestId("flightno-input"), "205");
+    await vi.advanceTimersByTimeAsync(400);
+    await screen.findByTestId("autofill-card");
+
+    // Both destinations offered; the last is the default, so no note yet.
+    await screen.findByTestId("final-destination");
+    expect(screen.queryByTestId("continuation-note")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("final-dest-MXP"));
+    expect(screen.getByTestId("continuation-note")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /add to roster/i }));
+    await waitFor(() => expect(createTrip).toHaveBeenCalled());
+
+    const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
+    expect(payload!.legs).toHaveLength(2);
+    expect(payload!.legs[0]).toMatchObject({ dest: "MXP", operating: true });
+    expect(payload!.legs[1]).toMatchObject({ dest: "JFK", operating: false });
+
+    // Only the sector she actually flew is reported back to the crowd-sourced schedule layer —
+    // she cannot vouch for times on a leg she was not on.
+    expect(confirmSchedule).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(confirmSchedule).mock.calls[0]?.[0]).toMatchObject({ dest: "MXP" });
+  });
+
   it("add flow: happy path posts the same UTC payload as the original stepper, then fires confirmSchedule and onSubmitted", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     vi.mocked(lookupSchedule).mockResolvedValue({
@@ -63,6 +129,7 @@ describe("AddTripForm", () => {
           source: "manual",
           notes: null,
           legSeq: 0,
+          operating: true,
         },
       ],
     });

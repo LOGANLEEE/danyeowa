@@ -24,6 +24,7 @@ function tripWith(id: string, flightNo: string, depUtc: string): TripWithFlights
         source: "manual",
         notes: null,
         legSeq: 0,
+        operating: true,
       },
     ],
   };
@@ -89,6 +90,7 @@ describe("useRecentFlights", () => {
           source: "manual",
           notes: null,
           legSeq: 0,
+          operating: true,
         },
         {
           id: "f2",
@@ -105,6 +107,7 @@ describe("useRecentFlights", () => {
           source: "manual",
           notes: null,
           legSeq: 1,
+          operating: true,
         },
       ],
     };

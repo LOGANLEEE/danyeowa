@@ -122,7 +122,10 @@ export async function signOutThroughUi(page: Page): Promise<void> {
 }
 
 /** One trip as /api/trips returns it — enough to count trips and their legs. */
-type RosterTrip = { id: string; flights: { id: string; flightNo: string }[] };
+type RosterLeg = { id: string; flightNo: string; dest: string; operating: boolean };
+/** `flights` is only the sectors the crew works; `continuation` is the aircraft's onward
+ * routing, which the API keeps out of `flights` on purpose. */
+type RosterTrip = { id: string; flights: RosterLeg[]; continuation?: RosterLeg[] };
 
 /**
  * The signed-in account's roster, straight from the API the app itself calls.
