@@ -47,6 +47,7 @@ const aklTrip: TripWithFlights = {
       source: "manual",
       notes: null,
       legSeq: 0,
+      operating: true,
     },
     {
       id: "f2",
@@ -63,6 +64,7 @@ const aklTrip: TripWithFlights = {
       source: "manual",
       notes: null,
       legSeq: 1,
+      operating: true,
     },
   ],
 };
@@ -91,6 +93,7 @@ const secondDutySameDay: TripWithFlights = {
       source: "manual",
       notes: null,
       legSeq: 0,
+      operating: true,
     },
   ],
 };
@@ -118,6 +121,7 @@ const inProgressTrip: TripWithFlights = {
       source: "manual",
       notes: null,
       legSeq: 0,
+      operating: true,
     },
     {
       id: "g2",
@@ -134,6 +138,7 @@ const inProgressTrip: TripWithFlights = {
       source: "manual",
       notes: null,
       legSeq: 1,
+      operating: true,
     },
   ],
 };
@@ -163,6 +168,7 @@ const citySampleTrip: TripWithFlights = {
       source: "manual",
       notes: null,
       legSeq: 0,
+      operating: true,
     },
   ],
 };
@@ -607,6 +613,7 @@ describe("CalendarHome", () => {
           source: "manual",
           notes: null,
           legSeq: 0,
+          operating: true,
         },
       ],
     };

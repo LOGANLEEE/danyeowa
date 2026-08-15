@@ -114,6 +114,10 @@ export async function runArrivalScan(env: Env, nowMs: number): Promise<ReportSca
       and(
         gte(schema.flights.arrUtc, windowStartIso),
         lte(schema.flights.arrUtc, windowEndIso),
+        // Only sectors the crew member actually works. This query reads `flights` directly, so
+        // it never sees the operating/continuation split /api/trips applies — it is the one
+        // place that must remember the flag, and forgetting it announces a landing she is not on.
+        eq(schema.flights.operating, true),
         // Stage 0 is the last one, so a flight that has had it is finished.
         or(isNull(schema.flights.arrivalAlertStage), gt(schema.flights.arrivalAlertStage, 0)),
       ),
@@ -244,6 +248,8 @@ export async function runReportScan(env: Env, nowMs: number): Promise<ReportScan
       and(
         gte(schema.flights.reportUtc, nowIso),
         lte(schema.flights.reportUtc, windowEndIso),
+        // See the arrival scan above: direct read of `flights`, so the flag is explicit here.
+        eq(schema.flights.operating, true),
         isNull(schema.flights.reportNotifiedAt),
       ),
     );

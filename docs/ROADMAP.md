@@ -253,6 +253,31 @@ someone who is not crew.
 
 ---
 
+## 6. Which sector is hers — DONE 2026-08-16
+
+Shipped per `docs/superpowers/specs/2026-08-15-operating-sector-design.md`.
+
+EK205 is DXB → MXP → JFK and the crew can change at Milan. The app stored every leg the schedule
+returned, so someone finishing at MXP was recorded as landing at **JFK 18:55** instead of
+**MXP 14:10** — wrong in the one number this app exists to get right.
+
+The add form now asks *"Where do you get off?"* whenever a lookup returns more than one sector.
+Later sectors are kept, marked `operating = false` (migration `0014`), and the API partitions them
+out of `flights` into `continuation`. That split is the safety mechanism: six places derive times
+from legs, and a consumer that has never heard of this feature still reads only her sectors.
+
+`report-scan.ts` is the one place the split does not reach — it queries `flights` directly by
+`reportUtc`/`arrUtc` with no trip context — so it filters explicitly. Both its queries carry a
+test proven failing first (`expected 1 to be +0`: a push for a landing she is not on).
+
+Only sectors she actually worked are reported back to the crowd-sourced schedule layer; she cannot
+vouch for times on a leg she was not on. `scheduleLegSeq` is never re-indexed.
+
+**Still open:** whether the partner's view should mention the onward routing at all. Moot until
+§4 builds a partner view, and the spec leans towards no.
+
+---
+
 ## 5. Smaller open items
 
 - **KIPRIS trademark check for 다녀와 is unverified.** The search page is a JS SPA; a scrape

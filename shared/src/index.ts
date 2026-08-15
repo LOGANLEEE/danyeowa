@@ -19,6 +19,10 @@ export const LegInputSchema = z.object({
   // depTz/arrTz resolved server-side from the airports table by IATA; not client-supplied.
   depTz: z.string().optional(),
   arrTz: z.string().optional(),
+  /** False for a sector the aircraft flies on without this crew member — the leg is stored so
+   * the routing stays true, but it is excluded from every derived time. Absent means operating,
+   * which keeps every existing caller (and the harvester's ingest payloads) correct. */
+  operating: z.boolean().optional(),
 });
 
 export type LegInput = z.infer<typeof LegInputSchema>;
@@ -54,6 +58,7 @@ export const FlightSchema = z.object({
   source: z.string(),
   notes: z.string().nullable(),
   legSeq: z.number(),
+  operating: z.boolean(),
 });
 
 export type Flight = z.infer<typeof FlightSchema>;
