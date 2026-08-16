@@ -63,6 +63,13 @@ test("crew: invite, accept, read each other's roster, and stop sharing", async (
   const card = b.page.getByTestId("day-detail-card");
   await expect(card).toContainText(EK412.origin);
 
+  // The whole point of sharing: the person who is NOT crew can see the clock. Report time is
+  // when her day starts; the arrival is when you leave for the airport. Asserting the route
+  // alone would pass on a card that shows dates and cities and no times at all — which is
+  // exactly what the deleted share link did.
+  await expect(card).toContainText(EK412.reportLocal);
+  await expect(card).toContainText(EK412.arrTime);
+
   // Read-only: no edit, no delete, and no add form on one of their empty days.
   await expect(b.page.getByTestId("day-detail-action")).toHaveCount(0);
   await expect(b.page.getByTestId("delete-trip")).toHaveCount(0);
