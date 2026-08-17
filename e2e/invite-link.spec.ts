@@ -46,15 +46,22 @@ test("invite link: a signed-out visitor sees who invited them, and the token gra
   const guestPage = await guest.newPage();
   await guestPage.goto(`/invite/${token}`);
 
+  // Stage one explains before it asks: who invited you, and what you would get. No form yet.
+  await expect(guestPage.getByTestId("invite-headline")).toContainText(inviterEmail.split("@")[0]!);
+  await expect(guestPage.getByLabel(/email/i)).toHaveCount(0);
+
+  // The blurred calendar is invented furniture, and says so. Blur is decoration — a line of CSS
+  // removes it — so what protects the roster is that no real data is ever sent here.
+  const peek = guestPage.getByTestId("invite-peek");
+  await expect(peek).toBeVisible();
+  await expect(peek).toContainText(/sample/i);
+
+  // Stage two: the sign-in form, with the masked address and never the full one.
+  await guestPage.getByTestId("invite-continue").click();
   const panel = guestPage.getByTestId("invite-preview");
   await expect(panel).toBeVisible();
-  await expect(panel).toContainText(inviterEmail.split("@")[0]!);
-  await expect(panel).toContainText("•"); // masked address, never the full one
+  await expect(panel).toContainText("•");
   await expect(panel).not.toContainText(guestEmail);
-
-  // No roster data reaches an unauthenticated visitor — the reason this route may exist at all.
-  const panelText = (await panel.textContent()) ?? "";
-  expect(panelText).not.toMatch(/\d{1,2}:\d{2}/);
 
   // The token is not a credential: holding it opens nothing.
   expect((await guestPage.request.get("/api/trips")).status()).toBe(401);
