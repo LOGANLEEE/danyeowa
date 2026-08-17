@@ -26,6 +26,13 @@ async function signIn(browser: Browser, ip: string): Promise<{ page: Page; email
 }
 
 test("crew: invite, accept, read each other's roster, and stop sharing", async ({ browser }) => {
+  // The heaviest test in the suite: TWO full email-OTP sign-ins (each allowed 20s on its own)
+  // plus a calendar walk to a fixture date months out, all inside the config's 30s default. That
+  // leaves no headroom on a loaded CI runner, and it timed out at helpers.ts:91 waiting for the
+  // add form — before any of the crew logic under test had run. Not flakiness: a budget smaller
+  // than the work. test.slow() triples it.
+  test.slow();
+
   const a = await signIn(browser, "203.0.113.10");
   const b = await signIn(browser, "203.0.113.11");
 
