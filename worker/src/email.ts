@@ -23,14 +23,16 @@ function escapeHtml(value: string): string {
  * truth and already exists by the time this runs. A failed send must not undo a real invite —
  * but it must not be silent either, so the caller reports it back to the sender.
  *
- * Deliberately carries NO token or sign-in link. The invite is claimed by signing in as the
- * invited address, so a forwarded email grants nothing — which is the whole reason the old
- * unlisted share link was deleted.
+ * The link carries the invite token, but the token only opens a PREVIEW: who invited you and
+ * which address to sign in with. It cannot accept the invite and it reveals nothing about the
+ * roster, so a forwarded email still grants no access to anyone's schedule. Accepting requires
+ * signing in as the invited address, exactly as before.
  */
 export async function sendCrewInviteEmail(
   env: EmailEnv,
   to: string,
   fromLabel: string,
+  token: string,
 ): Promise<boolean> {
   if (!env.RESEND_API_KEY) return false;
   const who = escapeHtml(fromLabel);
@@ -48,8 +50,9 @@ export async function sendCrewInviteEmail(
         html:
           `<p><strong>${who}</strong> wants to share their flight roster with you on danyeowa.</p>` +
           `<p>You'll see when they report, when they land, and which days they're free.</p>` +
-          `<p><a href="https://danyeowa.com">Open danyeowa</a> and sign in with this email address` +
-          ` &mdash; the invitation will be waiting.</p>`,
+          `<p><a href="https://danyeowa.com/invite/${encodeURIComponent(token)}">See the invitation</a></p>` +
+          `<p>You'll sign in with this email address &mdash; the link on its own doesn't open` +
+          ` anyone's roster.</p>`,
       }),
     });
     return res.ok;

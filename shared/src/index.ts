@@ -296,6 +296,14 @@ export type CrewMember = {
   inviteId: string;
 };
 
+/** What an unauthenticated visitor holding an invite link is allowed to see. Deliberately
+ * carries nothing about the roster — see the route's comment in worker/src/crew.ts. */
+export type InvitePreview = {
+  fromName: string;
+  /** e.g. `k•••••94@gmail.com` — enough to recognise, not enough to harvest. */
+  toEmailMasked: string;
+};
+
 export type CrewInvite = {
   id: string;
   /** The invited address, lower-cased. */

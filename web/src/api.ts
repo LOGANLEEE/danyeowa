@@ -11,6 +11,7 @@ import type {
   ScheduleSuggestResponse,
   Trip,
   TripInput,
+  InvitePreview,
 } from "@danyeowa/shared";
 
 /**
@@ -140,6 +141,16 @@ export async function updateNotificationPrefs(input: NotificationPrefsInput): Pr
 }
 
 /** The crew you share rosters with, plus invites in either direction. */
+/** The one unauthenticated fetch in the app: what an invite link shows before sign-in.
+ * `null` for an unknown, revoked, accepted or expired link — the page then degrades to the
+ * plain sign-in screen rather than a dead end. */
+export async function getInvitePreview(token: string): Promise<InvitePreview | null> {
+  const res = await fetch(`/api/invite/${encodeURIComponent(token)}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Failed to load the invitation");
+  return parseJson<InvitePreview>(res);
+}
+
 export async function getCrew(): Promise<CrewResponse> {
   const res = await fetch("/api/crew");
   if (!res.ok) throw new Error("Failed to load crew");
