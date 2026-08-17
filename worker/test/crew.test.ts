@@ -1,6 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { drizzle } from "drizzle-orm/d1";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CrewResponse, Flight, Trip } from "@danyeowa/shared";
 
 type TripWithFlights = Trip & { flights: Flight[] };
@@ -11,6 +11,11 @@ import { signInAs } from "./helpers";
 // Storage is shared across the tests in this file (not rolled back per test), so anything a
 // test writes has to be cleared here or the next one inherits it — the accounts created in
 // beforeAll are deliberately kept.
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete (env as unknown as { RESEND_API_KEY?: string }).RESEND_API_KEY;
+});
+
 beforeEach(async () => {
   const db = drizzle(env.DB, { schema });
   await db.delete(schema.crewInvites);
@@ -63,7 +68,10 @@ async function invite(cookie: string, email: string) {
     headers: json(cookie),
     body: JSON.stringify({ email }),
   });
-  return { status: res.status, body: (await res.json()) as { id: string; token?: string; error?: string } };
+  return {
+    status: res.status,
+    body: (await res.json()) as { id: string; token?: string; emailed?: boolean; error?: string },
+  };
 }
 
 const accept = (cookie: string, id: string) =>
@@ -112,6 +120,44 @@ describe("crew sharing", () => {
     expect((await api("/crew/invites/whatever/accept", { method: "POST" })).status).toBe(401);
     expect((await api("/crew/invites/whatever/revoke", { method: "POST" })).status).toBe(401);
     expect((await api(`/crew/${idA}/trips`)).status).toBe(401);
+  });
+
+  // Until now an invite told the recipient nothing. It was invisible unless they already had an
+  // account, signed in, and happened to look at the Share tab — which is why one sat unnoticed
+  // in production. The email is the notification; the row is still the source of truth.
+  it("emails the invited address, and says so", async () => {
+    const key = "re_test_key";
+    (env as unknown as { RESEND_API_KEY?: string }).RESEND_API_KEY = key;
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { status, body } = await invite(cookieA, "someone-new@example.com");
+
+    expect(status).toBe(201);
+    expect(body.emailed).toBe(true);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.resend.com/emails");
+    const payload = JSON.parse(String(init.body)) as { to: string[]; subject: string; html: string };
+    expect(payload.to).toEqual(["someone-new@example.com"]);
+    // No token and no sign-in link: the invite is claimed by signing in as the invited address,
+    // so a forwarded email grants nothing. This is the property the deleted share link lacked.
+    expect(payload.html).not.toContain("token");
+    expect(payload.html).toContain("danyeowa.com");
+  });
+
+  it("still creates a usable invite when the email cannot be sent", async () => {
+    // No RESEND_API_KEY configured — sendCrewInviteEmail gives up before any network call.
+    delete (env as unknown as { RESEND_API_KEY?: string }).RESEND_API_KEY;
+
+    const { status, body } = await invite(cookieA, EMAIL_B);
+    expect(status).toBe(201);
+    // Reported honestly rather than swallowed: the sender is told nobody was notified.
+    expect(body.emailed).toBe(false);
+
+    // The invite itself is untouched by the mail failure — B can still accept it.
+    expect((await accept(cookieB, body.id)).status).toBe(200);
+    expect((await crewOf(cookieA)).members.map((m) => m.userId)).toEqual([idB]);
   });
 
   it("pairs two accounts and lets each read the other's roster", async () => {

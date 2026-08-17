@@ -18,6 +18,8 @@ export default function CrewPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  /** False when the invite was created but the notification email did not go out. */
+  const [sentEmailed, setSentEmailed] = useState(true);
 
   useEffect(() => {
     getCrew()
@@ -34,6 +36,7 @@ export default function CrewPanel() {
     try {
       const created = await inviteCrew({ email: email.trim().toLowerCase() });
       setSentTo(created.email);
+      setSentEmailed(created.emailed !== false);
       setEmail("");
       await reload();
     } catch (err) {
@@ -168,11 +171,20 @@ export default function CrewPanel() {
         </button>
       </form>
 
-      {sentTo && (
-        <p className="text-sm text-ink-muted">
-          Invited {sentTo}. They accept it here on their own Share tab, signed in with that address.
-        </p>
-      )}
+      {sentTo &&
+        (sentEmailed ? (
+          <p data-testid="invite-sent" className="text-sm text-ink-muted">
+            Emailed {sentTo}. They open danyeowa, sign in with that address, and the invitation is
+            waiting on their Share tab.
+          </p>
+        ) : (
+          /* The invite is real either way — but saying "invited" when nobody was told is how
+             one sat unnoticed in production for two days. */
+          <p data-testid="invite-not-emailed" role="alert" className="text-sm text-report">
+            Invited {sentTo}, but we couldn't email them. Tell them to open danyeowa and sign in
+            with that address — the invitation is waiting.
+          </p>
+        ))}
 
       {error && (
         <p role="alert" className="text-sm text-danger">

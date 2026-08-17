@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
 import { CrewInviteCreateSchema } from "@danyeowa/shared";
 import type { CrewMember, CrewResponse } from "@danyeowa/shared";
+import { sendCrewInviteEmail } from "./email";
 import * as schema from "./db/schema";
 import { loadTripsWithFlights } from "./trips";
 import type { Env } from "./index";
@@ -199,7 +200,19 @@ crewRouter.post("/crew/invites", async (c) => {
   };
   await database.insert(schema.crewInvites).values(row);
 
-  return c.json({ id: row.id, email: row.toEmail, token: row.token, createdAt: row.createdAt }, 201);
+  // The invite row is the source of truth; the email is a notification. Until now there was no
+  // notification at all — an invite was invisible unless the recipient already had an account,
+  // signed in, and happened to look at the Share tab.
+  //
+  // Awaited, not fire-and-forget: a send that quietly fails leaves the sender believing someone
+  // was told. `emailed: false` is reported back so the UI can say so. The invite still stands
+  // either way — a mail outage must not cost a real invitation.
+  const emailed = await sendCrewInviteEmail(c.env, email, user.name?.trim() || user.email);
+
+  return c.json(
+    { id: row.id, email: row.toEmail, token: row.token, createdAt: row.createdAt, emailed },
+    201,
+  );
 });
 
 crewRouter.post("/crew/invites/:id/accept", async (c) => {

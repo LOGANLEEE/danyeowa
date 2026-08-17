@@ -300,6 +300,9 @@ export type CrewInvite = {
   id: string;
   /** The invited address, lower-cased. */
   email: string;
+  /** Did the invitation email actually reach Resend? Present only on the create response.
+   * False means the invite stands but nobody was told — the sender needs to know that. */
+  emailed?: boolean;
   /** Present only on invites you sent — the other side never needs to see it. */
   token?: string;
   /** Who sent it. Filled in only on invites addressed to you: accepting hands someone your

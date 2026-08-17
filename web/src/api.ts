@@ -155,7 +155,9 @@ export async function getCrewTrips(userId: string): Promise<TripWithFlights[]> {
   return body.trips;
 }
 
-export async function inviteCrew(input: CrewInviteCreateInput): Promise<{ id: string; email: string }> {
+export async function inviteCrew(
+  input: CrewInviteCreateInput,
+): Promise<{ id: string; email: string; emailed?: boolean }> {
   const res = await fetch("/api/crew/invites", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

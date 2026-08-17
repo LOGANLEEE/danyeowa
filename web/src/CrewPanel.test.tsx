@@ -34,7 +34,22 @@ describe("CrewPanel", () => {
     // Lower-cased on the way out: the API matches the invited address case-insensitively, and
     // sending it as typed would make the confirmation read differently to what was stored.
     await waitFor(() => expect(inviteCrew).toHaveBeenCalledWith({ email: "fo@example.com" }));
-    expect(await screen.findByText(/invited fo@example.com/i)).toBeInTheDocument();
+    expect(await screen.findByText(/emailed fo@example.com/i)).toBeInTheDocument();
+  });
+
+  // Saying "invited" when nobody was told is how an invitation sat unnoticed in production for
+  // two days. The invite is real either way, so this is a warning, not an error.
+  it("warns when the invite was created but the email did not go out", async () => {
+    vi.mocked(inviteCrew).mockResolvedValue({ id: "inv-2", email: "fo@example.com", emailed: false });
+    const user = userEvent.setup();
+    render(<CrewPanel />);
+
+    await user.type(await screen.findByTestId("crew-invite-email"), "fo@example.com");
+    await user.click(screen.getByTestId("crew-invite-send"));
+
+    const warning = await screen.findByTestId("invite-not-emailed");
+    expect(warning).toHaveTextContent(/couldn't email them/i);
+    expect(screen.queryByTestId("invite-sent")).not.toBeInTheDocument();
   });
 
   it("surfaces the reason an invite was refused", async () => {
