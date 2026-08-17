@@ -154,6 +154,62 @@ crewRouter.get("/crew", async (c) => {
   return c.json({ members, sent, received } satisfies CrewResponse);
 });
 
+/** How long the emailed preview link keeps working. The INVITE itself never expires — it stays
+ * acceptable from the Share tab forever. Only this unauthenticated peek ages out, because a
+ * bearer URL that lives for ever is the thing we deleted the old share link over. */
+const INVITE_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** `korlogan94@gmail.com` -> `k•••••94@gmail.com`. Enough for the recipient to recognise which
+ * of their addresses to sign in with, without handing the full address to anyone holding a
+ * forwarded link. */
+function maskEmail(email: string): string {
+  const [local = "", domain = ""] = email.split("@");
+  const head = local.slice(0, 1);
+  const tail = local.length > 3 ? local.slice(-2) : "";
+  return `${head}${"•".repeat(Math.max(local.length - head.length - tail.length, 1))}${tail}@${domain}`;
+}
+
+/**
+ * The ONLY unauthenticated data route in the app. It exists so someone who was invited but has
+ * no account sees who invited them and what they would get, rather than an anonymous sign-in
+ * form they have no reason to trust.
+ *
+ * It deliberately returns nothing about the roster — not a trip, not a date, not a count. What
+ * leaks from a forwarded link is "this person invited someone", which is not the airline data
+ * the old share link carried and was deleted for.
+ *
+ * 404 (never 403) for unknown, revoked, already-accepted or expired: a 403 would confirm the
+ * invite exists and hint at who it is for, which is the same reasoning the accept route uses.
+ */
+crewRouter.get("/invite/:token", async (c) => {
+  const database = db(c.env);
+  const [invite] = await database
+    .select()
+    .from(schema.crewInvites)
+    .where(eq(schema.crewInvites.token, c.req.param("token")))
+    .limit(1);
+
+  if (
+    !invite ||
+    invite.revokedAt !== null ||
+    invite.acceptedAt !== null ||
+    Date.now() - invite.createdAt > INVITE_LINK_TTL_MS
+  ) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  const [sender] = await database
+    .select({ email: schema.user.email, name: schema.user.name })
+    .from(schema.user)
+    .where(eq(schema.user.id, invite.fromUserId))
+    .limit(1);
+
+  return c.json({
+    fromName: sender?.name?.trim() || sender?.email?.split("@")[0] || "Someone",
+    toEmailMasked: maskEmail(invite.toEmail),
+  });
+});
+
 crewRouter.post("/crew/invites", async (c) => {
   const user = c.var.user;
   if (!user) return c.json({ error: "unauthenticated" }, 401);
@@ -207,7 +263,12 @@ crewRouter.post("/crew/invites", async (c) => {
   // Awaited, not fire-and-forget: a send that quietly fails leaves the sender believing someone
   // was told. `emailed: false` is reported back so the UI can say so. The invite still stands
   // either way — a mail outage must not cost a real invitation.
-  const emailed = await sendCrewInviteEmail(c.env, email, user.name?.trim() || user.email);
+  const emailed = await sendCrewInviteEmail(
+    c.env,
+    email,
+    user.name?.trim() || user.email,
+    row.token,
+  );
 
   return c.json(
     { id: row.id, email: row.toEmail, token: row.token, createdAt: row.createdAt, emailed },

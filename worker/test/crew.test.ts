@@ -1,4 +1,5 @@
 import { env, SELF } from "cloudflare:test";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CrewResponse, Flight, Trip } from "@danyeowa/shared";
@@ -140,10 +141,13 @@ describe("crew sharing", () => {
     expect(url).toBe("https://api.resend.com/emails");
     const payload = JSON.parse(String(init.body)) as { to: string[]; subject: string; html: string };
     expect(payload.to).toEqual(["someone-new@example.com"]);
-    // No token and no sign-in link: the invite is claimed by signing in as the invited address,
-    // so a forwarded email grants nothing. This is the property the deleted share link lacked.
-    expect(payload.html).not.toContain("token");
-    expect(payload.html).toContain("danyeowa.com");
+    // The link carries the token, but the token only opens a PREVIEW — it cannot accept the
+    // invite and shows nothing about the roster. Accepting still requires signing in as the
+    // invited address, which is the property the deleted share link lacked.
+    expect(payload.html).toContain(`https://danyeowa.com/invite/${body.token}`);
+
+    // Proof the link is not a credential: holding it does not get you the roster.
+    expect((await api(`/crew/${idA}/trips`)).status).toBe(401);
   });
 
   it("still creates a usable invite when the email cannot be sent", async () => {
@@ -158,6 +162,58 @@ describe("crew sharing", () => {
     // The invite itself is untouched by the mail failure — B can still accept it.
     expect((await accept(cookieB, body.id)).status).toBe(200);
     expect((await crewOf(cookieA)).members.map((m) => m.userId)).toEqual([idB]);
+  });
+
+  // The only unauthenticated data route in the app. Someone invited but without an account must
+  // see who invited them — an anonymous sign-in form gives them no reason to trust it — while
+  // the link itself reveals nothing about the roster.
+  describe("GET /invite/:token (public preview)", () => {
+    const preview = (token: string) => api(`/invite/${token}`);
+
+    it("shows who invited you and which address to use, and nothing about the roster", async () => {
+      const { body } = await invite(cookieA, EMAIL_B);
+      const res = await preview(body.token!);
+      expect(res.status).toBe(200);
+
+      const seen = (await res.json()) as Record<string, unknown>;
+      expect(seen.fromName).toBeTruthy();
+      // Masked: recognisable, not harvestable — and never the full address.
+      expect(String(seen.toEmailMasked)).toContain("•");
+      expect(String(seen.toEmailMasked)).not.toBe(EMAIL_B);
+      expect(String(seen.toEmailMasked)).toContain("@");
+
+      // The whole point: no roster data leaks through this route.
+      expect(Object.keys(seen).sort()).toEqual(["fromName", "toEmailMasked"]);
+    });
+
+    it("404s for an unknown token", async () => {
+      expect((await preview("no-such-token")).status).toBe(404);
+    });
+
+    it("404s once revoked, and once accepted", async () => {
+      const { body: revokedInvite } = await invite(cookieA, EMAIL_B);
+      await revoke(cookieA, revokedInvite.id);
+      expect((await preview(revokedInvite.token!)).status).toBe(404);
+
+      const { body: acceptedInvite } = await invite(cookieA, EMAIL_B);
+      await accept(cookieB, acceptedInvite.id);
+      expect((await preview(acceptedInvite.token!)).status).toBe(404);
+    });
+
+    it("404s after 7 days — but the invite itself is still acceptable", async () => {
+      const { body } = await invite(cookieA, EMAIL_B);
+      const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
+      await drizzle(env.DB, { schema })
+        .update(schema.crewInvites)
+        .set({ createdAt: eightDaysAgo })
+        .where(eq(schema.crewInvites.id, body.id));
+
+      expect((await preview(body.token!)).status).toBe(404);
+
+      // The LINK ages out; the INVITATION does not. Killing a real invite because a URL got old
+      // would be the worse failure, so B can still accept from the Share tab.
+      expect((await accept(cookieB, body.id)).status).toBe(200);
+    });
   });
 
   it("pairs two accounts and lets each read the other's roster", async () => {

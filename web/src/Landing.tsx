@@ -1,13 +1,20 @@
 import { useState } from "react";
+import type { InvitePreview } from "@danyeowa/shared";
 import { authClient } from "./auth-client";
 
-type Props = { onSignedIn: () => void };
+type Props = {
+  onSignedIn: () => void;
+  /** Set when the visitor arrived on an invite link. Replaces the sample departure board with
+   * who invited them and what signing in gets them — an anonymous form gives someone no reason
+   * to trust it. Carries nothing about the roster; see the route in worker/src/crew.ts. */
+  invite?: InvitePreview | null;
+};
 
 /** Single-surface signed-out screen: wordmark, a static "next duty" departure-board sample,
  * and the sign-in form inline beneath it. There is no separate login screen to navigate to —
  * the email step and the OTP-code step live on this one surface, the code field simply
  * appearing under the email field once a code has been sent. */
-export default function Landing({ onSignedIn }: Props) {
+export default function Landing({ onSignedIn, invite }: Props) {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
@@ -67,10 +74,28 @@ export default function Landing({ onSignedIn }: Props) {
         danyeowa
       </h1>
 
-      {/* Departure-board panel: static illustrative sample, not live schedule data. It stays
+      {invite ? (
+        <div
+          data-testid="invite-preview"
+          className="stagger-2 flex w-full flex-col gap-3 rounded-lg border border-accent bg-accent-soft p-4 text-left"
+        >
+          <p className="text-lg font-semibold text-ink">
+            {invite.fromName} shared their roster with you
+          </p>
+          <ul className="flex flex-col gap-1 text-sm text-ink-muted">
+            <li>When they report — the start of their day</li>
+            <li>When they land — when to leave to collect them</li>
+            <li>Which days they're free</li>
+          </ul>
+          <p className="text-sm text-ink-muted">
+            Sign in with <span className="num text-ink">{invite.toEmailMasked}</span> to accept.
+          </p>
+        </div>
+      ) : (
+      /* Departure-board panel: static illustrative sample, not live schedule data. It stays
           visually dark in both the light and dark app themes on purpose — it's meant to read
           as a physical airport board, not as themed app chrome — so it uses fixed color values
-          instead of the ink/card/edge tokens, which flip between themes. */}
+          instead of the ink/card/edge tokens, which flip between themes. */
       <div className="stagger-2 flex w-full flex-col gap-1 rounded-lg border border-white/10 bg-[#0b0d12] p-4 text-left shadow-sm">
         <p className="text-xs uppercase tracking-[0.2em] text-white/50">Next duty</p>
         <dl className="num flex flex-col text-sm text-white/90">
@@ -96,6 +121,7 @@ export default function Landing({ onSignedIn }: Props) {
           </div>
         </dl>
       </div>
+      )}
 
       <form onSubmit={codeSent ? handleSignIn : handleSendCode} className="stagger-3 flex w-full flex-col gap-3 text-left">
         <label htmlFor="landing-email" className="text-sm text-ink-muted">

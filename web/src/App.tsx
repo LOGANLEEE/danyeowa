@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { HealthResponse, Me } from "@danyeowa/shared";
 import { authClient } from "./auth-client";
 import CalendarHome from "./CalendarHome";
+import InviteLanding from "./InviteLanding";
 import InstallBanner from "./InstallBanner";
 import Landing from "./Landing";
 import SettingsView from "./SettingsView";
@@ -10,7 +11,33 @@ import TabBar from "./TabBar";
 import type { TabName } from "./TabBar";
 import TripForm from "./TripForm";
 
+const INVITE_PATH_PREFIX = "/invite/";
+
+/** Extracts the token from `/invite/:token`, or null when this isn't an invite link.
+ *
+ * Deliberately does NOT decodeURIComponent: tokens are base64url, which never contains a byte
+ * needing percent-encoding, so decoding could only throw on a hand-mangled URL. An unrecognised
+ * token simply 404s from the API and the page falls back to plain sign-in. */
+function inviteTokenFromPath(pathname: string): string | null {
+  if (!pathname.startsWith(INVITE_PATH_PREFIX)) return null;
+  const token = pathname.slice(INVITE_PATH_PREFIX.length);
+  return token.length > 0 ? token : null;
+}
+
 export default function App() {
+  // Checked before any signed-in state or effect runs. This reinstates the pre-auth split that
+  // was collapsed when /share/:token was deleted — for the same reason it existed then: someone
+  // arriving on an invite link has no account, and must not trigger auth-shaped requests before
+  // the page has even decided what to show them.
+  const inviteToken = inviteTokenFromPath(location.pathname);
+  if (inviteToken !== null) {
+    return <InviteLanding token={inviteToken} />;
+  }
+
+  return <SignedInApp />;
+}
+
+function SignedInApp() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
   const [activeTab, setActiveTab] = useState<TabName>("calendar");
