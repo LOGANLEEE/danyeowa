@@ -1,7 +1,15 @@
 import { env, SELF } from "cloudflare:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type { CrewResponse, Flight, Trip } from "@danyeowa/shared";
 
 type TripWithFlights = Trip & { flights: Flight[] };
@@ -51,14 +59,21 @@ const trip = {
   ],
 };
 
-const json = (cookie: string) => ({ "Content-Type": "application/json", Cookie: cookie });
+const json = (cookie: string) => ({
+  "Content-Type": "application/json",
+  Cookie: cookie,
+});
 
 function api(path: string, init?: RequestInit) {
   return SELF.fetch(`https://example.com/api${path}`, init);
 }
 
 async function createTrip(cookie: string) {
-  const res = await api("/trips", { method: "POST", headers: json(cookie), body: JSON.stringify(trip) });
+  const res = await api("/trips", {
+    method: "POST",
+    headers: json(cookie),
+    body: JSON.stringify(trip),
+  });
   expect(res.status).toBe(201);
   return (await res.json()) as TripWithFlights;
 }
@@ -71,7 +86,12 @@ async function invite(cookie: string, email: string) {
   });
   return {
     status: res.status,
-    body: (await res.json()) as { id: string; token?: string; emailed?: boolean; error?: string },
+    body: (await res.json()) as {
+      id: string;
+      token?: string;
+      emailed?: boolean;
+      error?: string;
+    },
   };
 }
 
@@ -81,14 +101,20 @@ const revoke = (cookie: string, id: string) =>
   api(`/crew/invites/${id}/revoke`, { method: "POST", headers: json(cookie) });
 
 const crewOf = async (cookie: string) =>
-  (await (await api("/crew", { headers: { Cookie: cookie } })).json()) as CrewResponse;
+  (await (
+    await api("/crew", { headers: { Cookie: cookie } })
+  ).json()) as CrewResponse;
 
 /** Whoever holds `cookie` reading `userId`'s roster. */
 const crewTrips = (cookie: string, userId: string) =>
   api(`/crew/${userId}/trips`, { headers: { Cookie: cookie } });
 
 const ownTrips = async (cookie: string) =>
-  ((await (await api("/trips", { headers: { Cookie: cookie } })).json()) as { trips: TripWithFlights[] }).trips;
+  (
+    (await (await api("/trips", { headers: { Cookie: cookie } })).json()) as {
+      trips: TripWithFlights[];
+    }
+  ).trips;
 
 /** A invites B, B accepts. The starting point for everything past the invite flow itself. */
 async function pairUp() {
@@ -102,8 +128,16 @@ beforeAll(async () => {
   cookieA = await signInAs(EMAIL_A);
   cookieB = await signInAs(EMAIL_B);
   cookieC = await signInAs(EMAIL_C);
-  idA = ((await (await api("/me", { headers: { Cookie: cookieA } })).json()) as { id: string }).id;
-  idB = ((await (await api("/me", { headers: { Cookie: cookieB } })).json()) as { id: string }).id;
+  idA = (
+    (await (await api("/me", { headers: { Cookie: cookieA } })).json()) as {
+      id: string;
+    }
+  ).id;
+  idB = (
+    (await (await api("/me", { headers: { Cookie: cookieB } })).json()) as {
+      id: string;
+    }
+  ).id;
 });
 
 describe("crew sharing", () => {
@@ -118,8 +152,12 @@ describe("crew sharing", () => {
         })
       ).status,
     ).toBe(401);
-    expect((await api("/crew/invites/whatever/accept", { method: "POST" })).status).toBe(401);
-    expect((await api("/crew/invites/whatever/revoke", { method: "POST" })).status).toBe(401);
+    expect(
+      (await api("/crew/invites/whatever/accept", { method: "POST" })).status,
+    ).toBe(401);
+    expect(
+      (await api("/crew/invites/whatever/revoke", { method: "POST" })).status,
+    ).toBe(401);
     expect((await api(`/crew/${idA}/trips`)).status).toBe(401);
   });
 
@@ -129,7 +167,9 @@ describe("crew sharing", () => {
   it("emails the invited address, and says so", async () => {
     const key = "re_test_key";
     (env as unknown as { RESEND_API_KEY?: string }).RESEND_API_KEY = key;
-    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     const { status, body } = await invite(cookieA, "someone-new@example.com");
@@ -139,12 +179,27 @@ describe("crew sharing", () => {
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://api.resend.com/emails");
-    const payload = JSON.parse(String(init.body)) as { to: string[]; subject: string; html: string };
+    const payload = JSON.parse(String(init.body)) as {
+      to: string[];
+      subject: string;
+      html: string;
+    };
     expect(payload.to).toEqual(["someone-new@example.com"]);
     // The link carries the token, but the token only opens a PREVIEW — it cannot accept the
     // invite and shows nothing about the roster. Accepting still requires signing in as the
     // invited address, which is the property the deleted share link lacked.
     expect(payload.html).toContain(`https://danyeowa.com/invite/${body.token}`);
+
+    // The email and the preview page are two halves of one introduction, so they must name the
+    // sender the same way — and neither may hand out their full address to someone who has only
+    // been invited. EMAIL_A is crew-a@example.com; "crew-a" is what both should say.
+    const preview = (await (await api(`/invite/${body.token}`)).json()) as {
+      fromName: string;
+    };
+    expect(preview.fromName).toBe("crew-a");
+    expect(payload.subject).toContain("crew-a");
+    expect(payload.subject).not.toContain(EMAIL_A);
+    expect(payload.html).not.toContain(EMAIL_A);
 
     // Proof the link is not a credential: holding it does not get you the roster.
     expect((await api(`/crew/${idA}/trips`)).status).toBe(401);
@@ -190,16 +245,23 @@ describe("crew sharing", () => {
       const { body } = await invite(cookieA, EMAIL_B);
 
       // B is who it was sent to.
-      const asB = await (await api(`/invite/${body.token}`, { headers: { Cookie: cookieB } })).json();
+      const asB = await (
+        await api(`/invite/${body.token}`, { headers: { Cookie: cookieB } })
+      ).json();
       expect(asB).toMatchObject({ signedInAs: EMAIL_B, matchesYou: true });
 
       // A is signed in, but the invite is not for them. Without this the app just shows no
       // invitation and gives no reason — the exact dead end Google sign-in walks people into.
-      const asA = await (await api(`/invite/${body.token}`, { headers: { Cookie: cookieA } })).json();
+      const asA = await (
+        await api(`/invite/${body.token}`, { headers: { Cookie: cookieA } })
+      ).json();
       expect(asA).toMatchObject({ signedInAs: EMAIL_A, matchesYou: false });
 
       // Signed out, neither field appears at all.
-      const anon = (await (await preview(body.token!)).json()) as Record<string, unknown>;
+      const anon = (await (await preview(body.token!)).json()) as Record<
+        string,
+        unknown
+      >;
       expect(Object.keys(anon).sort()).toEqual(["fromName", "toEmailMasked"]);
     });
 
@@ -431,7 +493,14 @@ describe("crew sharing", () => {
     const tripA = await createTrip(cookieA);
     const flightId = tripA.flights[0]!.id;
 
-    expect((await api(`/trips/${tripA.id}`, { method: "DELETE", headers: json(cookieB) })).status).toBe(404);
+    expect(
+      (
+        await api(`/trips/${tripA.id}`, {
+          method: "DELETE",
+          headers: json(cookieB),
+        })
+      ).status,
+    ).toBe(404);
     expect(
       (
         await api(`/flights/${flightId}`, {

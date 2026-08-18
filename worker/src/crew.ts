@@ -26,7 +26,10 @@ function generateToken(): string {
   crypto.getRandomValues(bytes);
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 /** Emails are compared, and stored, lower-cased: better-auth does not normalise case, so
@@ -50,7 +53,11 @@ const isActive = (row: typeof schema.crewInvites.$inferSelect) =>
  * single gate on reading someone else's roster — every crew read route goes through it, so
  * there is one place to get the check right rather than one per route.
  */
-async function activePairing(database: ReturnType<typeof db>, userId: string, otherUserId: string) {
+async function activePairing(
+  database: ReturnType<typeof db>,
+  userId: string,
+  otherUserId: string,
+) {
   const rows = await database
     .select()
     .from(schema.crewInvites)
@@ -97,19 +104,29 @@ crewRouter.get("/crew", async (c) => {
   for (const row of rows) {
     if (row.revokedAt !== null) continue;
     if (isActive(row)) {
-      const otherId = row.fromUserId === user.id ? row.acceptedByUserId : row.fromUserId;
+      const otherId =
+        row.fromUserId === user.id ? row.acceptedByUserId : row.fromUserId;
       // Self-pairings can't be created (POST rejects them), but a row that somehow names the
       // same account on both sides must not show up as a second badge for yourself.
       if (otherId && otherId !== user.id) partnerIds.add(otherId);
       continue;
     }
     if (row.fromUserId === user.id) {
-      sent.push({ id: row.id, email: row.toEmail, token: row.token, createdAt: row.createdAt });
+      sent.push({
+        id: row.id,
+        email: row.toEmail,
+        token: row.token,
+        createdAt: row.createdAt,
+      });
     } else if (row.toEmail === email) {
       // The token is deliberately withheld here: the receiver accepts by invite id, and echoing
       // a secret back to the other party earns nothing. The SENDER, though, is filled in below —
       // accepting hands someone your whereabouts, so you have to be told whose invite it is.
-      received.push({ id: row.id, email: row.toEmail, createdAt: row.createdAt });
+      received.push({
+        id: row.id,
+        email: row.toEmail,
+        createdAt: row.createdAt,
+      });
       senderIds.set(row.id, row.fromUserId);
     }
   }
@@ -117,7 +134,11 @@ crewRouter.get("/crew", async (c) => {
   const lookupIds = new Set([...partnerIds, ...senderIds.values()]);
   if (lookupIds.size > 0) {
     const accounts = await database
-      .select({ id: schema.user.id, email: schema.user.email, name: schema.user.name })
+      .select({
+        id: schema.user.id,
+        email: schema.user.email,
+        name: schema.user.name,
+      })
       .from(schema.user)
       .where(inArray(schema.user.id, [...lookupIds]));
     const byId = new Map(accounts.map((a) => [a.id, a]));
@@ -129,7 +150,8 @@ crewRouter.get("/crew", async (c) => {
     const seen = new Set<string>();
     for (const row of rows) {
       if (!isActive(row)) continue;
-      const otherId = row.fromUserId === user.id ? row.acceptedByUserId : row.fromUserId;
+      const otherId =
+        row.fromUserId === user.id ? row.acceptedByUserId : row.fromUserId;
       if (!otherId || otherId === user.id || seen.has(otherId)) continue;
       const account = byId.get(otherId);
       if (!account) continue;
@@ -162,6 +184,20 @@ const INVITE_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** `korlogan94@gmail.com` -> `k•••••94@gmail.com`. Enough for the recipient to recognise which
  * of their addresses to sign in with, without handing the full address to anyone holding a
  * forwarded link. */
+/** How a sender is named to the person being invited.
+ *
+ * Never the full email address. The preview page and the invitation email are two halves of one
+ * introduction, and they have to agree: being invited by "korlogan94" on the page and by
+ * "korlogan94@gmail.com" in the inbox reads as two different people. It also hands the sender's
+ * full address to anyone who is merely invited, before they have accepted anything.
+ */
+export function senderLabel(
+  name: string | null | undefined,
+  email: string | undefined,
+): string {
+  return name?.trim() || email?.split("@")[0] || "Someone";
+}
+
 function maskEmail(email: string): string {
   const [local = "", domain = ""] = email.split("@");
   const head = local.slice(0, 1);
@@ -213,10 +249,13 @@ crewRouter.get("/invite/:token", async (c) => {
   const viewer = c.var.user;
 
   return c.json({
-    fromName: sender?.name?.trim() || sender?.email?.split("@")[0] || "Someone",
+    fromName: senderLabel(sender?.name, sender?.email),
     toEmailMasked: maskEmail(invite.toEmail),
     ...(viewer
-      ? { signedInAs: viewer.email, matchesYou: normalise(viewer.email) === invite.toEmail }
+      ? {
+          signedInAs: viewer.email,
+          matchesYou: normalise(viewer.email) === invite.toEmail,
+        }
       : {}),
   });
 });
@@ -225,7 +264,9 @@ crewRouter.post("/crew/invites", async (c) => {
   const user = c.var.user;
   if (!user) return c.json({ error: "unauthenticated" }, 401);
 
-  const parsed = CrewInviteCreateSchema.safeParse(await c.req.json().catch(() => ({})));
+  const parsed = CrewInviteCreateSchema.safeParse(
+    await c.req.json().catch(() => ({})),
+  );
   if (!parsed.success) return c.json({ error: parsed.error.message }, 400);
 
   const email = normalise(parsed.data.email);
@@ -243,7 +284,12 @@ crewRouter.post("/crew/invites", async (c) => {
   const existing = await database
     .select()
     .from(schema.crewInvites)
-    .where(and(eq(schema.crewInvites.fromUserId, user.id), eq(schema.crewInvites.toEmail, email)));
+    .where(
+      and(
+        eq(schema.crewInvites.fromUserId, user.id),
+        eq(schema.crewInvites.toEmail, email),
+      ),
+    );
   if (existing.some((row) => row.revokedAt === null)) {
     return c.json({ error: "invite_exists" }, 409);
   }
@@ -277,12 +323,18 @@ crewRouter.post("/crew/invites", async (c) => {
   const emailed = await sendCrewInviteEmail(
     c.env,
     email,
-    user.name?.trim() || user.email,
+    senderLabel(user.name, user.email),
     row.token,
   );
 
   return c.json(
-    { id: row.id, email: row.toEmail, token: row.token, createdAt: row.createdAt, emailed },
+    {
+      id: row.id,
+      email: row.toEmail,
+      token: row.token,
+      createdAt: row.createdAt,
+      emailed,
+    },
     201,
   );
 });
@@ -305,7 +357,8 @@ crewRouter.post("/crew/invites/:id/accept", async (c) => {
     return c.json({ error: "not_found" }, 404);
   }
   if (invite.revokedAt !== null) return c.json({ error: "revoked" }, 409);
-  if (invite.fromUserId === user.id) return c.json({ error: "cannot_accept_own" }, 400);
+  if (invite.fromUserId === user.id)
+    return c.json({ error: "cannot_accept_own" }, 400);
   if (invite.acceptedAt !== null) {
     return invite.acceptedByUserId === user.id
       ? c.json({ ok: true })
@@ -317,7 +370,12 @@ crewRouter.post("/crew/invites/:id/accept", async (c) => {
     .set({ acceptedAt: Date.now(), acceptedByUserId: user.id })
     // Re-asserting "still unaccepted" in the WHERE makes a double accept a no-op rather than a
     // silent overwrite of whoever got there first.
-    .where(and(eq(schema.crewInvites.id, invite.id), isNull(schema.crewInvites.acceptedAt)));
+    .where(
+      and(
+        eq(schema.crewInvites.id, invite.id),
+        isNull(schema.crewInvites.acceptedAt),
+      ),
+    );
 
   return c.json({ ok: true });
 });
@@ -358,7 +416,12 @@ crewRouter.post("/crew/invites/:id/revoke", async (c) => {
   await database
     .update(schema.crewInvites)
     .set({ revokedAt: now })
-    .where(and(eq(schema.crewInvites.id, invite.id), isNull(schema.crewInvites.revokedAt)));
+    .where(
+      and(
+        eq(schema.crewInvites.id, invite.id),
+        isNull(schema.crewInvites.revokedAt),
+      ),
+    );
 
   if (otherUserId) {
     await database
@@ -401,6 +464,11 @@ crewRouter.get("/crew/:userId/trips", async (c) => {
     return c.json({ error: "not_found" }, 404);
   }
 
-  const trips = await loadTripsWithFlights(database, otherUserId, c.req.query("from"), c.req.query("to"));
+  const trips = await loadTripsWithFlights(
+    database,
+    otherUserId,
+    c.req.query("from"),
+    c.req.query("to"),
+  );
   return c.json({ trips });
 });
