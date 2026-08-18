@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { InvitePreview } from "@danyeowa/shared";
 import { getInvitePreview } from "./api";
+import { authClient } from "./auth-client";
+import GoogleButton from "./GoogleButton";
 import Landing from "./Landing";
 
 /**
@@ -25,7 +27,10 @@ function SamplePeek() {
           <p className="text-center text-sm text-ink-muted">August</p>
           <div className="grid grid-cols-7 gap-1">
             {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
-              <span key={i} className="text-center text-[0.6rem] text-ink-muted">
+              <span
+                key={i}
+                className="text-center text-[0.6rem] text-ink-muted"
+              >
                 {d}
               </span>
             ))}
@@ -34,7 +39,9 @@ function SamplePeek() {
                 key={day}
                 className={[
                   "num flex h-7 items-center justify-center rounded text-[0.7rem]",
-                  marked.has(day) ? "bg-accent-soft text-accent" : "text-ink-muted",
+                  marked.has(day)
+                    ? "bg-accent-soft text-accent"
+                    : "text-ink-muted",
                 ].join(" ")}
               >
                 {day}
@@ -53,7 +60,9 @@ function SamplePeek() {
           that is what conveys "this is a calendar of their days" — while the label makes sure
           nobody reads the invented numbers as real dates. */}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-card via-card/85 to-transparent px-4 pb-3 pt-8">
-        <p className="text-center text-sm text-ink-muted">Sample — sign in to see the real dates</p>
+        <p className="text-center text-sm text-ink-muted">
+          Sample — sign in to see the real dates
+        </p>
       </div>
     </div>
   );
@@ -69,10 +78,18 @@ function SamplePeek() {
  *
  * A dead link (unknown, revoked, already accepted, or older than 7 days) skips straight to plain
  * sign-in rather than a dead end — the invitation is still waiting on the Share tab once in.
+ *
+ * Someone who already has a session gets neither stage. The API tells us whether that session is
+ * the invited one, so the page either points them at the waiting invitation or explains the
+ * mismatch — the case Google sign-in makes easy to fall into, since it hands over whatever
+ * address the Google account carries and invites match on the exact address.
  */
 export default function InviteLanding({ token }: { token: string }) {
-  const [preview, setPreview] = useState<InvitePreview | null | "loading">("loading");
+  const [preview, setPreview] = useState<InvitePreview | null | "loading">(
+    "loading",
+  );
   const [signingIn, setSigningIn] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,45 +123,139 @@ export default function InviteLanding({ token }: { token: string }) {
   if (preview === null || signingIn) {
     return (
       <div className="flex min-h-dvh w-full flex-col items-center justify-center px-4 py-6">
-        <Landing invite={preview} onSignedIn={() => location.replace("/")} />
+        <Landing
+          invite={preview}
+          callbackURL={`/invite/${encodeURIComponent(token)}`}
+          onSignedIn={() => location.replace("/?tab=share")}
+        />
       </div>
     );
   }
 
+  // Already signed in as the invited address. Nothing left to do but go and accept it.
+  if (preview.matchesYou === true) {
+    return (
+      <Shell>
+        <p
+          data-testid="invite-headline"
+          className="stagger-2 text-xl font-semibold text-ink text-balance"
+        >
+          {preview.fromName} wants you to know when they're back
+        </p>
+        <p className="text-sm text-ink-muted text-balance">
+          You're signed in as{" "}
+          <span className="num text-ink">{preview.signedInAs}</span>. The
+          invitation is waiting for you.
+        </p>
+        <a
+          data-testid="invite-open-app"
+          href="/?tab=share"
+          className="flex min-h-[48px] w-full items-center justify-center rounded bg-accent px-3 py-3 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+        >
+          Accept {preview.fromName}'s invitation
+        </a>
+      </Shell>
+    );
+  }
+
+  // Signed in as somebody else. Left alone this is a silent dead end: the app opens with no
+  // invitation in it and nothing saying why. Say which address it went to instead.
+  if (preview.matchesYou === false) {
+    return (
+      <Shell>
+        <p
+          data-testid="invite-mismatch"
+          className="stagger-2 text-xl font-semibold text-ink text-balance"
+        >
+          This invitation went to a different address
+        </p>
+        <p className="text-sm text-ink-muted text-balance">
+          You're signed in as{" "}
+          <span className="num text-ink">{preview.signedInAs}</span>, but{" "}
+          {preview.fromName} sent it to{" "}
+          <span className="num text-ink">{preview.toEmailMasked}</span>. Sign in
+          with that address, or ask {preview.fromName} to invite this one.
+        </p>
+        <button
+          type="button"
+          data-testid="invite-switch-account"
+          onClick={async () => {
+            await authClient.signOut();
+            location.reload();
+          }}
+          className="min-h-[48px] w-full rounded bg-accent px-3 py-3 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+        >
+          Sign in as someone else
+        </button>
+        <a href="/" className="text-sm text-ink-muted underline">
+          Stay signed in as {preview.signedInAs}
+        </a>
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell>
+      <p
+        data-testid="invite-headline"
+        className="stagger-2 text-xl font-semibold text-ink text-balance"
+      >
+        {preview.fromName} wants you to know when they're back
+      </p>
+      <p className="text-sm text-ink-muted text-balance">
+        They fly for a living. This is their roster — so you know when their day
+        starts, when they land, and which days they're free.
+      </p>
+
+      <div data-testid="invite-peek" className="stagger-3 w-full">
+        <SamplePeek />
+      </div>
+
+      <div className="flex w-full flex-col gap-2">
+        <button
+          type="button"
+          data-testid="invite-continue"
+          onClick={() => setSigningIn(true)}
+          className="min-h-[48px] rounded bg-accent px-3 py-3 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
+        >
+          See {preview.fromName}'s roster
+        </button>
+        <p className="text-sm text-ink-muted text-balance">
+          We'll email a 6-digit code to{" "}
+          <span className="num text-ink">{preview.toEmailMasked}</span>. No
+          password to make, and it takes about a minute.
+        </p>
+      </div>
+
+      {/* Offered here as well as on the form: for someone whose Google address IS the invited
+          one, this is the whole sign-in, and making them read past it to an email field is
+          asking for work they do not need to do. */}
+      <div className="flex w-full items-center gap-2 text-xs text-ink-muted">
+        <span className="h-px flex-1 bg-edge" aria-hidden="true" />
+        or
+        <span className="h-px flex-1 bg-edge" aria-hidden="true" />
+      </div>
+      <GoogleButton
+        callbackURL={`/invite/${encodeURIComponent(token)}`}
+        onError={setError}
+      />
+
+      {error && (
+        <p role="alert" className="text-sm text-ink-muted">
+          {error}
+        </p>
+      )}
+    </Shell>
+  );
+}
+
+/** The centred column every signed-in-state screen here shares. */
+function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh w-full flex-col items-center justify-center px-4 py-8">
       <div className="entrance flex w-full max-w-sm flex-col items-center gap-6 text-center">
         <h1 className="stagger-1 text-3xl font-semibold text-ink">danyeowa</h1>
-
-        <div className="stagger-2 flex flex-col gap-2">
-          <p data-testid="invite-headline" className="text-xl font-semibold text-ink text-balance">
-            {preview.fromName} wants you to know when they're back
-          </p>
-          <p className="text-sm text-ink-muted text-balance">
-            They fly for a living. This is their roster — so you know when their day starts, when
-            they land, and which days they're free.
-          </p>
-        </div>
-
-        <div data-testid="invite-peek" className="stagger-3 w-full">
-          <SamplePeek />
-        </div>
-
-        <div className="flex w-full flex-col gap-2">
-          <button
-            type="button"
-            data-testid="invite-continue"
-            onClick={() => setSigningIn(true)}
-            className="min-h-[48px] rounded bg-accent px-3 py-3 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98]"
-          >
-            See {preview.fromName}'s roster
-          </button>
-          <p className="text-sm text-ink-muted text-balance">
-            We'll email a 6-digit code to{" "}
-            <span className="num text-ink">{preview.toEmailMasked}</span>. No password to make, and
-            it takes about a minute.
-          </p>
-        </div>
+        {children}
       </div>
     </div>
   );

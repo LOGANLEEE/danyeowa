@@ -302,6 +302,12 @@ export type InvitePreview = {
   fromName: string;
   /** e.g. `k•••••94@gmail.com` — enough to recognise, not enough to harvest. */
   toEmailMasked: string;
+  /** The viewer's own address, present only when they already have a session. */
+  signedInAs?: string;
+  /** Whether that session is the one the invite was addressed to. Invites match on exact
+   * address, so signing in with a different one (easily done via Google) otherwise lands
+   * someone in the app with no invitation and nothing explaining why. */
+  matchesYou?: boolean;
 };
 
 export type CrewInvite = {

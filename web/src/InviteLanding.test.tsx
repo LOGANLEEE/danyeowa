@@ -3,12 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import InviteLanding from "./InviteLanding";
 import { getInvitePreview } from "./api";
+import { authClient } from "./auth-client";
 
 vi.mock("./api", () => ({ getInvitePreview: vi.fn() }));
 vi.mock("./auth-client", () => ({
   authClient: {
     signIn: { emailOtp: vi.fn(), social: vi.fn() },
     emailOtp: { sendVerificationOtp: vi.fn() },
+    signOut: vi.fn(),
   },
 }));
 
@@ -32,7 +34,9 @@ describe("InviteLanding", () => {
     expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
     expect(screen.getByTestId("invite-continue")).toBeInTheDocument();
     // And it says what signing in will involve, rather than just presenting a field.
-    expect(screen.getByText(/6-digit code/i)).toHaveTextContent("k•••••94@gmail.com");
+    expect(screen.getByText(/6-digit code/i)).toHaveTextContent(
+      "k•••••94@gmail.com",
+    );
   });
 
   it("marks the blurred calendar as a sample, and hides it from screen readers", async () => {
@@ -78,6 +82,60 @@ describe("InviteLanding", () => {
     expect(await screen.findByLabelText(/email/i)).toBeInTheDocument();
     expect(screen.queryByTestId("invite-headline")).not.toBeInTheDocument();
     expect(screen.queryByTestId("invite-preview")).not.toBeInTheDocument();
+  });
+
+  it("offers Google, and comes back to the invite rather than to the app", async () => {
+    // Google sign-in is a full navigation away and back. Returning to "/" loses which invitation
+    // this was, which is the whole reason the visitor is here.
+    vi.mocked(getInvitePreview).mockResolvedValue(PREVIEW);
+    vi.mocked(authClient.signIn.social).mockResolvedValue({
+      error: null,
+    } as never);
+    const user = userEvent.setup();
+    render(<InviteLanding token="tok123" />);
+
+    await user.click(
+      await screen.findByRole("button", { name: /continue with google/i }),
+    );
+
+    expect(vi.mocked(authClient.signIn.social)).toHaveBeenCalledWith({
+      provider: "google",
+      callbackURL: "/invite/tok123",
+    });
+  });
+
+  it("sends an already-signed-in invitee straight to the waiting invitation", async () => {
+    vi.mocked(getInvitePreview).mockResolvedValue({
+      ...PREVIEW,
+      signedInAs: "kim@gmail.com",
+      matchesYou: true,
+    });
+    render(<InviteLanding token="tok123" />);
+
+    const open = await screen.findByTestId("invite-open-app");
+    expect(open).toHaveAttribute("href", "/?tab=share");
+    // Nothing to sign into — they already are.
+    expect(screen.queryByTestId("invite-continue")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/email/i)).not.toBeInTheDocument();
+  });
+
+  it("explains a mismatched session instead of dead-ending them in an empty app", async () => {
+    // The Google case: invites match on the exact address, and Google hands over whatever the
+    // account carries. Without this the app opens with no invitation and no reason given.
+    vi.mocked(getInvitePreview).mockResolvedValue({
+      ...PREVIEW,
+      signedInAs: "other@gmail.com",
+      matchesYou: false,
+    });
+    render(<InviteLanding token="tok123" />);
+
+    const mismatch = await screen.findByTestId("invite-mismatch");
+    expect(mismatch).toBeInTheDocument();
+    // Both halves of the problem, and the invited one still masked.
+    const body = mismatch.parentElement!;
+    expect(body).toHaveTextContent("other@gmail.com");
+    expect(body).toHaveTextContent("k•••••94@gmail.com");
+    expect(screen.getByTestId("invite-switch-account")).toBeInTheDocument();
   });
 
   it("treats a failed lookup as a dead link rather than crashing", async () => {
