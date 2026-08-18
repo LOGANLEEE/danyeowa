@@ -24,6 +24,13 @@ function inviteTokenFromPath(pathname: string): string | null {
   return token.length > 0 ? token : null;
 }
 
+/** Reads `?tab=share`, which is how a page outside the app (the invite landing) can point
+ * someone at a specific tab. Anything unrecognised falls back to the calendar. */
+function initialTab(search: string): TabName {
+  const asked = new URLSearchParams(search).get("tab");
+  return asked === "share" || asked === "settings" ? asked : "calendar";
+}
+
 export default function App() {
   // Checked before any signed-in state or effect runs. This reinstates the pre-auth split that
   // was collapsed when /share/:token was deleted — for the same reason it existed then: someone
@@ -40,7 +47,9 @@ export default function App() {
 function SignedInApp() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [me, setMe] = useState<Me | null | "loading">("loading");
-  const [activeTab, setActiveTab] = useState<TabName>("calendar");
+  const [activeTab, setActiveTab] = useState<TabName>(() =>
+    initialTab(location.search),
+  );
   const [showTripForm, setShowTripForm] = useState(false);
   const [tripsVersion, setTripsVersion] = useState(0);
   // Bumped to ask CalendarHome to open the day sheet for today (or the next trip-free day) -
@@ -92,15 +101,17 @@ function SignedInApp() {
     <div className="flex min-h-screen flex-col bg-ground text-ink">
       {!isLanding && (
         <header className="border-b border-edge px-4 py-2">
-          <h1 className="text-lg font-semibold text-ink">
-            danyeowa
-          </h1>
+          <h1 className="text-lg font-semibold text-ink">danyeowa</h1>
         </header>
       )}
 
       <main
         className={`flex flex-1 flex-col items-center px-4 py-6 ${isSignedIn ? "pb-24" : ""}`}
-        style={isSignedIn ? { paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" } : undefined}
+        style={
+          isSignedIn
+            ? { paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" }
+            : undefined
+        }
       >
         {isSignedIn && <InstallBanner />}
 
@@ -124,7 +135,11 @@ function SignedInApp() {
           // time — one row per leg, which read as a chart of unranked things — and was the only
           // way into a full-screen trip detail. Both are gone; the day card owns view, edit and
           // delete, and the month grid owns the overview.
-          <CalendarHome key={tripsVersion} now={now} openTodayToken={openTodayToken} />
+          <CalendarHome
+            key={tripsVersion}
+            now={now}
+            openTodayToken={openTodayToken}
+          />
         )}
       </main>
 
@@ -150,7 +165,11 @@ function SignedInApp() {
           above the tab bar for a debug-only readout. */}
       {!isSignedIn && (
         <footer className="px-4 py-2 text-right text-xs text-ink-muted">
-          {health === null ? "checking…" : health.ok ? "API: online" : "API: offline"}
+          {health === null
+            ? "checking…"
+            : health.ok
+              ? "API: online"
+              : "API: offline"}
         </footer>
       )}
     </div>

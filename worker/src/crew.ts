@@ -204,9 +204,20 @@ crewRouter.get("/invite/:token", async (c) => {
     .where(eq(schema.user.id, invite.fromUserId))
     .limit(1);
 
+  // When the visitor already has a session, say whether it is the RIGHT one. Invites match on
+  // exact address, and Google hands over whatever address that account carries — so signing in
+  // with the wrong one lands you in an app with no invitation and nothing explaining why.
+  //
+  // The comparison happens here, on the real addresses; only a boolean leaves. `signedInAs` is
+  // the viewer's own email, which /api/me already gives them.
+  const viewer = c.var.user;
+
   return c.json({
     fromName: sender?.name?.trim() || sender?.email?.split("@")[0] || "Someone",
     toEmailMasked: maskEmail(invite.toEmail),
+    ...(viewer
+      ? { signedInAs: viewer.email, matchesYou: normalise(viewer.email) === invite.toEmail }
+      : {}),
   });
 });
 

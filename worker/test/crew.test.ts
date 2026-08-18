@@ -186,6 +186,23 @@ describe("crew sharing", () => {
       expect(Object.keys(seen).sort()).toEqual(["fromName", "toEmailMasked"]);
     });
 
+    it("tells a signed-in visitor whether THIS session is the invited one", async () => {
+      const { body } = await invite(cookieA, EMAIL_B);
+
+      // B is who it was sent to.
+      const asB = await (await api(`/invite/${body.token}`, { headers: { Cookie: cookieB } })).json();
+      expect(asB).toMatchObject({ signedInAs: EMAIL_B, matchesYou: true });
+
+      // A is signed in, but the invite is not for them. Without this the app just shows no
+      // invitation and gives no reason — the exact dead end Google sign-in walks people into.
+      const asA = await (await api(`/invite/${body.token}`, { headers: { Cookie: cookieA } })).json();
+      expect(asA).toMatchObject({ signedInAs: EMAIL_A, matchesYou: false });
+
+      // Signed out, neither field appears at all.
+      const anon = (await (await preview(body.token!)).json()) as Record<string, unknown>;
+      expect(Object.keys(anon).sort()).toEqual(["fromName", "toEmailMasked"]);
+    });
+
     it("404s for an unknown token", async () => {
       expect((await preview("no-such-token")).status).toBe(404);
     });
