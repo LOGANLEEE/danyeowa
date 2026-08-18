@@ -51,7 +51,9 @@ export function dutyDayMarks(
     if (!legs || legs.length === 0) {
       // Layover: where the crew is standing that day = destination of the last leg that had
       // already landed. Only reached for days inside a span, so a leg always precedes it.
-      const landed = allLegs.filter((leg) => localDateKey(leg.arrUtc, homeTz) <= iso);
+      const landed = allLegs.filter(
+        (leg) => localDateKey(leg.arrUtc, homeTz) <= iso,
+      );
       const last = landed[landed.length - 1];
       if (last) marks.set(iso, { kind: "layover", code: last.dest });
       continue;
@@ -61,11 +63,66 @@ export function dutyDayMarks(
     const returnsBase = legs.find((leg) => leg.dest === base);
     const lastLeg = legs[legs.length - 1]!;
 
-    if (leavesBase && returnsBase) marks.set(iso, { kind: "turnaround", code: leavesBase.dest });
-    else if (leavesBase) marks.set(iso, { kind: "outbound", code: lastLeg.dest });
-    else if (returnsBase) marks.set(iso, { kind: "return", code: legs[0]!.origin });
+    if (leavesBase && returnsBase)
+      marks.set(iso, { kind: "turnaround", code: leavesBase.dest });
+    else if (leavesBase)
+      marks.set(iso, { kind: "outbound", code: lastLeg.dest });
+    else if (returnsBase)
+      marks.set(iso, { kind: "return", code: legs[0]!.origin });
     else marks.set(iso, { kind: "sector", code: lastLeg.dest });
   }
 
   return marks;
+}
+
+export type AwaySpan = { firstDepUtc: string; lastArrUtc: string };
+
+/**
+ * The stretches when the crew member is away from home base — walked across trips, not within one.
+ *
+ * A pairing is usually two trips: EK247 out on the 22nd, EK248 back on the 28th. The layover days
+ * between belong to neither trip, so per-trip spans leave them blank and they read exactly like
+ * the days she is at home. For the person waiting at home that is the wrong answer — she is not
+ * flying, but she is also not coming back.
+ *
+ * Walking the legs base-to-base finds those days: away opens on a departure from base and closes
+ * on an arrival at base.
+ *
+ * Two cases the walk has to survive, both caused by a roster that is only ever partly known:
+ *
+ * - **A departure from base while a span is still open.** She got home some way this roster does
+ *   not record, so the open span is closed at the last landing seen rather than swallowing the
+ *   days in between. Without this, one unclosed short trip would paint every day up to the next
+ *   return as "away".
+ * - **A span still open at the end.** It runs to the last landing known and no further. Guessing
+ *   past that would invent days she may already be home for.
+ */
+export function awaySpans(
+  trips: readonly TripLike[],
+  base: string,
+): AwaySpan[] {
+  const legs = trips
+    .flatMap((trip) => trip.flights)
+    .sort((a, b) => Date.parse(a.depUtc) - Date.parse(b.depUtc));
+
+  const spans: AwaySpan[] = [];
+  let openedAt: string | null = null;
+  let lastArrUtc: string | null = null;
+
+  for (const leg of legs) {
+    if (leg.origin === base) {
+      if (openedAt !== null && lastArrUtc !== null)
+        spans.push({ firstDepUtc: openedAt, lastArrUtc });
+      openedAt = leg.depUtc;
+    }
+    lastArrUtc = leg.arrUtc;
+    if (openedAt !== null && leg.dest === base) {
+      spans.push({ firstDepUtc: openedAt, lastArrUtc: leg.arrUtc });
+      openedAt = null;
+    }
+  }
+
+  if (openedAt !== null && lastArrUtc !== null)
+    spans.push({ firstDepUtc: openedAt, lastArrUtc });
+  return spans;
 }

@@ -3,6 +3,7 @@ import { localDateKey, monthGrid, tripDaysInMonth } from "@danyeowa/shared";
 import type { TripWithFlights } from "./api";
 import { dutyDayMarks, type DayKind } from "./lib/dayMarks";
 import { HOME_BASE_IATA } from "./lib/homeBase";
+import { awaySpans } from "./lib/dayMarks";
 
 type Props = {
   now: Date;
@@ -89,7 +90,11 @@ const MONTH_LABELS = [
 ];
 
 /** Month arithmetic that rolls the year, so the carousel's neighbours work across December. */
-function shiftMonth(year: number, month: number, delta: number): { year: number; month: number } {
+function shiftMonth(
+  year: number,
+  month: number,
+  delta: number,
+): { year: number; month: number } {
   const index = year * 12 + (month - 1) + delta;
   return { year: Math.floor(index / 12), month: (index % 12) + 1 };
 }
@@ -121,16 +126,35 @@ export default function TripsCalendar({
           return { trip, firstDepUtc: first.depUtc, lastArrUtc: last.arrUtc };
         })
         .filter(
-          (entry): entry is { trip: TripWithFlights; firstDepUtc: string; lastArrUtc: string } =>
-            entry !== null,
+          (
+            entry,
+          ): entry is {
+            trip: TripWithFlights;
+            firstDepUtc: string;
+            lastArrUtc: string;
+          } => entry !== null,
         );
 
   /** Everything one rendered month needs. Every mark here is month-scoped, so the neighbours the
    * carousel shows mid-swipe each need their own build — none of it can be hoisted out. */
   function buildMonth(year: number, month: number) {
     const grid = monthGrid(year, month, homeTz);
+    // Two sources, unioned. Per-trip spans are what the calendar has always marked; the
+    // base-to-base away spans add the days between two trips of one pairing — the layover in
+    // Buenos Aires that belongs to neither EK247 nor EK248 and used to read as a day at home.
+    // Union, not replacement: a roster the walk cannot interpret still marks everything it did
+    // before, so no day that is marked today can become unmarked.
     const dayMarks = tripDaysInMonth(
-      tripSpans.map(({ firstDepUtc, lastArrUtc }) => ({ firstDepUtc, lastArrUtc })),
+      [
+        ...tripSpans.map(({ firstDepUtc, lastArrUtc }) => ({
+          firstDepUtc,
+          lastArrUtc,
+        })),
+        ...awaySpans(
+          tripSpans.map(({ trip }) => trip),
+          HOME_BASE_IATA,
+        ),
+      ],
       year,
       month,
       homeTz,
@@ -146,7 +170,8 @@ export default function TripsCalendar({
 
     const monthPrefix = `${year}-${String(month).padStart(2, "0")}`;
     for (const iso of optimisticIsoDates ?? []) {
-      if (iso.startsWith(monthPrefix) && !dayMarks.has(iso)) dayMarks.set(iso, "away");
+      if (iso.startsWith(monthPrefix) && !dayMarks.has(iso))
+        dayMarks.set(iso, "away");
     }
 
     // Per-day trip lookup for the click handler: which trip (if any) covers a given ISO date.
@@ -222,7 +247,10 @@ export default function TripsCalendar({
     if (!dragStart.current) return;
     const dx = e.clientX - dragStart.current.x;
     const dy = e.clientY - dragStart.current.y;
-    if (Math.abs(dx) > TAP_CANCEL_DISTANCE || Math.abs(dy) > TAP_CANCEL_DISTANCE) {
+    if (
+      Math.abs(dx) > TAP_CANCEL_DISTANCE ||
+      Math.abs(dy) > TAP_CANCEL_DISTANCE
+    ) {
       dragMoved.current = true;
     }
     // Only track horizontally once the gesture has declared itself, so the grid doesn't creep
@@ -230,7 +258,9 @@ export default function TripsCalendar({
     if (!trackRef.current || Math.abs(dx) <= Math.abs(dy)) return;
     // Clamped to one panel: past that there is nothing rendered to show but blank track.
     const width = panelWidth();
-    trackRef.current.style.transform = trackOffset(Math.max(-width, Math.min(width, dx)));
+    trackRef.current.style.transform = trackOffset(
+      Math.max(-width, Math.min(width, dx)),
+    );
   }
 
   function handlePointerUp(e: React.PointerEvent) {
@@ -240,7 +270,8 @@ export default function TripsCalendar({
     dragStart.current = null;
 
     const isSwipe =
-      Math.abs(dx) > SWIPE_MIN_DISTANCE && Math.abs(dx) > Math.abs(dy) * SWIPE_DIRECTIONAL_RATIO;
+      Math.abs(dx) > SWIPE_MIN_DISTANCE &&
+      Math.abs(dx) > Math.abs(dy) * SWIPE_DIRECTIONAL_RATIO;
     if (!isSwipe) return settleBack();
 
     const width = panelWidth();
@@ -329,7 +360,10 @@ export default function TripsCalendar({
         >
           ‹
         </button>
-        <p data-testid="calendar-month" className="text-sm font-medium text-ink">
+        <p
+          data-testid="calendar-month"
+          className="text-sm font-medium text-ink"
+        >
           {MONTH_LABELS[viewMonth - 1]} {viewYear}
         </p>
         <button
@@ -367,72 +401,145 @@ export default function TripsCalendar({
         onPointerCancel={handlePointerCancel}
         onClickCapture={handleGridClickCapture}
       >
-        <div ref={trackRef} className="flex will-change-transform" style={{ transform: TRACK_BASE }}>
+        <div
+          ref={trackRef}
+          className="flex will-change-transform"
+          style={{ transform: TRACK_BASE }}
+        >
           {panels.map((panel, index) => {
             const isCurrent = index === 1;
             return (
-            <div
-              key={`${panel.year}-${panel.month}`}
-              inert={!isCurrent}
-              className="grid w-full shrink-0 grid-cols-7 gap-2"
-            >
-              {panel.grid.flat().map((cell) => {
-                const isToday = cell.iso === today;
-                const isSelected = cell.iso === selectedIso;
-                const isPast = cell.iso < today;
-                const mark = panel.dayMarks.get(cell.iso);
-                const hasTrip = mark !== undefined;
-                const duty = panel.dutyMarks.get(cell.iso);
-                const disabled = !hasTrip && isPast;
+              <div
+                key={`${panel.year}-${panel.month}`}
+                inert={!isCurrent}
+                className="grid w-full shrink-0 grid-cols-7 gap-2"
+              >
+                {panel.grid.flat().map((cell, cellIndex, cells) => {
+                  const isToday = cell.iso === today;
+                  const isSelected = cell.iso === selectedIso;
+                  const isPast = cell.iso < today;
+                  const mark = panel.dayMarks.get(cell.iso);
+                  const hasTrip = mark !== undefined;
+                  const duty = panel.dutyMarks.get(cell.iso);
+                  const disabled = !hasTrip && isPast;
 
-                return (
-                  <button
-                    key={cell.iso}
-                    type="button"
-                    // Only the centre panel is addressable: a month grid carries its neighbours'
-                    // edge days too, so all three panels together repeat some ISO dates, and a
-                    // duplicated test id silently breaks every getByTestId that uses one.
-                    data-testid={isCurrent ? `calendar-day-${cell.iso}` : undefined}
-                    disabled={disabled}
-                    aria-label={duty ? `${cell.day} ${DAY_LABEL[duty.kind]} ${duty.code}` : undefined}
-                    aria-current={isToday ? "date" : undefined}
-                    aria-pressed={isSelected}
-                    onClick={() => handleDayClick(cell.iso)}
-                    className={[
-                      "flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-lg border py-2 transition-[background-color,border-color,transform] duration-[120ms]",
-                      hasTrip ? "border-transparent bg-accent-soft" : "border-edge",
-                      // Selected (tap-to-detail) gets a stronger, filled ring - visually distinct
-                      // from today's plain outline ring so both can be told apart when they coincide.
-                      isSelected
-                        ? "ring-2 ring-accent ring-offset-1 ring-offset-ground"
-                        : isToday
-                          ? "ring-2 ring-accent"
+                  // A run of away days is drawn as ONE band, not as neighbouring boxes that
+                  // happen to share a colour: inner corners square off and the 0.5rem grid gap is
+                  // bridged, so a week away reads as a single object. Runs break at the week edge
+                  // (column 0 and 6) because a band cannot cross a row, and at the month edge
+                  // because dayMarks only covers the rendered month.
+                  const column = cellIndex % 7;
+                  const joinsLeft =
+                    hasTrip &&
+                    column > 0 &&
+                    panel.dayMarks.has(cells[cellIndex - 1]!.iso);
+                  const joinsRight =
+                    hasTrip &&
+                    column < 6 &&
+                    panel.dayMarks.has(cells[cellIndex + 1]!.iso);
+                  const corners = !hasTrip
+                    ? "rounded-lg"
+                    : joinsLeft && joinsRight
+                      ? "rounded-none"
+                      : joinsLeft
+                        ? "rounded-l-none rounded-r-lg"
+                        : joinsRight
+                          ? "rounded-l-lg rounded-r-none"
+                          : "rounded-lg";
+
+                  return (
+                    <button
+                      key={cell.iso}
+                      type="button"
+                      // Only the centre panel is addressable: a month grid carries its neighbours'
+                      // edge days too, so all three panels together repeat some ISO dates, and a
+                      // duplicated test id silently breaks every getByTestId that uses one.
+                      data-testid={
+                        isCurrent ? `calendar-day-${cell.iso}` : undefined
+                      }
+                      disabled={disabled}
+                      aria-label={
+                        duty
+                          ? `${cell.day} ${DAY_LABEL[duty.kind]} ${duty.code}`
+                          : undefined
+                      }
+                      aria-current={isToday ? "date" : undefined}
+                      aria-pressed={isSelected}
+                      onClick={() => handleDayClick(cell.iso)}
+                      className={[
+                        "relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 border py-2 transition-[background-color,border-color,transform] duration-[120ms]",
+                        corners,
+                        hasTrip
+                          ? "border-transparent bg-accent-soft"
+                          : "border-edge",
+                        // Selected (tap-to-detail) gets a stronger, filled ring - visually distinct
+                        // from today's plain outline ring so both can be told apart when they coincide.
+                        // Today no longer takes a ring: it was the same colour and shape as the
+                        // selected ring, one pixel apart, so the two were indistinguishable. Today
+                        // now marks the NUMBER (see below) and selection marks the CELL, which
+                        // means they can also both be true at once and still be read.
+                        isSelected
+                          ? "ring-2 ring-accent ring-offset-1 ring-offset-ground"
                           : "",
-                      !cell.inMonth ? "opacity-40" : "",
-                      isPast && !hasTrip ? "opacity-60" : "",
-                      // Press feedback: transform only, so a pressed cell never nudges its neighbours.
-                      disabled ? "cursor-default" : "hover:bg-raised active:scale-[0.96]",
-                    ].join(" ")}
-                  >
-                    <span className="num text-sm text-ink">{cell.day}</span>
-                    {duty ? (
+                        !cell.inMonth ? "opacity-40" : "",
+                        isPast && !hasTrip ? "opacity-60" : "",
+                        // Press feedback: transform only, so a pressed cell never nudges its neighbours.
+                        disabled
+                          ? "cursor-default"
+                          : "hover:bg-raised active:scale-[0.96]",
+                      ].join(" ")}
+                    >
+                      {joinsRight ? (
+                        // Fills the grid's 0.5rem gap so the band is continuous. Sits outside the
+                        // button's box on purpose; pointer-events-none keeps the neighbouring day
+                        // clickable right up to its own edge.
+                        <span
+                          aria-hidden="true"
+                          // Sized past the gap on every side: an absolutely positioned child is
+                          // laid out against the PADDING box, so inset-y-0 stops 1px short of the
+                          // painted background at top and bottom and leaves a hairline seam. The
+                          // overlap onto both neighbours is the same colour, so it is invisible.
+                          className="pointer-events-none absolute -inset-y-px left-full w-[calc(0.5rem+2px)] bg-accent-soft"
+                        />
+                      ) : null}
                       <span
-                        data-testid={isCurrent ? `day-mark-${cell.iso}` : undefined}
-                        className="num flex items-center gap-px text-xs leading-none text-ink"
+                        className={[
+                          "num flex h-6 min-w-6 items-center justify-center px-1 text-sm",
+                          isToday
+                            ? "rounded-full bg-today font-semibold text-ground"
+                            : "text-ink",
+                        ].join(" ")}
                       >
-                        <span aria-hidden="true" className={DAY_TONE[duty.kind]}>
-                          {DAY_GLYPH[duty.kind]}
-                        </span>
-                        {duty.code}
+                        {cell.day}
                       </span>
-                    ) : (
-                      // Optimistically added day: marked, but the legs haven't been refetched yet.
-                      hasTrip && <span className="h-1 w-3 rounded-full bg-accent" aria-hidden="true" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+                      {duty ? (
+                        <span
+                          data-testid={
+                            isCurrent ? `day-mark-${cell.iso}` : undefined
+                          }
+                          className="num flex items-center gap-px text-xs leading-none text-ink"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={DAY_TONE[duty.kind]}
+                          >
+                            {DAY_GLYPH[duty.kind]}
+                          </span>
+                          {duty.code}
+                        </span>
+                      ) : (
+                        // Optimistically added day: marked, but the legs haven't been refetched yet.
+                        hasTrip && (
+                          <span
+                            className="h-1 w-3 rounded-full bg-accent"
+                            aria-hidden="true"
+                          />
+                        )
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </div>

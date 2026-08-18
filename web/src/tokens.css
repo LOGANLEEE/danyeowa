@@ -10,6 +10,10 @@
   --color-edge: #ececea;
   --color-danger: #d9463c;
   --color-report: #2f6fed;
+  /* Today. Deliberately NOT the accent: on this screen blue means "duty", so a blue ring on an
+     empty day competes with the roster itself. Amber in both themes — report red-shifts to blue
+     in light mode, so it cannot be borrowed here. */
+  --color-today: #b06d00;
 }
 
 /* Dark overrides: two mechanisms, both must win over the @theme light defaults above.
@@ -29,6 +33,7 @@
     --color-edge: #2a2e37;
     --color-danger: #e0655f;
     --color-report: #ffd57e;
+    --color-today: #ffd57e;
   }
 }
 
@@ -44,6 +49,7 @@
   --color-edge: #2a2e37;
   --color-danger: #e0655f;
   --color-report: #ffd57e;
+  --color-today: #ffd57e;
 }
 
 :root[data-theme="light"] {
@@ -58,6 +64,7 @@
   --color-edge: #ececea;
   --color-danger: #d9463c;
   --color-report: #2f6fed;
+  --color-today: #b06d00;
 }
 
 .num {

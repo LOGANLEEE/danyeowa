@@ -32,10 +32,100 @@ const trip: TripWithFlights = {
   ],
 };
 
+/** EK247 out and EK248 back — two trips, one pairing, three layover days in Buenos Aires that
+ * belong to neither and used to render exactly like a day at home. Aug 22 is a Saturday, so the
+ * run crosses the week boundary between the 23rd and the 24th. */
+function leg(
+  id: string,
+  tripId: string,
+  origin: string,
+  dest: string,
+  dep: string,
+  arr: string,
+  legSeq: number,
+) {
+  return {
+    id,
+    tripId,
+    userId: "u1",
+    flightNo: "EK247",
+    origin,
+    dest,
+    depUtc: dep,
+    arrUtc: arr,
+    reportUtc: dep,
+    depTz: "Asia/Dubai",
+    arrTz: "America/Argentina/Buenos_Aires",
+    source: "manual" as const,
+    notes: null,
+    legSeq,
+    operating: true,
+  };
+}
+
+const outbound: TripWithFlights = {
+  id: "ek247",
+  userId: "u1",
+  label: null,
+  createdAt: now.getTime(),
+  flights: [
+    leg(
+      "o1",
+      "ek247",
+      "DXB",
+      "GIG",
+      "2026-08-22T02:30:00.000Z",
+      "2026-08-22T15:10:00.000Z",
+      0,
+    ),
+    leg(
+      "o2",
+      "ek247",
+      "GIG",
+      "EZE",
+      "2026-08-22T17:00:00.000Z",
+      "2026-08-22T20:15:00.000Z",
+      1,
+    ),
+  ],
+};
+
+const inbound: TripWithFlights = {
+  id: "ek248",
+  userId: "u1",
+  label: null,
+  createdAt: now.getTime(),
+  flights: [
+    leg(
+      "i1",
+      "ek248",
+      "EZE",
+      "GIG",
+      "2026-08-26T22:00:00.000Z",
+      "2026-08-27T01:10:00.000Z",
+      0,
+    ),
+    leg(
+      "i2",
+      "ek248",
+      "GIG",
+      "DXB",
+      "2026-08-27T03:00:00.000Z",
+      "2026-08-27T21:40:00.000Z",
+      1,
+    ),
+  ],
+};
+
 describe("TripsCalendar", () => {
   it("renders a weekday header row and the days of the current month", () => {
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
     );
 
     expect(screen.getByText("Mon")).toBeInTheDocument();
@@ -86,7 +176,12 @@ describe("TripsCalendar", () => {
     };
 
     render(
-      <TripsCalendar now={now} trips={[pairing]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+      <TripsCalendar
+        now={now}
+        trips={[pairing]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
     );
 
     expect(screen.getByTestId("day-mark-2026-08-15")).toHaveTextContent("↗AKL");
@@ -119,7 +214,12 @@ describe("TripsCalendar", () => {
     };
 
     render(
-      <TripsCalendar now={now} trips={[turnaround]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+      <TripsCalendar
+        now={now}
+        trips={[turnaround]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
     );
 
     expect(screen.getByTestId("day-mark-2026-08-18")).toHaveTextContent("⇄BKK");
@@ -192,7 +292,12 @@ describe("TripsCalendar", () => {
   it("navigates to the next and previous month via chevrons", async () => {
     const user = userEvent.setup();
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
     );
 
     expect(screen.getByText(/august 2026/i)).toBeInTheDocument();
@@ -205,16 +310,118 @@ describe("TripsCalendar", () => {
     expect(screen.getByText(/july 2026/i)).toBeInTheDocument();
   });
 
-  it("marks today's cell distinctly from other cells", () => {
+  it("marks the layover days between the outbound and the return", () => {
+    // The whole point: she is in Buenos Aires on the 24th, 25th and 26th. Per-trip spans left
+    // those blank, which made them look identical to the days she is at home.
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+      <TripsCalendar
+        now={now}
+        trips={[outbound, inbound]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
+    );
+
+    for (const iso of ["2026-08-24", "2026-08-25", "2026-08-26"]) {
+      expect(screen.getByTestId(`calendar-day-${iso}`).className).toContain(
+        "bg-accent-soft",
+      );
+      expect(screen.getByTestId(`day-mark-${iso}`)).toHaveTextContent("EZE");
+    }
+    // And a day she really is at home stays unmarked.
+    expect(
+      screen.getByTestId("calendar-day-2026-08-30").className,
+    ).not.toContain("bg-accent-soft");
+  });
+
+  it("draws a run of away days as one band, not as separate boxes", () => {
+    render(
+      <TripsCalendar
+        now={now}
+        trips={[outbound, inbound]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
+    );
+
+    const day = (iso: string) => screen.getByTestId(`calendar-day-${iso}`);
+
+    // 24th opens the row; 25th, 26th and 27th sit inside it, so inner corners square off.
+    expect(day("2026-08-25").className).toContain("rounded-none");
+    expect(day("2026-08-26").className).toContain("rounded-none");
+    expect(day("2026-08-27").className).toContain("rounded-none");
+    // She lands at 21:40Z on the 27th, which is 01:40 on the 28th in Dubai — so the 28th is the
+    // last day away and the one that closes the band.
+    expect(day("2026-08-28").className).toContain("rounded-r-lg");
+    // A day with nothing on it is a plain rounded box.
+    expect(day("2026-08-30").className).toContain("rounded-lg");
+    expect(day("2026-08-30").className).not.toContain("rounded-none");
+
+    // The 0.5rem grid gap is bridged, so the band has no seams between the days inside it.
+    expect(day("2026-08-25").querySelector(".left-full")).not.toBeNull();
+    // ...and is not bridged past the end of the run.
+    expect(day("2026-08-28").querySelector(".left-full")).toBeNull();
+  });
+
+  it("breaks the band at the week boundary rather than running off the row", () => {
+    render(
+      <TripsCalendar
+        now={now}
+        trips={[outbound, inbound]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
+    );
+
+    // Aug 23 is a Sunday, the last column. A band cannot cross a row, so it closes there and
+    // reopens on Monday the 24th — and neither may bridge into the gap at the row's edge.
+    expect(screen.getByTestId("calendar-day-2026-08-23").className).toContain(
+      "rounded-r-lg",
+    );
+    expect(
+      screen.getByTestId("calendar-day-2026-08-23").querySelector(".left-full"),
+    ).toBeNull();
+    expect(screen.getByTestId("calendar-day-2026-08-24").className).toContain(
+      "rounded-l-lg",
+    );
+  });
+
+  it("marks today on the number, in its own colour", () => {
+    render(
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
     );
 
     const today = screen.getByTestId("calendar-day-2026-08-10");
-    expect(today.className).toContain("ring-accent");
+    expect(today.querySelector(".bg-today")).not.toBeNull();
+    // Not the accent: on this screen blue means duty, so today must not borrow it.
+    expect(today.className).not.toContain("ring-accent");
   });
 
-  it("marks a selected day with a stronger ring, distinct from today's plain ring, when they differ", () => {
+  it("keeps today readable when it is also the selected day", () => {
+    // The old treatment gave both a ring in the same colour, one pixel apart, so a day that was
+    // both looked exactly like a day that was only today. Marking the NUMBER and marking the
+    // CELL are different surfaces, so both can be true at once and still be told apart.
+    render(
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+        selectedIso="2026-08-10"
+      />,
+    );
+
+    const cell = screen.getByTestId("calendar-day-2026-08-10");
+    expect(cell.className).toContain("ring-accent");
+    expect(cell.querySelector(".bg-today")).not.toBeNull();
+  });
+
+  it("marks a selected day on the cell, and only the selected day", () => {
     render(
       <TripsCalendar
         now={now}
@@ -228,12 +435,12 @@ describe("TripsCalendar", () => {
     const selected = screen.getByTestId("calendar-day-2026-08-20");
     const today = screen.getByTestId("calendar-day-2026-08-10");
     expect(selected.className).toContain("ring-accent");
-    expect(selected.className).toContain("ring-offset");
-    expect(today.className).toContain("ring-accent");
-    expect(today.className).not.toContain("ring-offset");
+    expect(selected.querySelector(".bg-today")).toBeNull();
+    expect(today.className).not.toContain("ring-accent");
+    expect(today.querySelector(".bg-today")).not.toBeNull();
   });
 
-  it("puts today's ring on the home-base LOCAL date, not the UTC date, when tz is ahead of UTC", () => {
+  it("puts today's mark on the home-base LOCAL date, not the UTC date, when tz is ahead of UTC", () => {
     // 2026-08-10T21:00:00Z in Pacific/Auckland (+12 NZ winter) is local Aug 11 09:00 -
     // the today ring must land on Aug 11, not the UTC calendar date Aug 10.
     const nowAheadOfUtc = new Date("2026-08-10T21:00:00.000Z");
@@ -246,8 +453,12 @@ describe("TripsCalendar", () => {
       />,
     );
 
-    expect(screen.getByTestId("calendar-day-2026-08-11").className).toContain("ring-accent");
-    expect(screen.getByTestId("calendar-day-2026-08-10").className).not.toContain("ring-accent");
+    expect(
+      screen.getByTestId("calendar-day-2026-08-11").querySelector(".bg-today"),
+    ).not.toBeNull();
+    expect(
+      screen.getByTestId("calendar-day-2026-08-10").querySelector(".bg-today"),
+    ).toBeNull();
   });
 
   // jsdom (as pulled in by this project) has no PointerEvent constructor, so
@@ -256,8 +467,21 @@ describe("TripsCalendar", () => {
   // `window.PointerEvent` is undefined here. A MouseEvent carries the same clientX/clientY
   // fields the component actually reads, so dispatching one typed as "pointerdown" et al is
   // enough for React's synthetic pointer-event plugin to see real coordinates.
-  function firePointer(el: Element, type: "pointerdown" | "pointermove" | "pointerup", clientX: number, clientY: number) {
-    fireEvent(el, new MouseEvent(type, { clientX, clientY, bubbles: true, cancelable: true }));
+  function firePointer(
+    el: Element,
+    type: "pointerdown" | "pointermove" | "pointerup",
+    clientX: number,
+    clientY: number,
+  ) {
+    fireEvent(
+      el,
+      new MouseEvent(type, {
+        clientX,
+        clientY,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
   }
 
   // Fires the pointerdown/move/up sequence a real drag or trackpad gesture produces, ending at
@@ -270,7 +494,12 @@ describe("TripsCalendar", () => {
 
   it("changes to the next month on a horizontal swipe left past the threshold", () => {
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
     );
     expect(screen.getByText(/august 2026/i)).toBeInTheDocument();
 
@@ -281,7 +510,12 @@ describe("TripsCalendar", () => {
 
   it("changes to the previous month on a horizontal swipe right past the threshold", () => {
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
     );
 
     swipe(screen.getByTestId("calendar-grid"), 60, 0);
@@ -291,7 +525,12 @@ describe("TripsCalendar", () => {
 
   it("ignores a mostly-vertical drag, even past the horizontal distance threshold", () => {
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
     );
 
     // 60px horizontal, but 80px vertical - not clearly horizontal (ratio requires
@@ -304,7 +543,12 @@ describe("TripsCalendar", () => {
   it("does not call onPickDay when a swipe ends over a day cell", () => {
     const onPickDay = vi.fn();
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={onPickDay} />,
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={onPickDay}
+      />,
     );
     const day = screen.getByTestId("calendar-day-2026-08-20");
 
@@ -318,7 +562,12 @@ describe("TripsCalendar", () => {
   it("still navigates via the ‹ › buttons after swipe support is added", async () => {
     const user = userEvent.setup();
     render(
-      <TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />,
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
     );
 
     await user.click(screen.getByTestId("calendar-next"));
@@ -333,7 +582,14 @@ describe("TripsCalendar", () => {
   const trackOf = (el: Element) => el.firstElementChild as HTMLElement;
 
   it("settles the track back to centre once a swipe has committed the new month", () => {
-    render(<TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />);
+    render(
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
+    );
     const grid = screen.getByTestId("calendar-grid");
 
     swipe(grid, -60, 0);
@@ -346,7 +602,14 @@ describe("TripsCalendar", () => {
   });
 
   it("glides back to centre after a drag too short to change the month", () => {
-    render(<TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />);
+    render(
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
+    );
     const grid = screen.getByTestId("calendar-grid");
 
     swipe(grid, -30, 0);
@@ -357,14 +620,27 @@ describe("TripsCalendar", () => {
   });
 
   it("renders both neighbouring months, inert, so a drag reveals real days", () => {
-    render(<TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />);
-    const panels = [...trackOf(screen.getByTestId("calendar-grid")).children] as HTMLElement[];
+    render(
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
+    );
+    const panels = [
+      ...trackOf(screen.getByTestId("calendar-grid")).children,
+    ] as HTMLElement[];
 
     expect(panels).toHaveLength(3);
     // jsdom implements neither the `inert` IDL property nor its behaviour, so this asserts the
     // attribute only; that it actually takes the panel out of the a11y tree is verified in a real
     // engine by web/verify-swipe.mjs.
-    expect(panels.map((p) => p.hasAttribute("inert"))).toEqual([true, false, true]);
+    expect(panels.map((p) => p.hasAttribute("inert"))).toEqual([
+      true,
+      false,
+      true,
+    ]);
     // Only the centre panel is addressable: neighbouring grids repeat each other's edge days, so
     // test ids on all three would collide (2026-08-31 would exist twice).
     expect(panels[0]!.querySelector("[data-testid]")).toBeNull();
@@ -372,7 +648,14 @@ describe("TripsCalendar", () => {
 
   it("animates the ‹ › buttons with the same settle as a swipe", async () => {
     const user = userEvent.setup();
-    render(<TripsCalendar now={now} trips={[]} homeTz="Asia/Dubai" onPickDay={vi.fn()} />);
+    render(
+      <TripsCalendar
+        now={now}
+        trips={[]}
+        homeTz="Asia/Dubai"
+        onPickDay={vi.fn()}
+      />,
+    );
     const track = trackOf(screen.getByTestId("calendar-grid"));
 
     await user.click(screen.getByTestId("calendar-next"));
@@ -382,7 +665,7 @@ describe("TripsCalendar", () => {
     expect(track.style.transform).toBe("translate3d(-100%, 0, 0)");
   });
 
-  it("puts today's ring on the home-base LOCAL date, not the UTC date, when tz is behind UTC", () => {
+  it("puts today's mark on the home-base LOCAL date, not the UTC date, when tz is behind UTC", () => {
     // 2026-08-10T02:00:00Z in America/Sao_Paulo (-3) is local Aug 9 23:00 - the today ring
     // must land on Aug 9, not the UTC calendar date Aug 10.
     const nowBehindUtc = new Date("2026-08-10T02:00:00.000Z");
@@ -395,7 +678,11 @@ describe("TripsCalendar", () => {
       />,
     );
 
-    expect(screen.getByTestId("calendar-day-2026-08-09").className).toContain("ring-accent");
-    expect(screen.getByTestId("calendar-day-2026-08-10").className).not.toContain("ring-accent");
+    expect(
+      screen.getByTestId("calendar-day-2026-08-09").querySelector(".bg-today"),
+    ).not.toBeNull();
+    expect(
+      screen.getByTestId("calendar-day-2026-08-10").querySelector(".bg-today"),
+    ).toBeNull();
   });
 });
