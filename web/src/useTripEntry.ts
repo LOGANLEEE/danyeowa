@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Airport, LegInput, ScheduleLeg } from "@danyeowa/shared";
 import {
   TripInputSchema,
@@ -106,7 +106,9 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   const [mode, setMode] = useState<EntryMode>("flightno");
 
   const [flightNo, setFlightNo] = useState("");
-  const [autofillLegs, setAutofillLegs] = useState<AutofillLegDraft[] | null>(null);
+  const [autofillLegs, setAutofillLegs] = useState<AutofillLegDraft[] | null>(
+    null,
+  );
   /**
    * Index of the last leg the crew member actually works, or null for "all of them".
    *
@@ -132,8 +134,19 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   const [appendedFlightNo, setAppendedFlightNo] = useState<string | null>(null);
   const [appendLookupMiss, setAppendLookupMiss] = useState(false);
 
-  const [legs, setLegs] = useState<LegDraft[]>([{ ...emptyLeg(), dep: `${pickedDate}T00:00` }]);
-  const [airports, setAirports] = useState<Map<string, Airport | null>>(new Map());
+  const [legs, setLegs] = useState<LegDraft[]>([
+    { ...emptyLeg(), dep: `${pickedDate}T00:00` },
+  ]);
+  const [airports, setAirports] = useState<Map<string, Airport | null>>(
+    new Map(),
+  );
+  // Lookups that have been started but have not answered yet. A code that is merely still in
+  // flight is NOT the same as a code that turned out not to be an airport, and `airports` alone
+  // cannot tell them apart — it is empty in both cases. Submitting used to read that emptiness
+  // as "unknown airport", so tapping Add straight after typing DXB rejected DXB. A ref, not
+  // state: it is read inside an async submit, where a re-render would not have reached the
+  // closure anyway.
+  const pendingLookups = useRef(new Map<string, Promise<Airport | null>>());
   const [unknown, setUnknown] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -225,7 +238,12 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       setAppendLookupMiss(true);
       return;
     }
-    const appended = autofillLegsFrom(anchorDate, candidate, result.legs, lastLeg.legSeq + 1);
+    const appended = autofillLegsFrom(
+      anchorDate,
+      candidate,
+      result.legs,
+      lastLeg.legSeq + 1,
+    );
     setAutofillLegs((prev) => (prev ? [...prev, ...appended] : appended));
     setAppendedFlightNo(candidate);
     setAppendLookupMiss(false);
@@ -235,7 +253,9 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
    * with the appended flight number. */
   function removeAppendedFlight() {
     if (!appendedFlightNo) return;
-    setAutofillLegs((prev) => (prev ? prev.filter((leg) => leg.flightNo !== appendedFlightNo) : prev));
+    setAutofillLegs((prev) =>
+      prev ? prev.filter((leg) => leg.flightNo !== appendedFlightNo) : prev,
+    );
     setAppendedFlightNo(null);
     setAppendLookupMiss(false);
   }
@@ -250,7 +270,13 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   }
 
   function switchToManual() {
-    setLegs([{ ...emptyLeg(), flightNo: normaliseFlightNo(flightNo), dep: `${pickedDate}T00:00` }]);
+    setLegs([
+      {
+        ...emptyLeg(),
+        flightNo: normaliseFlightNo(flightNo),
+        dep: `${pickedDate}T00:00`,
+      },
+    ]);
     setMode("manual");
   }
 
@@ -275,7 +301,15 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   async function lookupAirport(iata: string) {
     const code = iata.toUpperCase();
     if (!code || airports.has(code)) return;
-    const airport = await getAirport(code);
+    // Registered before awaiting, and reused if the same code is asked for twice while the
+    // first request is still open, so a submit can wait on exactly this request.
+    let inFlight = pendingLookups.current.get(code);
+    if (!inFlight) {
+      inFlight = getAirport(code);
+      pendingLookups.current.set(code, inFlight);
+    }
+    const airport = await inFlight;
+    pendingLookups.current.delete(code);
     setAirports((prev) => new Map(prev).set(code, airport));
     setUnknown((prev) => {
       const next = new Set(prev);
@@ -324,7 +358,10 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
 
     for (const [index, leg] of autofillLegs.entries()) {
       const operating = index <= lastOperating;
-      const depUtc = wallToUtc(`${leg.depDate}T${leg.depTime}:00`, leg.originTz);
+      const depUtc = wallToUtc(
+        `${leg.depDate}T${leg.depTime}:00`,
+        leg.originTz,
+      );
       // Arrival date = this leg's own dep date + this leg's own dayOffset (arr date - dep date).
       const arrDate = addDaysIso(leg.depDate, leg.dayOffset);
       const arrUtc = wallToUtc(`${arrDate}T${leg.arrTime}:00`, leg.destTz);
@@ -391,10 +428,25 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   async function handleManualSubmit() {
     setError(null);
 
+    // Let any lookup this trip depends on finish first. Without it, a fast typist — or a slow
+    // network — gets told a perfectly real airport is unknown, and the tap is silently thrown
+    // away. Codes nobody ever looked up are absent here too, so a genuinely wrong code still
+    // fails, with the message it deserves.
+    const resolved = new Map(airports);
+    await Promise.all(
+      legs
+        .flatMap((leg) => [leg.origin.toUpperCase(), leg.dest.toUpperCase()])
+        .filter((code) => code && !resolved.has(code))
+        .map(async (code) => {
+          const inFlight = pendingLookups.current.get(code);
+          if (inFlight) resolved.set(code, await inFlight);
+        }),
+    );
+
     const resolvedLegs: LegInput[] = [];
     for (const leg of legs) {
-      const originAirport = airports.get(leg.origin.toUpperCase());
-      const destAirport = airports.get(leg.dest.toUpperCase());
+      const originAirport = resolved.get(leg.origin.toUpperCase());
+      const destAirport = resolved.get(leg.dest.toUpperCase());
       if (!originAirport || !destAirport) {
         setError("Every leg needs a known origin and destination airport");
         return;

@@ -1,7 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AddTripForm from "./AddTripForm";
+import type { Airport } from "@danyeowa/shared";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
 
 vi.mock("./api", () => ({
@@ -64,7 +65,13 @@ describe("AddTripForm", () => {
       flights: [],
     });
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
 
     await user.type(screen.getByTestId("flightno-input"), "205");
     await vi.advanceTimersByTimeAsync(400);
@@ -88,7 +95,9 @@ describe("AddTripForm", () => {
     // Only the sector she actually flew is reported back to the crowd-sourced schedule layer —
     // she cannot vouch for times on a leg she was not on.
     expect(confirmSchedule).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(confirmSchedule).mock.calls[0]?.[0]).toMatchObject({ dest: "MXP" });
+    expect(vi.mocked(confirmSchedule).mock.calls[0]?.[0]).toMatchObject({
+      dest: "MXP",
+    });
   });
 
   it("add flow: happy path posts the same UTC payload as the original stepper, then fires confirmSchedule and onSubmitted", async () => {
@@ -135,7 +144,13 @@ describe("AddTripForm", () => {
     });
     const onSubmitted = vi.fn();
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={onSubmitted} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={onSubmitted}
+      />,
+    );
 
     // The airline code ("EK") is a fixed adornment, not typed - only the digits go into the input.
     await user.type(screen.getByTestId("flightno-input"), "412");
@@ -181,7 +196,13 @@ describe("AddTripForm", () => {
       ],
     });
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
 
     await user.type(screen.getByTestId("flightno-input"), "412");
     await vi.advanceTimersByTimeAsync(400);
@@ -194,21 +215,31 @@ describe("AddTripForm", () => {
 
   it("shows a muted 'checking schedule…' line and disables Add while the lookup is in flight", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    let resolveLookup!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    let resolveLookup!: (
+      value: Awaited<ReturnType<typeof lookupSchedule>>,
+    ) => void;
     vi.mocked(lookupSchedule).mockReturnValue(
       new Promise((resolve) => {
         resolveLookup = resolve;
       }),
     );
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
 
     expect(screen.queryByTestId("schedule-loading")).not.toBeInTheDocument();
 
     await user.type(screen.getByTestId("flightno-input"), "412");
     await vi.advanceTimersByTimeAsync(400);
 
-    expect(await screen.findByTestId("schedule-loading")).toHaveTextContent(/checking schedule/i);
+    expect(await screen.findByTestId("schedule-loading")).toHaveTextContent(
+      /checking schedule/i,
+    );
     // No manual-fallback link while still resolving - only after the lookup settles.
     expect(screen.queryByTestId("manual-expand")).not.toBeInTheDocument();
 
@@ -238,20 +269,32 @@ describe("AddTripForm", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     vi.mocked(lookupSchedule).mockReturnValue(new Promise(() => {})); // never resolves in this test
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
 
-    expect(screen.queryByRole("button", { name: /add to roster/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /add to roster/i }),
+    ).not.toBeInTheDocument();
 
     await user.type(screen.getByTestId("flightno-input"), "412");
     await vi.advanceTimersByTimeAsync(400);
 
-    const addButton = await screen.findByRole("button", { name: /^add to roster$/i });
+    const addButton = await screen.findByRole("button", {
+      name: /^add to roster$/i,
+    });
     expect(addButton).toBeEnabled();
   });
 
   it("pressing Add while the lookup is still resolving queues the submit and saves once it resolves", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    let resolveLookup!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    let resolveLookup!: (
+      value: Awaited<ReturnType<typeof lookupSchedule>>,
+    ) => void;
     vi.mocked(lookupSchedule).mockReturnValue(
       new Promise((resolve) => {
         resolveLookup = resolve;
@@ -265,12 +308,20 @@ describe("AddTripForm", () => {
       flights: [],
     });
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
 
     await user.type(screen.getByTestId("flightno-input"), "412");
     await vi.advanceTimersByTimeAsync(400);
 
-    const addButton = await screen.findByRole("button", { name: /^add to roster$/i });
+    const addButton = await screen.findByRole("button", {
+      name: /^add to roster$/i,
+    });
     await user.click(addButton);
 
     expect(screen.getByRole("button", { name: /adding/i })).toBeInTheDocument();
@@ -296,24 +347,38 @@ describe("AddTripForm", () => {
 
     await waitFor(() => expect(createTrip).toHaveBeenCalledTimes(1));
     const payload = vi.mocked(createTrip).mock.calls[0]?.[0];
-    expect(payload!.legs[0]).toMatchObject({ flightNo: "EK412", origin: "DXB", dest: "LHR" });
+    expect(payload!.legs[0]).toMatchObject({
+      flightNo: "EK412",
+      origin: "DXB",
+      dest: "LHR",
+    });
   });
 
   it("pressing Add while resolving, then hitting a lookup miss, saves nothing and shows the manual-entry link", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    let resolveLookup!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    let resolveLookup!: (
+      value: Awaited<ReturnType<typeof lookupSchedule>>,
+    ) => void;
     vi.mocked(lookupSchedule).mockReturnValue(
       new Promise((resolve) => {
         resolveLookup = resolve;
       }),
     );
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
 
     await user.type(screen.getByTestId("flightno-input"), "999");
     await vi.advanceTimersByTimeAsync(400);
 
-    const addButton = await screen.findByRole("button", { name: /^add to roster$/i });
+    const addButton = await screen.findByRole("button", {
+      name: /^add to roster$/i,
+    });
     await user.click(addButton);
     expect(screen.getByRole("button", { name: /adding/i })).toBeInTheDocument();
 
@@ -325,19 +390,29 @@ describe("AddTripForm", () => {
 
   it("editing the flight number after pressing Add cancels the queued submit - no auto-save, even once the stale lookup resolves", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    let resolveFirst!: (value: Awaited<ReturnType<typeof lookupSchedule>>) => void;
+    let resolveFirst!: (
+      value: Awaited<ReturnType<typeof lookupSchedule>>,
+    ) => void;
     vi.mocked(lookupSchedule).mockReturnValueOnce(
       new Promise((resolve) => {
         resolveFirst = resolve;
       }),
     );
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
 
     await user.type(screen.getByTestId("flightno-input"), "412");
     await vi.advanceTimersByTimeAsync(400);
 
-    const addButton = await screen.findByRole("button", { name: /^add to roster$/i });
+    const addButton = await screen.findByRole("button", {
+      name: /^add to roster$/i,
+    });
     await user.click(addButton);
     expect(screen.getByRole("button", { name: /adding/i })).toBeInTheDocument();
 
@@ -364,7 +439,9 @@ describe("AddTripForm", () => {
     // The new number's own preview arrives, but the button is back to non-busy - the earlier
     // press was dropped, not carried over as an auto-submit on the edited number.
     await screen.findByTestId("autofill-card");
-    expect(screen.getByRole("button", { name: /^add to roster$/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^add to roster$/i }),
+    ).toBeInTheDocument();
     expect(createTrip).not.toHaveBeenCalled();
 
     // The stale first lookup finally resolving shouldn't retroactively trigger a save either.
@@ -391,7 +468,13 @@ describe("AddTripForm", () => {
   it("does not render manual-expand until a lookup actually misses (not on a fresh form)", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
 
     // Fresh form, no input yet - manual-expand doesn't exist at all.
     expect(screen.queryByTestId("manual-expand")).not.toBeInTheDocument();
@@ -407,7 +490,13 @@ describe("AddTripForm", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     vi.mocked(lookupSchedule).mockResolvedValue(null);
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
 
     await user.type(screen.getByTestId("flightno-input"), "999");
     await vi.advanceTimersByTimeAsync(400);
@@ -427,8 +516,20 @@ describe("AddTripForm", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     vi.mocked(lookupSchedule).mockResolvedValue(null);
     vi.mocked(getAirport).mockImplementation(async (iata: string) => {
-      if (iata === "DXB") return { iata: "DXB", city: "Dubai", name: "Dubai Intl", tz: "Asia/Dubai" };
-      if (iata === "LHR") return { iata: "LHR", city: "London", name: "Heathrow", tz: "Europe/London" };
+      if (iata === "DXB")
+        return {
+          iata: "DXB",
+          city: "Dubai",
+          name: "Dubai Intl",
+          tz: "Asia/Dubai",
+        };
+      if (iata === "LHR")
+        return {
+          iata: "LHR",
+          city: "London",
+          name: "Heathrow",
+          tz: "Europe/London",
+        };
       return null;
     });
     vi.mocked(createTrip).mockResolvedValue({
@@ -440,7 +541,13 @@ describe("AddTripForm", () => {
     });
     const onSubmitted = vi.fn();
 
-    render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={onSubmitted} />);
+    render(
+      <AddTripForm
+        isoDate="2026-08-20"
+        homeTz="Asia/Dubai"
+        onSubmitted={onSubmitted}
+      />,
+    );
 
     await user.type(screen.getByTestId("flightno-input"), "999");
     await vi.advanceTimersByTimeAsync(400);
@@ -496,7 +603,13 @@ describe("AddTripForm", () => {
 
     async function previewEk097(user: ReturnType<typeof userEvent.setup>) {
       vi.mocked(lookupSchedule).mockResolvedValueOnce({ legs: EK097_LEGS });
-      render(<AddTripForm isoDate="2026-08-20" homeTz="Asia/Dubai" onSubmitted={vi.fn()} />);
+      render(
+        <AddTripForm
+          isoDate="2026-08-20"
+          homeTz="Asia/Dubai"
+          onSubmitted={vi.fn()}
+        />,
+      );
       await user.type(screen.getByTestId("flightno-input"), "097");
       await vi.advanceTimersByTimeAsync(400);
       await screen.findByTestId("autofill-card");
@@ -536,8 +649,16 @@ describe("AddTripForm", () => {
       // ONE trip, two legs, combined save (not two POSTs).
       expect(payload!.legs).toHaveLength(2);
       // Leading zeros are stripped by normaliseFlightNo at the submit boundary (EK097 -> EK97).
-      expect(payload!.legs[0]).toMatchObject({ flightNo: "EK97", origin: "DXB", dest: "BCN" });
-      expect(payload!.legs[1]).toMatchObject({ flightNo: "EK98", origin: "BCN", dest: "DXB" });
+      expect(payload!.legs[0]).toMatchObject({
+        flightNo: "EK97",
+        origin: "DXB",
+        dest: "BCN",
+      });
+      expect(payload!.legs[1]).toMatchObject({
+        flightNo: "EK98",
+        origin: "BCN",
+        dest: "DXB",
+      });
     });
 
     it("reverts to single-flight preview when the appended card's ✕ is clicked", async () => {
@@ -553,8 +674,12 @@ describe("AddTripForm", () => {
       await user.click(screen.getByTestId("remove-appended"));
 
       expect(screen.queryByTestId("appended-card")).not.toBeInTheDocument();
-      expect(screen.getByTestId("autofill-card")).toHaveTextContent("DXB → BCN");
-      expect(screen.getByTestId("autofill-card")).not.toHaveTextContent("BCN → DXB");
+      expect(screen.getByTestId("autofill-card")).toHaveTextContent(
+        "DXB → BCN",
+      );
+      expect(screen.getByTestId("autofill-card")).not.toHaveTextContent(
+        "BCN → DXB",
+      );
       // Back to single-flight preview: the "+ add flight" control is available again.
       expect(screen.getByTestId("append-flight")).toBeInTheDocument();
     });
@@ -573,5 +698,136 @@ describe("AddTripForm", () => {
       expect(screen.getByTestId("autofill-card")).toBeInTheDocument();
       expect(screen.queryByTestId("manual-expand")).not.toBeInTheDocument();
     });
+  });
+
+  it("waits for an airport lookup still in flight instead of calling the airport unknown", async () => {
+    // The real defect, found in a CI trace: the form was fully filled, DXB and BAH were both
+    // valid, the button was pressed — and no POST was ever made, because the submit read an
+    // airport map that had not been filled in yet and reported "unknown airport". A fast typist
+    // on a slow network gets exactly this, and the tap is silently thrown away.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(lookupSchedule).mockResolvedValue(null); // unknown flight -> the manual path
+    vi.mocked(createTrip).mockResolvedValue({} as never);
+
+    // DXB comes back at once. BAH is still open when Add is pressed.
+    // ONE deferred promise, made up front. A mockImplementation that builds a new promise per
+    // call hands back a fresh resolver on any repeat lookup, and the resolver this test holds
+    // would then settle a promise nobody is waiting on.
+    let resolveBah!: (a: Airport | null) => void;
+    const bahPending = new Promise<Airport | null>((resolve) => {
+      resolveBah = resolve;
+    });
+    vi.mocked(getAirport).mockImplementation((code: string) =>
+      code.toUpperCase() === "BAH"
+        ? bahPending
+        : Promise.resolve({
+            iata: "DXB",
+            city: "Dubai",
+            name: "Dubai Intl",
+            tz: "Asia/Dubai",
+          }),
+    );
+
+    render(
+      <AddTripForm
+        isoDate="2026-11-09"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("flightno-input"), "999");
+    await vi.advanceTimersByTimeAsync(400);
+    await user.click(await screen.findByTestId("manual-expand"));
+
+    await user.clear(screen.getByLabelText(/flight no/i));
+    await user.type(screen.getByLabelText(/flight no/i), "EK999");
+    await user.type(screen.getByLabelText(/^origin$/i), "DXB");
+    await user.tab();
+    await user.type(screen.getByLabelText(/^dest$/i), "BAH");
+    await user.tab();
+    // Times last, and only once the resolved origin has landed in state: the lookup's re-render
+    // rewrites the departure field, so anything set before it is thrown away.
+    await vi.advanceTimersByTimeAsync(0);
+    // fireEvent.change, not type(): a datetime-local input takes its value whole, and typing it
+    // character by character leaves it invalid.
+    fireEvent.change(screen.getByLabelText(/departure \(local\)/i), {
+      target: { value: "2026-11-09T06:00" },
+    });
+    fireEvent.change(screen.getByLabelText(/arrival \(local\)/i), {
+      target: { value: "2026-11-09T07:10" },
+    });
+    // The instrument, before relying on it: if the field did not take the value, the failure
+    // below would be about dates, not about the airport race this test is for.
+    expect(
+      (screen.getByLabelText(/departure \(local\)/i) as HTMLInputElement).value,
+    ).toBe("2026-11-09T06:00");
+
+    await user.click(screen.getByRole("button", { name: /add to roster/i }));
+
+    // Waiting, not failing: no request yet, and above all no lie about the airport.
+    expect(createTrip).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(/known origin and destination/i),
+    ).not.toBeInTheDocument();
+
+    resolveBah({
+      iata: "BAH",
+      city: "Manama",
+      name: "Bahrain Intl",
+      tz: "Asia/Bahrain",
+    });
+
+    await waitFor(() => expect(createTrip).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByText(/known origin and destination/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still refuses an airport nobody could resolve", async () => {
+    // The guard has to keep working: waiting for a lookup must not turn into ignoring the answer.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    vi.mocked(lookupSchedule).mockResolvedValue(null);
+    vi.mocked(createTrip).mockResolvedValue({} as never);
+    vi.mocked(getAirport).mockImplementation((code: string) =>
+      Promise.resolve(
+        code.toUpperCase() === "DXB"
+          ? { iata: "DXB", city: "Dubai", name: "Dubai Intl", tz: "Asia/Dubai" }
+          : null,
+      ),
+    );
+
+    render(
+      <AddTripForm
+        isoDate="2026-11-09"
+        homeTz="Asia/Dubai"
+        onSubmitted={vi.fn()}
+      />,
+    );
+
+    await user.type(screen.getByTestId("flightno-input"), "999");
+    await vi.advanceTimersByTimeAsync(400);
+    await user.click(await screen.findByTestId("manual-expand"));
+
+    await user.clear(screen.getByLabelText(/flight no/i));
+    await user.type(screen.getByLabelText(/flight no/i), "EK999");
+    await user.type(screen.getByLabelText(/^origin$/i), "DXB");
+    await user.tab();
+    await user.type(screen.getByLabelText(/^dest$/i), "ZZZ");
+    await user.tab();
+    await vi.advanceTimersByTimeAsync(0);
+    fireEvent.change(screen.getByLabelText(/departure \(local\)/i), {
+      target: { value: "2026-11-09T06:00" },
+    });
+    fireEvent.change(screen.getByLabelText(/arrival \(local\)/i), {
+      target: { value: "2026-11-09T07:10" },
+    });
+
+    await user.click(screen.getByRole("button", { name: /add to roster/i }));
+
+    expect(
+      await screen.findByText(/known origin and destination/i),
+    ).toBeInTheDocument();
+    expect(createTrip).not.toHaveBeenCalled();
   });
 });
