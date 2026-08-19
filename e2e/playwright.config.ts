@@ -23,8 +23,17 @@ export const AUTH_FILE = path.join(__dirname, ".auth", "user.json");
 
 export default defineConfig({
   testDir: ".",
-  timeout: 30_000,
-  expect: { timeout: 5_000 },
+  // Timeouts sized for the CI runner, not for a laptop. The suite takes ~1 minute locally and
+  // 2-4 minutes on GitHub's runner, and every flake that has blocked a deploy has been the same
+  // shape: an assertion that the UI has caught up, timing out at 5s while the write was still
+  // in flight. The retry then passes, which is the tell — these are latency failures, not wrong
+  // answers, and no assertion is weakened by giving it room.
+  //
+  // Where the distinction actually matters, prefer helpers.ts's expectRosterCount: it asks the
+  // server whether the write landed, so "never written" and "not yet painted" stop looking
+  // identical. A longer timeout hides that difference; it just stops it costing a deploy.
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
   fullyParallel: false,
   retries: 1,
   workers: 1,
