@@ -9,7 +9,6 @@ import SettingsView from "./SettingsView";
 import CrewPanel from "./CrewPanel";
 import TabBar from "./TabBar";
 import type { TabName } from "./TabBar";
-import TripForm from "./TripForm";
 
 const INVITE_PATH_PREFIX = "/invite/";
 
@@ -50,7 +49,6 @@ function SignedInApp() {
   const [activeTab, setActiveTab] = useState<TabName>(() =>
     initialTab(location.search),
   );
-  const [showTripForm, setShowTripForm] = useState(false);
   const [tripsVersion, setTripsVersion] = useState(0);
   // Bumped to ask CalendarHome to open the day sheet for today (or the next trip-free day) -
   // fired by the tab bar's center + button, from any tab.
@@ -117,15 +115,6 @@ function SignedInApp() {
 
         {me === null ? (
           <Landing onSignedIn={loadMe} />
-        ) : showTripForm ? (
-          <TripForm
-            now={now}
-            homeTz={Intl.DateTimeFormat().resolvedOptions().timeZone}
-            onSubmitted={() => {
-              setShowTripForm(false);
-              setTripsVersion((v) => v + 1);
-            }}
-          />
         ) : activeTab === "share" ? (
           <CrewPanel />
         ) : activeTab === "settings" ? (
@@ -147,13 +136,11 @@ function SignedInApp() {
         <TabBar
           active={activeTab}
           onSelect={(tab) => {
-            setShowTripForm(false);
             setActiveTab(tab);
           }}
           // Opens the day sheet for today (or the next trip-free day) on the calendar tab,
           // regardless of which tab was active when + was tapped.
           onAdd={() => {
-            setShowTripForm(false);
             setActiveTab("calendar");
             setOpenTodayToken((v) => v + 1);
           }}
