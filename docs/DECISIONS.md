@@ -8,6 +8,136 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-19
+
+### A deploy is not done until production says so
+
+`wrangler deploy` exiting zero, and the deploy job going green, are the same evidence: the CLI
+was happy. Neither is evidence that the new code answers requests. After #53 merged, this job
+was green while production still queried a table the migration had dropped, and nothing caught
+it — it was found by hand.
+
+`/api/health` now reports `version`, the commit the Worker was deployed from, injected with
+`wrangler deploy --var BUILD_SHA:$GITHUB_SHA`. The deploy job then polls production until it
+sees **both** that commit and the asset filename this run built, and fails if it never does.
+
+Two halves, because they fail separately. A worker-only change leaves the bundle hash untouched,
+so the asset check alone would pass on a Worker that never updated; a web-only change leaves the
+Worker identical, so the version check alone would pass on stale assets.
+
+Retried for five minutes rather than asked once: a request made mid-propagation gets the previous
+version and looks exactly like a failed deploy. A one-shot check would have become the flake it
+was written to catch.
+
+**Rejected — assert `/api/health` returns `ok`.** It already did, throughout the #53 incident.
+Liveness is not identity.
+
+**`pnpm run deploy -- --var …` does not work,** and fails silently. The script is
+`build && wrangler deploy`, and pnpm drops `--` arguments rather than appending them to the
+chained command, so the var never reaches wrangler and the smoke check could never pass. Worse,
+the same call with `--dry-run` appended **deployed for real** — the flag was dropped too. Build
+and deploy are separate steps in the workflow for this reason. Calling `wrangler` directly does
+honour both flags; this is a pnpm forwarding limit, not a wrangler one.
+
+---
+
+## 2026-08-18
+
+### Days away from base are one band, computed across trips
+
+A pairing is normally two trips — EK247 out on the 22nd, EK248 back on the 28th — and the day
+markers were computed *inside* one trip, first departure to last arrival. The layover days
+belonged to neither, so the 24th–26th rendered exactly like the 20th and the 21st. For the person
+this app is for, that is the wrong answer: she is not flying, but she is also not coming home.
+
+`awaySpans()` (`web/src/lib/dayMarks.ts`) walks the legs base-to-base instead — away opens on a
+departure from `HOME_BASE_IATA`, closes on an arrival at it. Two cases a partly-known roster
+forces, both tested:
+
+- **A departure from base while a span is still open.** She got home by some route this roster
+  does not record, so the open span closes at the last landing seen. Without it, one unclosed
+  short trip paints every day up to the next return as away.
+- **A span still open at the end of the roster.** It stops at the last landing known. Running it
+  to "now" would invent days she may already be home for.
+
+The result is **unioned** with the existing per-trip spans, never substituted for them, so a
+roster the walk cannot interpret still marks everything it marked before. No day that is marked
+today can become unmarked.
+
+A run of away days is drawn as one band: inner corners square off and the 0.5rem grid gap is
+bridged by an absolutely positioned child. The band breaks at the week edge, because it cannot
+cross a row, and at the month edge, because the marks are month-scoped.
+
+**Rejected — colour the layover cells and let the eye join them.** Tried in three variants
+(same fill, softer fill, a connector bar under each week). All three leave seven boxes that
+happen to share a colour. The ask was that the days read as *connected*; only removing the gaps
+does that.
+
+**Trap:** an absolutely positioned child lays out against the **padding** box, not the border
+box, so `inset-y-0` stopped 1px short at top and bottom and left a hairline seam. Caught by an
+e2e assertion on edge coverage, invisible in a screenshot.
+
+### Today is marked on the number, not the cell
+
+Today was `ring-2 ring-accent`; the selected day was `ring-2 ring-accent ring-offset-1`. Same
+colour, same shape, one pixel apart — indistinguishable, and a day that was both looked exactly
+like a day that was only today.
+
+Today now fills the **number** with a disc in `--color-today`; selection keeps the ring on the
+**cell**. Different surfaces, so both can be true at once and still be read.
+
+The colour is new and deliberately not the accent: on this screen blue means *duty*, so a blue
+ring on an empty day competes with the roster itself. `--color-report` could not be borrowed —
+it is amber in dark but blue in light, which would reintroduce the collision in one theme.
+
+**Rejected — a `TODAY` caption under the number.** On a day that also has a duty it wants the
+same line as the station code; one of them has to go, or the cell grows.
+**Rejected — the same ring in grey.** Colour alone carries it, which fails for anyone who has
+trouble with colour, and the grey disappears entirely under the selected ring.
+
+---
+
+## 2026-08-17
+
+### An invitation explains itself before it asks for anything
+
+`/invite/:token` used to land an unknown visitor on an anonymous email field. They had no idea an
+invitation existed, no idea who sent it, and no reason to trust the page.
+
+It is now two stages: who invited you and what you would get, then sign-in. The preview route
+returns exactly two strings — the sender's display name and a **masked** address — and no
+schedule data at all, so the token cannot leak a roster even in principle.
+
+The blurred calendar on that page is **entirely fabricated**. Blur is decoration; one line of CSS
+removes it. Nothing real may sit behind it, and it is labelled as a sample and hidden from screen
+readers.
+
+### The preview says whether *this* session is the invited one
+
+Invites match on the exact address, and Google hands over whatever address its account carries.
+Signing in with the wrong one used to land people in an app with no invitation and nothing
+explaining why.
+
+`GET /api/invite/:token` now returns `matchesYou` when a session exists. The comparison happens on
+the server against real addresses; only a boolean leaves. Signed out, the field is absent
+entirely.
+
+**Rejected — return the invited address so the client can compare.** That hands a full address to
+anyone holding a link.
+
+Google's `callbackURL` is the invite page, not `/`: the round trip is a full navigation, so
+returning to the app root loses which invitation the visitor came for.
+
+### One rule names the sender, everywhere
+
+The preview page introduced the sender as `korlogan94`; the email that carried people there said
+`korlogan94@gmail.com shared their roster with you`. Two halves of one introduction disagreeing —
+and the email half handed a full address to someone who had only been invited.
+
+`senderLabel()` (`worker/src/crew.ts`) now serves both: name, else the local part, else `Someone`.
+
+---
+
 ## 2026-08-14
 
 ### The family share link is deleted; the invite is the only way to share
@@ -402,7 +532,7 @@ swipe tests dispatch `MouseEvent` typed as pointer events to work around it.
 | Thing | Why not |
 |---|---|
 | Weather / sunset at destination | Needs airport lat/lng seed column + weather API. Prototyped as placeholders only. |
-| Sharing rework | `/share/:token` today is a public link needing no account; a per-person login is a different data model. Needs a design conversation first. |
+| A public share link | Deleted in #53. `/share/:token` needed no account, so the link *was* the credential. Sharing is now an invitation to a named address that must sign in. Reinstating a public link would undo that on purpose. |
 | Destination news | Goes stale fast, real cost, unclear value next to an arrival time. |
 | Async schedule reconciliation | See latency numbers above. |
 | Second D1 for previews | Only worth it if previews get heavy use. |

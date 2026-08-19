@@ -3,7 +3,15 @@ import { z } from "zod";
 export * from "./time";
 export * from "./flight";
 
-export type HealthResponse = { ok: boolean; d1: boolean };
+export type HealthResponse = {
+  ok: boolean;
+  d1: boolean;
+  /** The commit this Worker was deployed from, injected at deploy time. Absent locally.
+   * Exists so a deploy can be PROVEN to have taken effect: a green deploy job is not evidence
+   * that the new code answers requests, and once it was not — production kept querying a table
+   * a merged migration had already dropped. */
+  version?: string;
+};
 export type Me = { id: string; email: string; name: string | null };
 
 const iataSchema = z.string().regex(/^[A-Z]{3}$/i);

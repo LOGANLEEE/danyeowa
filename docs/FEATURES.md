@@ -24,6 +24,11 @@ codebase to find out. Status words mean exactly one thing:
 | Edit / delete on the card | Live | Pencil and bin. Editing is create-then-delete, never the reverse |
 | Trip detail with leg timeline | Live | Report → depart → land, with layovers between sectors — on the day card, which is the only trip surface now |
 | Manual entry when a lookup misses | Live | Only appears after a lookup actually returns empty |
+| More than one duty on a day | Live | A turnaround in the morning and a standby that evening are separate trips, not legs. The day card stacks one card per duty, each with its own edit and delete. `tripsForDay()` returns a list; it used to return the first match and stop, which made a second duty invisible |
+| Delete asks in a modal | Live | Native `<dialog>` + `showModal()`, so Esc, focus trap and inert background come from the platform. jsdom implements none of it, so the behaviour is only ever real in e2e |
+| Which sector is actually hers | Live | A multi-sector service (EK205 DXB→MXP→JFK) can change crew down-route. Non-operating legs are stored so the routing stays true but split out of `flights` into `continuation`, so a consumer that forgets the flag still gets the right times |
+| Layover days marked | Live | Days between two trips of one pairing — she is in EZE, not at home. Computed base-to-base across trips, drawn as one continuous band. See `DECISIONS.md` 2026-08-18 |
+| Today told apart from the tapped day | Live | Today fills the number in `--color-today`; selection rings the cell. They used to be the same colour and shape, one pixel apart |
 
 ## Notifications
 
@@ -54,6 +59,10 @@ codebase to find out. Status words mean exactly one thing:
 | Google sign-in | Live in prod only | Cannot work on localhost or preview URLs — Google needs exact redirect URIs |
 | Share a roster by link | **Removed 2026-08-14** | `/share/:token` and the `share_links` table are gone. It carried no clock times, and a bearer URL is the wrong place to put them — see `DECISIONS.md`. The invite is now the only way to share |
 | Crew sharing (per-person) | Live | Invite by email on the Share tab (now the only thing on that tab); once accepted, both sides read each other's calendar through the badge row. Read-only in both directions — no write route takes a user id. Verified in production 2026-08-13 with two throwaway accounts: invite → accept → cross-read → revoke, zero mutation controls on the other roster, rows cleaned up after |
+| The invitation is emailed | Live | Resend, from `noreply@danyeowa.com`. Awaited, not fire-and-forget: the response carries `emailed`, so a silent send failure cannot leave the sender believing someone was told. The invite still stands if mail is down. Verified by reading real delivered mail |
+| Invite link explains itself | Live | `/invite/:token` shows who invited you and a fabricated, blurred sample calendar before asking for anything. The route returns two strings and no schedule data, so the token cannot leak a roster |
+| Wrong-account sign-in is explained | Live | `matchesYou` (boolean only, server-side comparison) tells a signed-in visitor whether this session is the invited one, instead of dropping them into an app with no invitation and no reason given |
+| Deploys prove themselves | Live | `/api/health` reports the commit it was deployed from; the deploy job polls production for that commit *and* the asset filename it built before going green |
 
 ## App shell
 
