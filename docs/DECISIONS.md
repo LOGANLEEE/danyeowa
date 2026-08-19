@@ -235,9 +235,11 @@ fr24 scraper's user-agent (`RoasterMeBot/1.0` → `DanyeowaBot/1.0`).
 variable is set in `~/.config/roaster-me/env` on a machine this repo cannot edit, and a rename
 that silently repoints the harvester at the default URL is worse than an alias that never expires.
 
-**Deliberately still `roaster`:** `docs/rules/*` and `docs/superpowers/{plans,specs}/*` are a
-frozen archive. Rewriting a historical document to say something it did not say makes it useless
-as a record.
+**Deliberately still `roaster`:** `docs/superpowers/{plans,specs}/*` are a frozen archive.
+Rewriting a historical document to say something it did not say makes it useless as a record.
+(`docs/rules/*` was in this set until 2026-08-19, when it was deleted outright — see the open
+questions below. The archive argument survives it: git history holds the text, and unlike a file
+in `docs/` nobody has to be warned away from it.)
 
 The user-agent was previously left alone because changing it changes the fingerprint fr24 sees.
 That is still true; it was accepted because the string is self-identifying either way, and a
@@ -569,8 +571,10 @@ swipe tests dispatch `MouseEvent` typed as pointer events to work around it.
   (2026-08-19). It could not render: `showTripForm` started `false` and every call to its setter
   passed `false`. 884 lines carrying a duplicate of the airport guard and the un-normalised
   flight-number bug, reachable by nothing.
-- **`docs/rules/*`** (Expo/Supabase/Jest, 74 stale references) is flagged but not deleted; removal
-  is the owner's call.
+- ~~**`docs/rules/*`** is flagged but not deleted…~~ **Deleted 2026-08-19.** Measured 112
+  mentions of a stack this project does not use against 10 of the one it does, with zero for
+  Hono or Drizzle. Git history is the archive; a document every reader has to be warned away
+  from costs more than it records. Content preserved at `1bc3242`.
 
 ## Not built, deliberately
 

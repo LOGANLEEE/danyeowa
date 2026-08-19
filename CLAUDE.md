@@ -14,8 +14,7 @@ React 19 + Vite + Tailwind v4 (`web/`) · Hono + Cloudflare Workers + D1 + Drizz
 shared types and time helpers (`shared/`) · better-auth (email OTP + Google) · Vitest unit tests ·
 Playwright e2e (`e2e/`) · deployed by GitHub Actions to Cloudflare.
 
-⚠️ `docs/rules/*` describes Expo/Supabase/Jest and is **stale** — a previous incarnation of this
-project. Ignore it. `docs/superpowers/plans/*` is accurate but stops at Plan 10 (2026-08-09).
+⚠️ `docs/superpowers/plans/*` is accurate but stops at Plan 10 (2026-08-09).
 
 ## Workflow — follow this for any feature or fix
 
