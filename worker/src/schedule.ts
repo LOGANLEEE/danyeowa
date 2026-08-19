@@ -250,7 +250,21 @@ scheduleRouter.get("/schedule/lookup", async (c) => {
     // purge. The client's existing manual-entry fallback already handles this response.
     const stillMissing = await learnAirportsForLegs(database, resolved.legs);
     if (stillMissing.size > 0) {
-      await recordMiss(database, flightNo);
+      // 404, but deliberately NO recordMiss. The provider just said this flight exists; the
+      // gap is ours — an airport we have not seeded and that this provider does not annotate.
+      // A miss row here claims "the provider says this flight does not exist", which is false,
+      // and it self-shields: `isRecentlyMissed` short-circuits ahead of the provider chain, so
+      // the `clearMiss` that would undo it can never run, and seeding the airport does not
+      // clear it either (ingest clears by flight number). A real service would stay hidden for
+      // the full hour — the EK247 failure again, from the other side.
+      //
+      // Not a rare corner: airport metadata comes from aerodatabox alone, and scrape-fr24 —
+      // the FIRST provider in the chain — never supplies it. Any fr24-resolved flight touching
+      // a station outside the seeded set lands here.
+      //
+      // The cost of not caching is re-querying providers for this one flight number until the
+      // airport becomes learnable. That is the right trade: the chain is answering fine, and
+      // the alternative hides a service that exists.
       return c.json({ error: "unknown_flight" }, 404);
     }
 

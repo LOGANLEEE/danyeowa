@@ -565,8 +565,15 @@ swipe tests dispatch `MouseEvent` typed as pointer events to work around it.
 
 - ~~Is scroll-to-expand reachable on a short roster?~~ **Resolved by removing the feature** — the
   real defect was the shrink-clamp loop above, not reachability.
-- **The Worker still records a miss when its fetch was BLOCKED.** That is what poisoned EK247 for a
-  whole TTL. Now that the local fetcher owns the cache, a challenged fetch should write nothing.
+- ~~**The Worker still records a miss when its fetch was BLOCKED.**~~ **Resolved 2026-08-19.**
+  The blocked/timed-out path was already correct (`schedule.ts` only records a miss when a
+  provider ANSWERED `absent`). A *second* path was not: when a provider RESOLVED a flight but an
+  airport could not be learned, it recorded a miss too — claiming the provider said the flight
+  does not exist, when it had said the opposite. That row self-shields, because
+  `isRecentlyMissed` short-circuits ahead of the provider chain so the `clearMiss` that would
+  undo it never runs, and seeding the airport does not clear it (ingest clears by flight number).
+  Not a corner case: airport metadata comes from aerodatabox alone and scrape-fr24 — the first
+  provider in the chain — never supplies it. Fixed by not caching there at all.
 - ~~**`TripForm.tsx`** is a near-duplicate of `useTripEntry`…~~ **Resolved by deleting it**
   (2026-08-19). It could not render: `showTripForm` started `false` and every call to its setter
   passed `false`. 884 lines carrying a duplicate of the airport guard and the un-normalised
