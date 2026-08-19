@@ -32,22 +32,28 @@ function api(path: string, init?: RequestInit) {
  * do not have — without a header it answers `MISSING_OR_NULL_ORIGIN`, 403, and deletes nothing.
  * A browser sends this automatically on a same-origin request, so it costs the real client
  * nothing; it only has to be supplied by hand here. The value has to be the trusted origin,
- * which comes from BETTER_AUTH_URL (`http://localhost:8787` in .dev.vars) rather than from the
- * URL SELF.fetch is called with.
+ * which better-auth derives from BETTER_AUTH_URL — read from env here rather than written down,
+ * because .dev.vars is not present in CI and a hardcoded origin passes locally and 403s there.
  */
-const AUTH_ORIGIN = "http://localhost:8787";
+const AUTH_ORIGIN =
+  (env as unknown as { BETTER_AUTH_URL?: string }).BETTER_AUTH_URL ?? "";
 
 beforeAll(async () => {
   const db = drizzle(env.DB, { schema });
   await seedAirports(db);
 
   ownerCookie = await signInAs(OWNER);
-  ownerId = ((await (await api("/me", { headers: { Cookie: ownerCookie } })).json()) as { id: string })
-    .id;
+  ownerId = (
+    (await (await api("/me", { headers: { Cookie: ownerCookie } })).json()) as {
+      id: string;
+    }
+  ).id;
 
   bystanderCookie = await signInAs(BYSTANDER);
   bystanderId = (
-    (await (await api("/me", { headers: { Cookie: bystanderCookie } })).json()) as { id: string }
+    (await (
+      await api("/me", { headers: { Cookie: bystanderCookie } })
+    ).json()) as { id: string }
   ).id;
 });
 
@@ -59,7 +65,9 @@ async function countsFor(userId: string) {
     session: await one("SELECT COUNT(*) AS n FROM session WHERE user_id = ?"),
     trips: await one("SELECT COUNT(*) AS n FROM trips WHERE user_id = ?"),
     flights: await one("SELECT COUNT(*) AS n FROM flights WHERE user_id = ?"),
-    invitesSent: await one("SELECT COUNT(*) AS n FROM crew_invites WHERE from_user_id = ?"),
+    invitesSent: await one(
+      "SELECT COUNT(*) AS n FROM crew_invites WHERE from_user_id = ?",
+    ),
   };
 }
 
@@ -94,17 +102,33 @@ describe("DELETE account", () => {
     // The instrument first: prove these counts can be non-zero, or "all zero afterwards" proves
     // nothing at all.
     const before = await countsFor(ownerId);
-    expect(before).toEqual({ user: 1, session: 1, trips: 1, flights: 1, invitesSent: 1 });
+    expect(before).toEqual({
+      user: 1,
+      session: 1,
+      trips: 1,
+      flights: 1,
+      invitesSent: 1,
+    });
 
     const res = await api("/auth/delete-user", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Cookie: ownerCookie, Origin: AUTH_ORIGIN },
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: ownerCookie,
+        Origin: AUTH_ORIGIN,
+      },
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(200);
 
     const after = await countsFor(ownerId);
-    expect(after).toEqual({ user: 0, session: 0, trips: 0, flights: 0, invitesSent: 0 });
+    expect(after).toEqual({
+      user: 0,
+      session: 0,
+      trips: 0,
+      flights: 0,
+      invitesSent: 0,
+    });
   });
 
   it("leaves everyone else untouched", async () => {
