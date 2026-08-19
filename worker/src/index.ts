@@ -13,6 +13,8 @@ export type Env = {
   DB: D1Database;
   ASSETS: Fetcher;
   RESEND_API_KEY?: string;
+  /** Set by the deploy job (`wrangler deploy --var BUILD_SHA:…`), never in wrangler.jsonc. */
+  BUILD_SHA?: string;
   DEV_OTP_FALLBACK?: string;
   /** Local-only: address that always gets the fixed dev OTP (see worker/src/auth.ts). */
   DEV_FIXED_OTP_EMAIL?: string;
@@ -81,7 +83,11 @@ app.use("/api/*", async (c, next) => {
 
 app.get("/api/health", async (c) => {
   const row = await c.env.DB.prepare("SELECT 1 AS one").first<{ one: number }>();
-  const body: HealthResponse = { ok: true, d1: row?.one === 1 };
+  const body: HealthResponse = {
+    ok: true,
+    d1: row?.one === 1,
+    ...(c.env.BUILD_SHA ? { version: c.env.BUILD_SHA } : {}),
+  };
   return c.json(body);
 });
 
