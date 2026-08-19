@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { UNKNOWN_FLIGHT_NO, openAddForm, signInThroughUi } from "./helpers";
+import {
+  UNKNOWN_FLIGHT_NO,
+  expectRosterCount,
+  openAddForm,
+  signInThroughUi,
+} from "./helpers";
 
 /**
  * Deleting an account, end to end.
@@ -44,6 +49,9 @@ test("delete account: confirm by typing the address, and the roster goes with it
   await page.getByLabel(/departure \(local\)/i).fill(`${DAY}T06:00`);
   await page.getByLabel(/arrival \(local\)/i).fill(`${DAY}T07:10`);
   await page.getByRole("button", { name: /add to roster/i }).click();
+  // Server truth first — see expectRosterCount. Asserting the card alone is what blocked the
+  // deploy of this very feature twice.
+  await expectRosterCount(page, 1);
   await expect(page.getByTestId("delete-trip")).toHaveCount(1);
 
   // The instrument: prove the API answers for this account BEFORE deleting, or the 401

@@ -1,3 +1,4 @@
+import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 /** Test account used across the spec — idempotent because each run deletes its own trip. */
@@ -78,7 +79,9 @@ export async function pickCalendarDay(page: Page, iso: string): Promise<void> {
     }
     await page.getByTestId("calendar-next").click();
   }
-  throw new Error(`calendar-day-${iso} never became visible after 24 months of navigation`);
+  throw new Error(
+    `calendar-day-${iso} never became visible after 24 months of navigation`,
+  );
 }
 
 /**
@@ -93,9 +96,13 @@ export async function openAddForm(page: Page, iso: string): Promise<void> {
 
 /** Fetches the most recently captured dev-fallback OTP via the E2E_TEST_MODE-gated route. */
 async function fetchLastOtp(page: Page, email: string): Promise<string> {
-  const res = await page.request.get(`/api/__e2e/last-otp?email=${encodeURIComponent(email)}`);
+  const res = await page.request.get(
+    `/api/__e2e/last-otp?email=${encodeURIComponent(email)}`,
+  );
   if (!res.ok()) {
-    throw new Error(`__e2e/last-otp failed: ${res.status()} ${await res.text()}`);
+    throw new Error(
+      `__e2e/last-otp failed: ${res.status()} ${await res.text()}`,
+    );
   }
   const body = (await res.json()) as { otp: string };
   return body.otp;
@@ -103,7 +110,10 @@ async function fetchLastOtp(page: Page, email: string): Promise<string> {
 
 /** Drives the full landing -> email OTP sign-in flow via the real UI. The email field is on
  * the landing surface itself (no separate login screen/CTA to navigate through first). */
-export async function signInThroughUi(page: Page, email = E2E_EMAIL): Promise<void> {
+export async function signInThroughUi(
+  page: Page,
+  email = E2E_EMAIL,
+): Promise<void> {
   await page.goto("/");
   await page.getByLabel(/email/i).fill(email);
   await page.getByRole("button", { name: /send code/i }).click();
@@ -122,10 +132,19 @@ export async function signOutThroughUi(page: Page): Promise<void> {
 }
 
 /** One trip as /api/trips returns it — enough to count trips and their legs. */
-type RosterLeg = { id: string; flightNo: string; dest: string; operating: boolean };
+type RosterLeg = {
+  id: string;
+  flightNo: string;
+  dest: string;
+  operating: boolean;
+};
 /** `flights` is only the sectors the crew works; `continuation` is the aircraft's onward
  * routing, which the API keeps out of `flights` on purpose. */
-type RosterTrip = { id: string; flights: RosterLeg[]; continuation?: RosterLeg[] };
+type RosterTrip = {
+  id: string;
+  flights: RosterLeg[];
+  continuation?: RosterLeg[];
+};
 
 /**
  * The signed-in account's roster, straight from the API the app itself calls.
@@ -152,10 +171,36 @@ export async function rosterTrips(page: Page): Promise<RosterTrip[]> {
 export async function clearRoster(page: Page): Promise<void> {
   for (const trip of await rosterTrips(page)) {
     const res = await page.request.delete(`/api/trips/${trip.id}`);
-    if (!res.ok()) throw new Error(`DELETE /api/trips/${trip.id} failed: ${res.status()}`);
+    if (!res.ok())
+      throw new Error(`DELETE /api/trips/${trip.id} failed: ${res.status()}`);
   }
   const left = await rosterTrips(page);
-  if (left.length > 0) throw new Error(`roster not empty after cleanup: ${left.length} trip(s) left`);
+  if (left.length > 0)
+    throw new Error(
+      `roster not empty after cleanup: ${left.length} trip(s) left`,
+    );
   await page.reload();
   await page.getByTestId("calendar-grid").waitFor({ timeout: 20_000 });
+}
+
+/**
+ * Waits until the SERVER agrees the roster holds `count` trips.
+ *
+ * Use this immediately after adding or deleting a duty, before asserting anything on screen.
+ * `expect(page.getByTestId("delete-trip")).toHaveCount(n)` on its own conflates two different
+ * failures — the write never happened, or it happened and the calendar had not repainted — and
+ * with the suite's 5s expect timeout a write that merely takes longer than that is
+ * indistinguishable from a broken feature. Both `away-band.spec.ts` and `delete-account.spec.ts`
+ * blocked a deploy on exactly that, at exactly that assertion.
+ *
+ * The window is deliberately wider than the default: the point is to let a slow write finish,
+ * while a genuinely missing trip still fails and now says which of the two it was.
+ */
+export async function expectRosterCount(
+  page: Page,
+  count: number,
+): Promise<void> {
+  await expect
+    .poll(async () => (await rosterTrips(page)).length, { timeout: 10_000 })
+    .toBe(count);
 }
