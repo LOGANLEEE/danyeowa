@@ -217,7 +217,37 @@ invite redesign.
 
 ---
 
-## 2026-08-13 (latest)
+## 2026-08-19 (latest)
+
+### The last things still called `roaster` were outside the repo
+
+The 2026-08-13 entry renamed everything inside the repo and stopped at the working copy's own
+directory name, the launchd labels and the config path — all three live on this machine, not in
+git, so no PR could carry them. That left `cd roaster-me` as the first thing anyone typed to work
+on danyeowa.
+
+**Renamed** (this change): the working copy `~/project/portfolio/roaster-me` → `.../danyeowa`;
+`~/.config/roaster-me/env` → `~/.config/danyeowa/env`; the launchd labels
+`com.roasterme.{harvest,refresh-arrivals}` → `com.danyeowa.*`, with their logs moving from
+`/tmp/roaster-*.log` to `/tmp/danyeowa-*.log`. The plists' `WorkingDirectory` and script paths
+were rewritten to the new directory. Both agents were unloaded before the move and bootstrapped
+after it; `com.danyeowa.refresh-arrivals` was kickstarted once and logged
+`nothing arriving in the next 4h` from the new path.
+
+**`ROASTER_API` is gone**, not aliased. The 08-13 entry kept it as a fallback on the grounds that
+it was set in a config file "this repo cannot edit" — that was wrong. The file is on this machine,
+and it only ever contained `INGEST_TOKEN`. Nothing set `ROASTER_API`, so the fallback was dead
+code protecting a case that did not exist.
+
+**The GitHub repo, the Worker and the D1 database needed nothing** — they were already `danyeowa`.
+The old `roaster-me` Worker stays up on purpose as a redirector, per §3 of `ROADMAP.md`.
+
+**Still `roaster`, still deliberately:** `docs/superpowers/{plans,specs}/*` and the dated entries
+below. Both are records of what was true when written.
+
+---
+
+## 2026-08-13
 
 ### The internal identifiers get the new name too
 

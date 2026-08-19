@@ -55,7 +55,7 @@ validated with the same schema the app reads:
 Guarded by a bearer token. The Worker secret and the local copy must match:
 
 ```bash
-export INGEST_TOKEN=...                       # or: source ~/.config/roaster-me/env
+export INGEST_TOKEN=...                       # or: source ~/.config/danyeowa/env
 npx wrangler secret put INGEST_TOKEN          # to rotate; update the launchd plists too
 ```
 
@@ -147,18 +147,18 @@ Both background jobs are launchd user agents, not cron entries:
 
 | Label | Interval | Log |
 |---|---|---|
-| `com.roasterme.refresh-arrivals` | 900s | `/tmp/roaster-refresh.log` |
-| `com.roasterme.harvest` | 1800s | `/tmp/roaster-harvest.log` |
+| `com.danyeowa.refresh-arrivals` | 900s | `/tmp/danyeowa-refresh.log` |
+| `com.danyeowa.harvest` | 1800s | `/tmp/danyeowa-harvest.log` |
 
 `StartInterval` is the reason for the switch. **cron simply skips a slot the machine slept
 through; launchd runs the missed interval once it wakes.** Measured on the cron setup: 1 skipped
 run in 39, which matters most at the exact moment it hurts — the last check before a landing.
 
 ```bash
-launchctl list | grep roasterme                              # loaded?
-launchctl kickstart -p gui/$(id -u)/com.roasterme.harvest    # run one now
-launchctl bootout gui/$(id -u)/com.roasterme.harvest         # stop
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.roasterme.harvest.plist
+launchctl list | grep danyeowa                              # loaded?
+launchctl kickstart -p gui/$(id -u)/com.danyeowa.harvest    # run one now
+launchctl bootout gui/$(id -u)/com.danyeowa.harvest         # stop
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.danyeowa.harvest.plist
 ```
 
 Plists live in `~/Library/LaunchAgents/`. They carry an explicit `PATH` (launchd, like cron, has
