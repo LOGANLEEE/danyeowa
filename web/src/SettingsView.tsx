@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
-import { getPushConfig, subscribePush, unsubscribePush, updateNotificationPrefs } from "./api";
+import { useEffect, useRef, useState } from "react";
+import {
+  SessionTooOldError,
+  deleteAccount,
+  getPushConfig,
+  subscribePush,
+  unsubscribePush,
+  updateNotificationPrefs,
+} from "./api";
 import { getAirlinePrefix, setAirlinePrefix } from "./lib/airlinePrefix";
 import {
   isInstallPromptAvailable,
@@ -31,23 +38,43 @@ const LEAD_OPTIONS: { value: number; label: string }[] = [
 ];
 
 function pushSupported(): boolean {
-  return "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+  return (
+    "Notification" in window &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window
+  );
 }
 
 export default function SettingsView({ email, onSignOut }: Props) {
+  // Deletion is irreversible and has no undo, so the confirmation is the person typing their own
+  // address — a button they can hit by accident is the wrong shape for this.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [typedEmail, setTypedEmail] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteDialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = deleteDialogRef.current;
+    if (!dialog) return;
+    if (confirmingDelete && !dialog.open) dialog.showModal();
+    if (!confirmingDelete && dialog.open) dialog.close();
+  }, [confirmingDelete]);
   const [theme, setThemeState] = useState<Theme>(getStoredTheme);
-  const [airlinePrefix, setAirlinePrefixState] = useState<string>(getAirlinePrefix);
+  const [airlinePrefix, setAirlinePrefixState] =
+    useState<string>(getAirlinePrefix);
 
   const [supported] = useState(pushSupported);
-  const [permission, setPermission] = useState<NotificationPermission | null>(() =>
-    pushSupported() ? Notification.permission : null,
+  const [permission, setPermission] = useState<NotificationPermission | null>(
+    () => (pushSupported() ? Notification.permission : null),
   );
   const [subscribed, setSubscribed] = useState(false);
   const [leadMinutes, setLeadMinutes] = useState(120);
   const [arrivalEnabled, setArrivalEnabled] = useState(true);
   const [pushError, setPushError] = useState<string | null>(null);
 
-  const [installAvailable, setInstallAvailable] = useState(isInstallPromptAvailable);
+  const [installAvailable, setInstallAvailable] = useState(
+    isInstallPromptAvailable,
+  );
   const [standalone] = useState(isRunningStandalone);
 
   useEffect(() => {
@@ -139,7 +166,11 @@ export default function SettingsView({ email, onSignOut }: Props) {
   async function handleArrivalToggle(next: boolean) {
     setArrivalEnabled(next);
     try {
-      await updateNotificationPrefs({ enabled: true, leadMinutes, arrivalEnabled: next });
+      await updateNotificationPrefs({
+        enabled: true,
+        leadMinutes,
+        arrivalEnabled: next,
+      });
     } catch {
       // Put the switch back rather than leaving it showing a setting the server never took.
       setArrivalEnabled(!next);
@@ -157,7 +188,10 @@ export default function SettingsView({ email, onSignOut }: Props) {
       <fieldset className="stagger-2 flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
         <legend className="px-1 text-xs uppercase text-ink-muted">Theme</legend>
         {THEME_OPTIONS.map((option) => (
-          <label key={option.value} className="flex items-center gap-2 text-ink">
+          <label
+            key={option.value}
+            className="flex items-center gap-2 text-ink"
+          >
             <input
               type="radio"
               name="theme"
@@ -180,8 +214,8 @@ export default function SettingsView({ email, onSignOut }: Props) {
           </p>
         ) : permission === "denied" ? (
           <p className="text-sm text-ink-muted">
-            Notifications are blocked for this site — enable them in your browser settings to get
-            report-time reminders.
+            Notifications are blocked for this site — enable them in your
+            browser settings to get report-time reminders.
           </p>
         ) : (
           <>
@@ -191,7 +225,9 @@ export default function SettingsView({ email, onSignOut }: Props) {
                 type="checkbox"
                 data-testid="push-toggle"
                 checked={subscribed}
-                onChange={(e) => (e.target.checked ? handleToggleOn() : handleToggleOff())}
+                onChange={(e) =>
+                  e.target.checked ? handleToggleOn() : handleToggleOff()
+                }
                 className="accent-accent"
               />
             </label>
@@ -288,6 +324,119 @@ export default function SettingsView({ email, onSignOut }: Props) {
       >
         Sign out
       </button>
+
+      <div className="flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
+        <p className="px-1 text-xs uppercase text-ink-muted">Danger zone</p>
+        <p className="text-sm text-ink-muted">
+          Deleting your account removes your roster, your crew links and your
+          sign-in. It cannot be undone.
+        </p>
+        <button
+          type="button"
+          data-testid="delete-account"
+          onClick={() => {
+            setTypedEmail("");
+            setDeleteError(null);
+            setConfirmingDelete(true);
+          }}
+          className="min-h-[44px] self-start rounded border border-danger px-3 py-2 text-danger transition-colors duration-[120ms] hover:bg-danger/10"
+        >
+          Delete account
+        </button>
+      </div>
+
+      {/* Native <dialog>, same as the duty-delete confirm: showModal() gives the focus trap, Esc
+          and the inert background for free. Mounted only while open, because jsdom implements
+          neither showModal nor close and a permanently mounted one breaks the unit suite. */}
+      {confirmingDelete ? (
+        <dialog
+          ref={deleteDialogRef}
+          data-testid="delete-account-dialog"
+          aria-labelledby="delete-account-title"
+          onClose={() => setConfirmingDelete(false)}
+          onClick={(e) => {
+            if (e.target === deleteDialogRef.current)
+              setConfirmingDelete(false);
+          }}
+          className="max-w-[calc(100vw-2rem)] rounded-lg border border-edge bg-card p-5 text-ink backdrop:bg-black/50"
+        >
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1">
+              <p
+                id="delete-account-title"
+                className="text-lg font-semibold text-ink"
+              >
+                Delete your account?
+              </p>
+              <p className="text-sm text-ink-muted">
+                This removes your roster, your crew links and your sign-in. It
+                cannot be undone.
+              </p>
+            </div>
+
+            <label className="flex flex-col gap-1 text-sm text-ink-muted">
+              Type <span className="num text-ink">{email}</span> to confirm
+              <input
+                type="email"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                data-testid="delete-account-confirm-input"
+                value={typedEmail}
+                onChange={(e) => setTypedEmail(e.target.value)}
+                className="num rounded border border-edge bg-raised px-3 py-3 text-ink outline-none transition-colors duration-[120ms] focus:border-danger"
+              />
+            </label>
+
+            {deleteError ? (
+              <p role="alert" className="text-sm text-danger">
+                {deleteError}
+              </p>
+            ) : null}
+
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                className="min-h-[48px] rounded border border-edge px-4 py-2 text-ink transition-colors duration-[120ms] hover:border-ink-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                data-testid="confirm-delete-account"
+                // Compared case-insensitively and trimmed: the address is a fact they are
+                // confirming, not a password, and failing someone for a capital letter or a
+                // trailing space would just teach them to paste it.
+                disabled={
+                  deleting ||
+                  typedEmail.trim().toLowerCase() !== email.toLowerCase()
+                }
+                onClick={async () => {
+                  setDeleting(true);
+                  setDeleteError(null);
+                  try {
+                    await deleteAccount();
+                    // The session is already gone server-side; this clears the client's copy and
+                    // returns to the signed-out screen.
+                    onSignOut();
+                  } catch (err) {
+                    setDeleteError(
+                      err instanceof SessionTooOldError
+                        ? "For safety this needs a recent sign-in. Sign out, sign back in, and try again."
+                        : "Couldn't delete the account — check your connection and try again.",
+                    );
+                    setDeleting(false);
+                  }
+                }}
+                className="min-h-[48px] rounded bg-danger px-4 py-2 font-medium text-ground transition-[background-color,transform] duration-[120ms] hover:brightness-110 active:scale-[0.98] disabled:opacity-40"
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </dialog>
+      ) : null}
     </div>
   );
 }

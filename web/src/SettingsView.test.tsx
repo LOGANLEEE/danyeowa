@@ -11,6 +11,11 @@ vi.mock("./api", () => ({
   subscribePush: vi.fn(),
   unsubscribePush: vi.fn(),
   updateNotificationPrefs: vi.fn(),
+  deleteAccount: vi.fn(),
+  // Declared inside the factory because vi.mock is hoisted above every top-level binding in
+  // this file. A real class, not a stub: SettingsView branches on `instanceof`, so a plain
+  // object would make the freshness message untestable and silently take the generic branch.
+  SessionTooOldError: class extends Error {},
 }));
 
 describe("SettingsView", () => {
@@ -67,12 +72,17 @@ describe("SettingsView", () => {
       // No Notification/serviceWorker/PushManager stubbed — jsdom doesn't define them by
       // default, so this is the natural "unsupported" state.
       render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
-      expect(screen.getByTestId("push-unsupported")).toHaveTextContent(/install to home screen/i);
+      expect(screen.getByTestId("push-unsupported")).toHaveTextContent(
+        /install to home screen/i,
+      );
       expect(screen.queryByTestId("push-toggle")).not.toBeInTheDocument();
     });
 
     it("shows a muted explanation when permission was previously denied", () => {
-      vi.stubGlobal("Notification", { permission: "denied", requestPermission: vi.fn() });
+      vi.stubGlobal("Notification", {
+        permission: "denied",
+        requestPermission: vi.fn(),
+      });
       vi.stubGlobal("PushManager", class {});
       Object.defineProperty(navigator, "serviceWorker", {
         value: { getRegistration: vi.fn() },
@@ -98,11 +108,15 @@ describe("SettingsView", () => {
       const user = userEvent.setup();
 
       const requestPermission = vi.fn().mockResolvedValue("granted");
-      vi.stubGlobal("Notification", { permission: "default", requestPermission });
+      vi.stubGlobal("Notification", {
+        permission: "default",
+        requestPermission,
+      });
       vi.stubGlobal("PushManager", class {});
 
       vi.mocked(api.getPushConfig).mockResolvedValue({
-        publicKey: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        publicKey:
+          "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         enabled: true,
         leadMinutes: 120,
         arrivalEnabled: true,
@@ -128,7 +142,9 @@ describe("SettingsView", () => {
 
       await waitFor(() => expect(requestPermission).toHaveBeenCalled());
       await waitFor(() => expect(subscribe).toHaveBeenCalled());
-      expect(subscribe.mock.calls[0]![0]).toMatchObject({ userVisibleOnly: true });
+      expect(subscribe.mock.calls[0]![0]).toMatchObject({
+        userVisibleOnly: true,
+      });
       await waitFor(() =>
         expect(api.subscribePush).toHaveBeenCalledWith({
           endpoint: "https://push.example.com/abc",
@@ -142,7 +158,10 @@ describe("SettingsView", () => {
     it("unsubscribes on toggle-off: DELETEs the subscription and calls unsubscribe()", async () => {
       const user = userEvent.setup();
 
-      vi.stubGlobal("Notification", { permission: "granted", requestPermission: vi.fn() });
+      vi.stubGlobal("Notification", {
+        permission: "granted",
+        requestPermission: vi.fn(),
+      });
       vi.stubGlobal("PushManager", class {});
 
       vi.mocked(api.getPushConfig).mockResolvedValue({
@@ -154,9 +173,14 @@ describe("SettingsView", () => {
       });
 
       const unsubscribe = vi.fn().mockResolvedValue(true);
-      const existingSubscription = { endpoint: "https://push.example.com/xyz", unsubscribe };
+      const existingSubscription = {
+        endpoint: "https://push.example.com/xyz",
+        unsubscribe,
+      };
       const registration = {
-        pushManager: { getSubscription: vi.fn().mockResolvedValue(existingSubscription) },
+        pushManager: {
+          getSubscription: vi.fn().mockResolvedValue(existingSubscription),
+        },
       };
       Object.defineProperty(navigator, "serviceWorker", {
         value: { getRegistration: vi.fn().mockResolvedValue(registration) },
@@ -171,7 +195,9 @@ describe("SettingsView", () => {
       await user.click(toggle);
 
       await waitFor(() =>
-        expect(api.unsubscribePush).toHaveBeenCalledWith("https://push.example.com/xyz"),
+        expect(api.unsubscribePush).toHaveBeenCalledWith(
+          "https://push.example.com/xyz",
+        ),
       );
       await waitFor(() => expect(unsubscribe).toHaveBeenCalled());
       await waitFor(() => expect(toggle).not.toBeChecked());
@@ -180,7 +206,10 @@ describe("SettingsView", () => {
     it("PUTs prefs when the lead-minutes select changes", async () => {
       const user = userEvent.setup();
 
-      vi.stubGlobal("Notification", { permission: "granted", requestPermission: vi.fn() });
+      vi.stubGlobal("Notification", {
+        permission: "granted",
+        requestPermission: vi.fn(),
+      });
       vi.stubGlobal("PushManager", class {});
 
       vi.mocked(api.getPushConfig).mockResolvedValue({
@@ -191,7 +220,9 @@ describe("SettingsView", () => {
         subscribed: true,
       });
       Object.defineProperty(navigator, "serviceWorker", {
-        value: { getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }) },
+        value: {
+          getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }),
+        },
         configurable: true,
       });
 
@@ -201,14 +232,20 @@ describe("SettingsView", () => {
       await user.selectOptions(select, "30");
 
       await waitFor(() =>
-        expect(api.updateNotificationPrefs).toHaveBeenCalledWith({ enabled: true, leadMinutes: 30 }),
+        expect(api.updateNotificationPrefs).toHaveBeenCalledWith({
+          enabled: true,
+          leadMinutes: 30,
+        }),
       );
     });
 
     it("PUTs prefs when arrival alerts are switched off", async () => {
       const user = userEvent.setup();
 
-      vi.stubGlobal("Notification", { permission: "granted", requestPermission: vi.fn() });
+      vi.stubGlobal("Notification", {
+        permission: "granted",
+        requestPermission: vi.fn(),
+      });
       vi.stubGlobal("PushManager", class {});
 
       vi.mocked(api.getPushConfig).mockResolvedValue({
@@ -219,7 +256,9 @@ describe("SettingsView", () => {
         subscribed: true,
       });
       Object.defineProperty(navigator, "serviceWorker", {
-        value: { getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }) },
+        value: {
+          getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }),
+        },
         configurable: true,
       });
 
@@ -243,7 +282,10 @@ describe("SettingsView", () => {
       // A switch that stays flipped after a failed save is a lie about what the server holds.
       const user = userEvent.setup();
 
-      vi.stubGlobal("Notification", { permission: "granted", requestPermission: vi.fn() });
+      vi.stubGlobal("Notification", {
+        permission: "granted",
+        requestPermission: vi.fn(),
+      });
       vi.stubGlobal("PushManager", class {});
 
       vi.mocked(api.getPushConfig).mockResolvedValue({
@@ -253,9 +295,13 @@ describe("SettingsView", () => {
         arrivalEnabled: true,
         subscribed: true,
       });
-      vi.mocked(api.updateNotificationPrefs).mockRejectedValueOnce(new Error("offline"));
+      vi.mocked(api.updateNotificationPrefs).mockRejectedValueOnce(
+        new Error("offline"),
+      );
       Object.defineProperty(navigator, "serviceWorker", {
-        value: { getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }) },
+        value: {
+          getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }),
+        },
         configurable: true,
       });
 
@@ -265,7 +311,9 @@ describe("SettingsView", () => {
       await user.click(toggle);
 
       await waitFor(() => expect(toggle).toBeChecked());
-      expect(screen.getByText(/couldn't save arrival alerts/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/couldn't save arrival alerts/i),
+      ).toBeInTheDocument();
     });
   });
 
@@ -278,7 +326,9 @@ describe("SettingsView", () => {
     it("shows the installed badge when running in standalone display-mode", () => {
       vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
       render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
-      expect(screen.getByTestId("installed-badge")).toHaveTextContent(/installed/i);
+      expect(screen.getByTestId("installed-badge")).toHaveTextContent(
+        /installed/i,
+      );
       expect(screen.queryByTestId("install-button")).not.toBeInTheDocument();
       expect(screen.queryByTestId("install-hint-ios")).not.toBeInTheDocument();
     });
@@ -289,7 +339,9 @@ describe("SettingsView", () => {
         "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15",
       );
       render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
-      expect(screen.getByTestId("install-hint-ios")).toHaveTextContent(/add to home screen/i);
+      expect(screen.getByTestId("install-hint-ios")).toHaveTextContent(
+        /add to home screen/i,
+      );
       expect(screen.queryByTestId("install-button")).not.toBeInTheDocument();
       expect(screen.queryByTestId("installed-badge")).not.toBeInTheDocument();
     });
@@ -311,7 +363,9 @@ describe("SettingsView", () => {
 
       const prompt = vi.fn().mockResolvedValue(undefined);
       const userChoice = Promise.resolve({ outcome: "accepted" as const });
-      const event = new Event("beforeinstallprompt", { cancelable: true }) as Event & {
+      const event = new Event("beforeinstallprompt", {
+        cancelable: true,
+      }) as Event & {
         prompt: typeof prompt;
         userChoice: typeof userChoice;
       };
@@ -323,7 +377,9 @@ describe("SettingsView", () => {
       await user.click(button);
 
       expect(prompt).toHaveBeenCalledTimes(1);
-      await waitFor(() => expect(screen.queryByTestId("install-button")).not.toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.queryByTestId("install-button")).not.toBeInTheDocument(),
+      );
     });
   });
 
@@ -353,6 +409,100 @@ describe("SettingsView", () => {
       await user.type(input, "qf");
 
       expect(input).toHaveValue("QF");
+    });
+  });
+
+  describe("deleting the account", () => {
+    const EMAIL = "pilot@example.com";
+
+    async function openDialog() {
+      const user = userEvent.setup();
+      render(<SettingsView email={EMAIL} onSignOut={vi.fn()} />);
+      await user.click(screen.getByTestId("delete-account"));
+      return user;
+    }
+
+    it("keeps the delete button dead until the exact address is typed", async () => {
+      const user = await openDialog();
+
+      const confirm = screen.getByTestId("confirm-delete-account");
+      expect(confirm).toBeDisabled();
+
+      await user.type(
+        screen.getByTestId("delete-account-confirm-input"),
+        "pilot@example.co",
+      );
+      expect(confirm).toBeDisabled();
+
+      await user.type(screen.getByTestId("delete-account-confirm-input"), "m");
+      expect(confirm).toBeEnabled();
+    });
+
+    it("accepts the address with different case or stray spaces", async () => {
+      // They are confirming a fact they can see on screen, not entering a password. Failing
+      // someone over a capital letter only teaches them to paste it.
+      const user = await openDialog();
+      await user.type(
+        screen.getByTestId("delete-account-confirm-input"),
+        "  Pilot@Example.com ",
+      );
+      expect(screen.getByTestId("confirm-delete-account")).toBeEnabled();
+    });
+
+    it("deletes, then hands control back to the signed-out screen", async () => {
+      const onSignOut = vi.fn();
+      const user = userEvent.setup();
+      vi.mocked(api.deleteAccount).mockResolvedValue(undefined);
+      render(<SettingsView email={EMAIL} onSignOut={onSignOut} />);
+
+      await user.click(screen.getByTestId("delete-account"));
+      await user.type(
+        screen.getByTestId("delete-account-confirm-input"),
+        EMAIL,
+      );
+      await user.click(screen.getByTestId("confirm-delete-account"));
+
+      await waitFor(() =>
+        expect(vi.mocked(api.deleteAccount)).toHaveBeenCalledTimes(1),
+      );
+      await waitFor(() => expect(onSignOut).toHaveBeenCalledTimes(1));
+    });
+
+    it("says to sign in again when the session is too old, rather than 'something went wrong'", async () => {
+      // better-auth refuses a stale session because there is no password to ask for instead.
+      // That is an answer, not a fault, and the person is mid-way through deleting their data —
+      // the worst possible moment for a generic error.
+      const user = await openDialog();
+      vi.mocked(api.deleteAccount).mockRejectedValue(
+        new api.SessionTooOldError(),
+      );
+
+      await user.type(
+        screen.getByTestId("delete-account-confirm-input"),
+        EMAIL,
+      );
+      await user.click(screen.getByTestId("confirm-delete-account"));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        /sign in again|recent sign-in/i,
+      );
+    });
+
+    it("does not sign the user out when the delete failed", async () => {
+      const onSignOut = vi.fn();
+      const user = userEvent.setup();
+      vi.mocked(api.deleteAccount).mockRejectedValue(new Error("network"));
+      render(<SettingsView email={EMAIL} onSignOut={onSignOut} />);
+
+      await user.click(screen.getByTestId("delete-account"));
+      await user.type(
+        screen.getByTestId("delete-account-confirm-input"),
+        EMAIL,
+      );
+      await user.click(screen.getByTestId("confirm-delete-account"));
+
+      expect(await screen.findByRole("alert")).toBeInTheDocument();
+      expect(onSignOut).not.toHaveBeenCalled();
     });
   });
 });
