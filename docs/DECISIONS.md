@@ -8,6 +8,49 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-19 (later)
+
+### Deleting an account deletes one row
+
+`user.deleteUser.enabled` in better-auth, so `POST /api/auth/delete-user` removes the `user` row.
+Everything else goes with it: session, account, trips, flights, crew invites in *both*
+directions, push subscriptions, notification prefs — every one of those tables declares
+`ON DELETE cascade`.
+
+The cascade is **measured**, in `worker/test/delete-account.test.ts`, through the real API rather
+than with hand-written rows. A declared cascade that the database ignores orphans the rows
+instead of removing them and looks identical from the caller's side, so "the schema says
+cascade" is not evidence. The test counts before as well as after, because all-zeroes proves
+nothing unless the counter was shown able to be non-zero.
+
+**Rejected — soft delete.** If the data stays, "delete" is a lie, and this app holds one person's
+whole movements.
+
+**Rejected — an emailed confirmation link.** Stronger, and it would sidestep the freshness limit
+below, but it needs a new template, a callback route and a landing state for two users. The typed
+address plus a recent session is enough friction here.
+
+**The confirmation is typing your own address** into a native `<dialog>`, compared trimmed and
+case-insensitively — it is a fact on screen being confirmed, not a password, and failing someone
+over a capital letter only teaches them to paste it.
+
+**Two things this inherits from better-auth, both deliberate:**
+
+- **Session freshness.** With no password to ask for (email OTP and Google only), the endpoint
+  refuses a session older than 24h. That is an answer, not a fault, so it gets its own error type
+  and its own message — a generic "something went wrong" at the moment someone is deleting their
+  data is the worst possible response.
+- **An Origin check.** `/api/auth/delete-user` is CSRF-protected in a way the app's own Hono
+  routes are not; without the header it answers `MISSING_OR_NULL_ORIGIN`. Browsers send it
+  automatically, so it costs the client nothing, but tests must supply it — and the trusted value
+  comes from `BETTER_AUTH_URL`, not from the URL under test.
+
+**Known consequence:** when one half of a paired crew deletes their account, the invite row
+cascades away and the other side simply stops seeing them, with no notification. Accepted for an
+app with two users.
+
+---
+
 ## 2026-08-19
 
 ### A deploy is not done until production says so

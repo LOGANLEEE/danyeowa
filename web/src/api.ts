@@ -20,7 +20,10 @@ import type {
  * reads by accident, so a consumer that forgets this feature exists still gets the right landing
  * time. Optional because older payloads (and fixtures) simply have no continuation.
  */
-export type TripWithFlights = Trip & { flights: Flight[]; continuation?: Flight[] };
+export type TripWithFlights = Trip & {
+  flights: Flight[];
+  continuation?: Flight[];
+};
 
 async function parseJson<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
@@ -40,7 +43,9 @@ export async function createTrip(input: TripInput): Promise<TripWithFlights> {
     body: JSON.stringify(input),
   });
   if (!res.ok) {
-    const body = await parseJson<{ error?: string }>(res).catch(() => ({}) as { error?: string });
+    const body = await parseJson<{ error?: string }>(res).catch(
+      () => ({}) as { error?: string },
+    );
     throw new Error(body.error ?? "Failed to create trip");
   }
   return parseJson<TripWithFlights>(res);
@@ -52,7 +57,6 @@ export async function getAirport(iata: string): Promise<Airport | null> {
   if (!res.ok) throw new Error("Failed to look up airport");
   return parseJson<Airport>(res);
 }
-
 
 export async function deleteTrip(id: string): Promise<void> {
   const res = await fetch(`/api/trips/${id}`, { method: "DELETE" });
@@ -73,7 +77,9 @@ export async function lookupSchedule(
 }
 
 /** Fire-and-forget: reports the (possibly edited) times the user actually saved back to the crowd layer. */
-export async function confirmSchedule(input: ScheduleConfirmInput): Promise<void> {
+export async function confirmSchedule(
+  input: ScheduleConfirmInput,
+): Promise<void> {
   await fetch("/api/schedule/confirm", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -103,10 +109,6 @@ export async function suggestReturns(params: {
   return parseJson<ScheduleSuggestResponse>(res);
 }
 
-
-
-
-
 export async function getPushConfig(): Promise<PushConfig> {
   const res = await fetch("/api/push/config");
   if (!res.ok) throw new Error("Failed to load push config");
@@ -131,7 +133,9 @@ export async function unsubscribePush(endpoint: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to unsubscribe from push notifications");
 }
 
-export async function updateNotificationPrefs(input: NotificationPrefsInput): Promise<void> {
+export async function updateNotificationPrefs(
+  input: NotificationPrefsInput,
+): Promise<void> {
   const res = await fetch("/api/push/prefs", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -144,7 +148,9 @@ export async function updateNotificationPrefs(input: NotificationPrefsInput): Pr
 /** The one unauthenticated fetch in the app: what an invite link shows before sign-in.
  * `null` for an unknown, revoked, accepted or expired link — the page then degrades to the
  * plain sign-in screen rather than a dead end. */
-export async function getInvitePreview(token: string): Promise<InvitePreview | null> {
+export async function getInvitePreview(
+  token: string,
+): Promise<InvitePreview | null> {
   const res = await fetch(`/api/invite/${encodeURIComponent(token)}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Failed to load the invitation");
@@ -175,7 +181,9 @@ export async function inviteCrew(
     body: JSON.stringify(input),
   });
   if (!res.ok) {
-    const body = await parseJson<{ error?: string }>(res).catch(() => ({}) as { error?: string });
+    const body = await parseJson<{ error?: string }>(res).catch(
+      () => ({}) as { error?: string },
+    );
     throw new Error(crewInviteError(res.status, body.error));
   }
   return parseJson<{ id: string; email: string }>(res);
@@ -191,12 +199,51 @@ function crewInviteError(status: number, code: string | undefined): string {
 }
 
 export async function acceptCrewInvite(id: string): Promise<void> {
-  const res = await fetch(`/api/crew/invites/${encodeURIComponent(id)}/accept`, { method: "POST" });
+  const res = await fetch(
+    `/api/crew/invites/${encodeURIComponent(id)}/accept`,
+    { method: "POST" },
+  );
   if (!res.ok) throw new Error("Couldn't accept the invite");
 }
 
 /** Ends a pairing, or withdraws an invite that hasn't been accepted. Either side may do it. */
 export async function revokeCrewInvite(id: string): Promise<void> {
-  const res = await fetch(`/api/crew/invites/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+  const res = await fetch(
+    `/api/crew/invites/${encodeURIComponent(id)}/revoke`,
+    { method: "POST" },
+  );
   if (!res.ok) throw new Error("Couldn't stop sharing");
+}
+
+/** Session freshness is better-auth's second lock on deletion — see `deleteAccount`. */
+export class SessionTooOldError extends Error {
+  constructor() {
+    super("Sign in again to confirm");
+    this.name = "SessionTooOldError";
+  }
+}
+
+/**
+ * Deletes the signed-in account, and with it everything that hangs off it — roster, crew links,
+ * push subscriptions, sessions. One `user` row goes; the rest follows by ON DELETE cascade.
+ *
+ * A plain fetch rather than the auth client: this is a same-origin POST, so the browser attaches
+ * the session cookie and the Origin header that better-auth's CSRF check requires, and there is
+ * nothing else to configure.
+ *
+ * better-auth refuses when the session is older than its freshness window (24h) because there is
+ * no password to ask for instead. That is a real answer, not a failure, so it gets its own error
+ * type — the caller has to tell the person to sign in again rather than showing "something went
+ * wrong" at the exact moment they are trying to delete their data.
+ */
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch("/api/auth/delete-user", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+  if (res.ok) return;
+  const body = (await res.json().catch(() => null)) as { code?: string } | null;
+  if (body?.code === "SESSION_EXPIRED") throw new SessionTooOldError();
+  throw new Error("Failed to delete the account");
 }

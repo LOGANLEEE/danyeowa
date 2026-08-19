@@ -63,6 +63,7 @@ codebase to find out. Status words mean exactly one thing:
 | Invite link explains itself | Live | `/invite/:token` shows who invited you and a fabricated, blurred sample calendar before asking for anything. The route returns two strings and no schedule data, so the token cannot leak a roster |
 | Wrong-account sign-in is explained | Live | `matchesYou` (boolean only, server-side comparison) tells a signed-in visitor whether this session is the invited one, instead of dropping them into an app with no invitation and no reason given |
 | Deploys prove themselves | Live | `/api/health` reports the commit it was deployed from; the deploy job polls production for that commit *and* the asset filename it built before going green |
+| Delete your account | Live | Settings → danger zone. Confirmed by typing your own address into a native `<dialog>`. Removes the `user` row; roster, crew links, push subscriptions and sessions follow by ON DELETE cascade — measured, not assumed |
 
 ## App shell
 

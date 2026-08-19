@@ -67,6 +67,20 @@ export const createAuth = (env: AuthEnv) => {
       ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
     },
     database: drizzleAdapter(drizzle(env.DB, { schema }), { provider: "sqlite", schema }),
+    user: {
+      // Deleting the user row is the WHOLE deletion: every table that holds anything of theirs
+      // — session, account, trips, flights, crew invites in both directions, push
+      // subscriptions, notification prefs — declares ON DELETE cascade, and D1 enforces it.
+      // That is measured in test/delete-account.test.ts, not assumed from the schema: a
+      // declared cascade that the database ignores orphans rows instead of removing them, and
+      // looks identical from the caller's side.
+      //
+      // No sendDeleteAccountVerification on purpose. Configuring it would replace the direct
+      // delete with an emailed link; the confirmation here is typing your own address into the
+      // modal, with better-auth's session-freshness check (24h) as the second lock. There is no
+      // password to ask for — this app has only email OTP and Google.
+      deleteUser: { enabled: true },
+    },
     socialProviders: {
       google: {
         clientId: env.GOOGLE_CLIENT_ID,
