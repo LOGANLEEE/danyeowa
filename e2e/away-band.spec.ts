@@ -4,6 +4,7 @@ import {
   clearRoster,
   openAddForm,
   pickCalendarDay,
+  rosterTrips,
 } from "./helpers";
 
 /**
@@ -30,6 +31,7 @@ async function addSector(
   dest: string,
   depTime: string,
   arrTime: string,
+  expectedTotal: number,
 ): Promise<void> {
   await page.getByTestId("flightno-input").fill(UNKNOWN_FLIGHT_NO.slice(2));
   await expect(page.getByText(/unknown flight/i)).toBeVisible();
@@ -42,6 +44,13 @@ async function addSector(
   await page.getByLabel(/departure \(local\)/i).fill(`${iso}T${depTime}`);
   await page.getByLabel(/arrival \(local\)/i).fill(`${iso}T${arrTime}`);
   await page.getByRole("button", { name: /add to roster/i }).click();
+
+  // Ask the SERVER whether the trip exists before looking at the screen. Asserting the card
+  // first conflates two different failures — the write never happened, or it happened and the
+  // calendar had not repainted — and they need opposite fixes.
+  await expect
+    .poll(async () => (await rosterTrips(page)).length, { timeout: 10_000 })
+    .toBe(expectedTotal);
 }
 
 test("away days: the layover between two trips is marked, and the run reads as one band", async ({
@@ -83,11 +92,11 @@ test("away days: the layover between two trips is marked, and the run reads as o
 
   // Out of base on the 14th, back to base on the 17th. Two separate trips, one pairing.
   await openAddForm(page, OUT_DAY);
-  await addSector(page, OUT_DAY, "DXB", "EZE", "03:00", "22:00");
+  await addSector(page, OUT_DAY, "DXB", "EZE", "03:00", "22:00", 1);
   await expect(page.getByTestId("delete-trip")).toHaveCount(1);
 
   await openAddForm(page, BACK_DAY);
-  await addSector(page, BACK_DAY, "EZE", "DXB", "02:00", "20:00");
+  await addSector(page, BACK_DAY, "EZE", "DXB", "02:00", "20:00", 2);
   await expect(page.getByTestId("delete-trip")).toHaveCount(1);
 
   const cell = (iso: string) => page.getByTestId(`calendar-day-${iso}`);
