@@ -81,7 +81,8 @@ describe("GET /api/schedule/lookup", () => {
 
   it("404s with unknown_flight when the cache misses AND every provider misses (fetch returns 404)", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = () => Promise.resolve(new Response("not found", { status: 404 }));
+    globalThis.fetch = () =>
+      Promise.resolve(new Response("not found", { status: 404 }));
     try {
       const res = await SELF.fetch(
         "https://example.com/api/schedule/lookup?flight_no=XX999&date=2026-08-20",
@@ -158,7 +159,9 @@ describe("GET /api/schedule/lookup", () => {
       { headers: { Cookie: cookie } },
     );
     expect(res.status).toBe(200);
-    const body = await res.json<{ legs: Array<{ origin: string; dest: string }> }>();
+    const body = await res.json<{
+      legs: Array<{ origin: string; dest: string }>;
+    }>();
     expect(body.legs[0]).toMatchObject({ origin: "DXB", dest: "LHR" });
   });
 
@@ -187,9 +190,21 @@ describe("GET /api/schedule/lookup", () => {
         { headers: { Cookie: cookie } },
       );
       expect(res.status).toBe(200);
-      const body = await res.json<{ legs: Array<{ origin: string; dest: string; depLocal: string; arrLocal: string }> }>();
+      const body = await res.json<{
+        legs: Array<{
+          origin: string;
+          dest: string;
+          depLocal: string;
+          arrLocal: string;
+        }>;
+      }>();
       expect(body.legs).toHaveLength(1);
-      expect(body.legs[0]).toMatchObject({ origin: "DXB", dest: "BKK", depLocal: "09:40", arrLocal: "19:25" });
+      expect(body.legs[0]).toMatchObject({
+        origin: "DXB",
+        dest: "BKK",
+        depLocal: "09:40",
+        arrLocal: "19:25",
+      });
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -197,8 +212,20 @@ describe("GET /api/schedule/lookup", () => {
     // The resolved leg must now be cached in D1 with live-scrape provenance.
     const row = await env.DB.prepare(
       "SELECT origin, dest, source, fetched_at, source_date_iso, confirm_count FROM flight_schedules WHERE flight_no = 'EK372' AND leg_seq = 0",
-    ).first<{ origin: string; dest: string; source: string; fetched_at: number; source_date_iso: string; confirm_count: number }>();
-    expect(row).toMatchObject({ origin: "DXB", dest: "BKK", source: "live-scrape", confirm_count: 0 });
+    ).first<{
+      origin: string;
+      dest: string;
+      source: string;
+      fetched_at: number;
+      source_date_iso: string;
+      confirm_count: number;
+    }>();
+    expect(row).toMatchObject({
+      origin: "DXB",
+      dest: "BKK",
+      source: "live-scrape",
+      confirm_count: 0,
+    });
     expect(row?.fetched_at).toBeGreaterThan(0);
     expect(row?.source_date_iso).toBe("2026-08-17");
   });
@@ -233,7 +260,8 @@ describe("GET /api/schedule/lookup", () => {
 
   it("provider-null (all providers miss) -> 404 unknown_flight, client falls back to manual entry", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = () => Promise.resolve(new Response("blocked", { status: 403 }));
+    globalThis.fetch = () =>
+      Promise.resolve(new Response("blocked", { status: 403 }));
     try {
       const res = await SELF.fetch(
         "https://example.com/api/schedule/lookup?flight_no=XX111&date=2026-08-20",
@@ -265,9 +293,86 @@ describe("GET /api/schedule/lookup", () => {
   // success, crowd confirm), and the TTL itself was shortened from 24h to 1h as the bound on
   // the remaining un-clearable case (see MISS_CACHE_TTL_MS doc comment in schedule.ts).
 
+  // The rule from CLAUDE.md: never negative-cache a NON-answer. This path is the one that still
+  // broke it. When a provider RESOLVES a flight but one of its airports cannot be learned, the
+  // lookup 404s (correct — a leg whose tz we cannot resolve must not be served) and used to also
+  // record a miss. That miss says "the provider says this flight does not exist", which is false:
+  // the provider said it does, and the gap is ours.
+  //
+  // It is not theoretical. Airport metadata comes from aerodatabox alone; scrape-fr24 never
+  // supplies it, and fr24 is the FIRST provider in the chain — so any fr24-resolved flight
+  // touching a station outside the 108 seeded airports lands here.
+  //
+  // The miss row also self-shields: `isRecentlyMissed` short-circuits before the provider chain,
+  // so the `clearMiss` that would undo it can never run, and seeding the airport does not clear
+  // it either (ingest clears by flight number). A real service stays hidden for the full hour.
+  it("does NOT record a miss when the flight resolved but an airport could not be learned", async () => {
+    // Same fixture, with the destination rewritten to a code that is not in the seed set and
+    // that fr24 cannot annotate.
+    // The rewrite must hit the HREF: the parser reads the IATA from `/data/airports/bkk`, not
+    // from the visible "(BKK)" label (scrape-fr24.ts). Changing only the label leaves the parse
+    // untouched — the first version of this test did exactly that and proved nothing.
+    const htmlWithUnknownAirport = (fr24Ek372Html as string)
+      .replaceAll("/data/airports/bkk", "/data/airports/zzz")
+      .replaceAll("BKK", "ZZZ");
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () =>
+      Promise.resolve(new Response(htmlWithUnknownAirport));
+    try {
+      const res = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK9001&date=2026-08-17",
+        { headers: { Cookie: cookie } },
+      );
+      // 404 is right — we will not serve a leg whose timezone we cannot resolve.
+      expect(res.status).toBe(404);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    // ...but nothing may be cached that claims the flight does not exist.
+    const miss = await env.DB.prepare(
+      "SELECT flight_no FROM schedule_lookup_misses WHERE flight_no = 'EK9001'",
+    ).first<{ flight_no: string }>();
+    expect(miss).toBeNull();
+  });
+
+  it("serves the flight as soon as the missing airport is seeded, without waiting out the TTL", async () => {
+    // The consequence of the row above, stated as behaviour: the gap is ours and it is fixable,
+    // so fixing it must take effect immediately.
+    // The rewrite must hit the HREF: the parser reads the IATA from `/data/airports/bkk`, not
+    // from the visible "(BKK)" label (scrape-fr24.ts). Changing only the label leaves the parse
+    // untouched — the first version of this test did exactly that and proved nothing.
+    const htmlWithUnknownAirport = (fr24Ek372Html as string)
+      .replaceAll("/data/airports/bkk", "/data/airports/zzz")
+      .replaceAll("BKK", "ZZZ");
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = () =>
+      Promise.resolve(new Response(htmlWithUnknownAirport));
+    try {
+      const first = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK9002&date=2026-08-17",
+        { headers: { Cookie: cookie } },
+      );
+      expect(first.status).toBe(404); // the instrument: it really is unresolvable right now
+
+      await env.DB.prepare(
+        "INSERT INTO airports (iata, city, name, tz, source) VALUES ('ZZZ', 'Testville', 'Test Intl', 'Asia/Bangkok', 'manual') ON CONFLICT DO NOTHING",
+      ).run();
+
+      const second = await SELF.fetch(
+        "https://example.com/api/schedule/lookup?flight_no=EK9002&date=2026-08-17",
+        { headers: { Cookie: cookie } },
+      );
+      expect(second.status).toBe(200);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it("records a schedule_lookup_misses row when every provider misses", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = () => Promise.resolve(new Response("not found", { status: 404 }));
+    globalThis.fetch = () =>
+      Promise.resolve(new Response("not found", { status: 404 }));
     try {
       const res = await SELF.fetch(
         "https://example.com/api/schedule/lookup?flight_no=EK9999&date=2026-08-20",
@@ -351,7 +456,12 @@ describe("GET /api/schedule/lookup", () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = () => Promise.resolve(new Response(fr24Ek372Html));
     try {
-      await refreshScheduleFromProviders(db, env as unknown as Env, "EK374", "2026-08-17");
+      await refreshScheduleFromProviders(
+        db,
+        env as unknown as Env,
+        "EK374",
+        "2026-08-17",
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -438,7 +548,9 @@ describe("GET /api/schedule/lookup", () => {
       "SELECT * FROM flight_schedules WHERE flight_no = 'EK779'",
     ).first();
     expect(scheduleRow).toBeNull();
-    const airportRow = await env.DB.prepare("SELECT * FROM airports WHERE iata = 'ZAG'").first();
+    const airportRow = await env.DB.prepare(
+      "SELECT * FROM airports WHERE iata = 'ZAG'",
+    ).first();
     expect(airportRow).toBeNull();
   });
 
@@ -450,11 +562,19 @@ describe("GET /api/schedule/lookup", () => {
     const aeroDataBoxBody = JSON.stringify([
       {
         departure: {
-          airport: { iata: "DXB", name: "Dubai International Airport", timeZone: "Asia/Dubai" },
+          airport: {
+            iata: "DXB",
+            name: "Dubai International Airport",
+            timeZone: "Asia/Dubai",
+          },
           scheduledTime: { local: "2026-08-17 09:40+04:00" },
         },
         arrival: {
-          airport: { iata: "ZAG", name: "Zagreb Airport", timeZone: "Europe/Zagreb" },
+          airport: {
+            iata: "ZAG",
+            name: "Zagreb Airport",
+            timeZone: "Europe/Zagreb",
+          },
           scheduledTime: { local: "2026-08-17 13:00+02:00" },
         },
       },
@@ -462,7 +582,12 @@ describe("GET /api/schedule/lookup", () => {
 
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
       if (url.includes("flightradar24.com")) {
         return Promise.resolve(new Response("blocked", { status: 403 }));
       }
@@ -474,8 +599,14 @@ describe("GET /api/schedule/lookup", () => {
         { headers: { Cookie: cookie } },
       );
       expect(res.status).toBe(200);
-      const body = await res.json<{ legs: Array<{ origin: string; dest: string; destTz: string }> }>();
-      expect(body.legs[0]).toMatchObject({ origin: "DXB", dest: "ZAG", destTz: "Europe/Zagreb" });
+      const body = await res.json<{
+        legs: Array<{ origin: string; dest: string; destTz: string }>;
+      }>();
+      expect(body.legs[0]).toMatchObject({
+        origin: "DXB",
+        dest: "ZAG",
+        destTz: "Europe/Zagreb",
+      });
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -511,7 +642,9 @@ describe("GET /api/schedule/lookup", () => {
       // Served immediately from the stale row - still the ORIGINAL (stale) data, since
       // the never-resolving refresh can't have overwritten it yet.
       expect(res.status).toBe(200);
-      const body = await res.json<{ legs: Array<{ origin: string; dest: string }> }>();
+      const body = await res.json<{
+        legs: Array<{ origin: string; dest: string }>;
+      }>();
       expect(body.legs[0]).toMatchObject({ origin: "DXB", dest: "TPE" });
     } finally {
       globalThis.fetch = originalFetch;
@@ -536,7 +669,12 @@ describe("GET /api/schedule/lookup", () => {
     globalThis.fetch = () => Promise.resolve(new Response(fr24Ek372Html));
     try {
       const database = drizzle(env.DB, { schema });
-      await refreshScheduleFromProviders(database, env as unknown as Env, "EK903", "2026-08-20");
+      await refreshScheduleFromProviders(
+        database,
+        env as unknown as Env,
+        "EK903",
+        "2026-08-20",
+      );
 
       const refreshed = await env.DB.prepare(
         "SELECT origin, dest, fetched_at FROM flight_schedules WHERE flight_no = 'EK903' AND leg_seq = 0",
@@ -670,7 +808,11 @@ describe("POST /api/schedule/confirm", () => {
 
     const row = await env.DB.prepare(
       "SELECT confirm_count, days_of_week, source FROM flight_schedules WHERE flight_no = 'EK999' AND leg_seq = 0",
-    ).first<{ confirm_count: number; days_of_week: string; source: string | null }>();
+    ).first<{
+      confirm_count: number;
+      days_of_week: string;
+      source: string | null;
+    }>();
     expect(row?.confirm_count).toBe(1);
     // A crowd-inserted row with no prior schedule data defaults to "always match".
     expect(row?.days_of_week).toBe("1234567");
@@ -687,7 +829,12 @@ describe("POST /api/schedule/confirm", () => {
     const res = await SELF.fetch("https://example.com/api/schedule/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json", Cookie: cookie },
-      body: JSON.stringify({ ...confirmBody, flightNo: "ek384", origin: "dxb", dest: "bkk" }),
+      body: JSON.stringify({
+        ...confirmBody,
+        flightNo: "ek384",
+        origin: "dxb",
+        dest: "bkk",
+      }),
     });
     expect(res.status).toBe(200);
 
@@ -725,7 +872,11 @@ describe("POST /api/schedule/confirm", () => {
   });
 
   it("400s when origin equals dest", async () => {
-    const res = await postConfirm({ ...confirmBody, origin: "DXB", dest: "DXB" });
+    const res = await postConfirm({
+      ...confirmBody,
+      origin: "DXB",
+      dest: "DXB",
+    });
     expect(res.status).toBe(400);
   });
 
@@ -821,8 +972,16 @@ describe("GET /api/schedule/suggest", () => {
     expect(ek413.flightNo).toBe("EK413");
     expect(ek413.sibling).toBe(true);
     expect(ek413.legs).toHaveLength(2);
-    expect(ek413.legs[0]).toMatchObject({ legSeq: 0, origin: "CHC", dest: "SYD" });
-    expect(ek413.legs[1]).toMatchObject({ legSeq: 1, origin: "SYD", dest: "DXB" });
+    expect(ek413.legs[0]).toMatchObject({
+      legSeq: 0,
+      origin: "CHC",
+      dest: "SYD",
+    });
+    expect(ek413.legs[1]).toMatchObject({
+      legSeq: 1,
+      origin: "SYD",
+      dest: "DXB",
+    });
     expect(ek413.layoverHours).toBeCloseTo(1.0833333333333333, 6);
     // Same-day operating match (query date === resolved date), per the comment above.
     expect(ek413.dateIso).toBe("2026-08-21");
@@ -845,7 +1004,12 @@ describe("GET /api/schedule/suggest", () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json<{
-      suggestions: Array<{ flightNo: string; layoverHours: number; sibling: boolean; dateIso: string }>;
+      suggestions: Array<{
+        flightNo: string;
+        layoverHours: number;
+        sibling: boolean;
+        dateIso: string;
+      }>;
     }>();
 
     const ek413 = body.suggestions.find((s) => s.flightNo === "EK413");
@@ -893,7 +1057,11 @@ describe("GET /api/schedule/suggest", () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json<{
-      suggestions: Array<{ flightNo: string; layoverHours: number; sibling: boolean }>;
+      suggestions: Array<{
+        flightNo: string;
+        layoverHours: number;
+        sibling: boolean;
+      }>;
     }>();
 
     const flightNos = body.suggestions.map((s) => s.flightNo);
