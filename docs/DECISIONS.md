@@ -565,8 +565,10 @@ swipe tests dispatch `MouseEvent` typed as pointer events to work around it.
   real defect was the shrink-clamp loop above, not reachability.
 - **The Worker still records a miss when its fetch was BLOCKED.** That is what poisoned EK247 for a
   whole TTL. Now that the local fetcher owns the cache, a challenged fetch should write nothing.
-- **`TripForm.tsx`** is a near-duplicate of `useTripEntry` still submitting un-normalised flight
-  numbers to the same endpoints — the `EK049` bug survives in that path.
+- ~~**`TripForm.tsx`** is a near-duplicate of `useTripEntry`…~~ **Resolved by deleting it**
+  (2026-08-19). It could not render: `showTripForm` started `false` and every call to its setter
+  passed `false`. 884 lines carrying a duplicate of the airport guard and the un-normalised
+  flight-number bug, reachable by nothing.
 - **`docs/rules/*`** (Expo/Supabase/Jest, 74 stale references) is flagged but not deleted; removal
   is the owner's call.
 
