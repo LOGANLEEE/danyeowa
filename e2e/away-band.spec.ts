@@ -4,7 +4,7 @@ import {
   clearRoster,
   openAddForm,
   pickCalendarDay,
-  rosterTrips,
+  expectRosterCount,
 } from "./helpers";
 
 /**
@@ -45,12 +45,7 @@ async function addSector(
   await page.getByLabel(/arrival \(local\)/i).fill(`${iso}T${arrTime}`);
   await page.getByRole("button", { name: /add to roster/i }).click();
 
-  // Ask the SERVER whether the trip exists before looking at the screen. Asserting the card
-  // first conflates two different failures — the write never happened, or it happened and the
-  // calendar had not repainted — and they need opposite fixes.
-  await expect
-    .poll(async () => (await rosterTrips(page)).length, { timeout: 10_000 })
-    .toBe(expectedTotal);
+  await expectRosterCount(page, expectedTotal);
 }
 
 test("away days: the layover between two trips is marked, and the run reads as one band", async ({
