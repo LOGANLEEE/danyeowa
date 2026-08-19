@@ -174,6 +174,17 @@ jobs:
               echo "production serves $GITHUB_SHA and $BUNDLE (attempt $attempt)"
               exit 0
             fi
+            # Superseded is a PASS, not a failure. Two merges minutes apart both deploy, and the
+            # older run then waits forever for a commit production has already moved past — which
+            # is exactly what reddened main on 34e6116 while its own deploy had succeeded. If this
+            # commit is an ancestor of what is being served, the served build CONTAINS this one,
+            # and that is the property the check exists to establish.
+            if [ -n "$SERVED_SHA" ] && [ "$SERVED_SHA" != "$GITHUB_SHA" ] \
+              && git fetch --no-tags -q origin "$SERVED_SHA" 2>/dev/null \
+              && git merge-base --is-ancestor "$GITHUB_SHA" "$SERVED_SHA"; then
+              echo "superseded: production serves $SERVED_SHA, which contains $GITHUB_SHA"
+              exit 0
+            fi
             echo "attempt $attempt: worker=${SERVED_SHA:-none}"
             sleep 15
           done
