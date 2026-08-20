@@ -217,7 +217,40 @@ invite redesign.
 
 ---
 
-## 2026-08-19 (latest)
+## 2026-08-20 (latest)
+
+### The harvester's token moved out of the launchd plists
+
+Both plists carried `INGEST_TOKEN` inline in `EnvironmentVariables`. A plist in
+`~/Library/LaunchAgents/` is `0644`, so every process on the machine could read the credential
+that writes to production. `~/.config/danyeowa/env` was already `0600` and already held the same
+value — the plist copy was redundant as well as exposed.
+
+Both `ProgramArguments` now run through `/bin/sh -c` and source that file:
+
+```sh
+. "$HOME/.config/danyeowa/env" && exec /opt/homebrew/opt/node@22/bin/node <script> <args>
+```
+
+**Rejected: parsing the env file in `ingest-client.mjs`.** It would have meant a new parser and a
+test for a format `sh` already parses, and it would not have removed the plist copy on its own.
+
+**`&&`, not `;`.** With `;` a missing or unreadable env file would let the job continue and hit
+production with no token, and the log would read as an auth failure rather than a missing file.
+
+Proven failing-first: the token was removed with nothing sourcing the file, and
+`com.danyeowa.refresh-arrivals` exited `1` with
+`FAILED: Error: INGEST_TOKEN is not set`. After the change both agents exit `0` —
+refresh logged `nothing arriving in the next 4h`, harvest logged
+`live roster: 147 airborne, 0 new, 571 known total`. The token string no longer appears in either
+plist; the same grep finds it in a pre-change copy, so the search was not blind.
+
+**Not done: rotation.** The value was not changed, so anything that read it while the plists were
+`0644` still holds a working token.
+
+---
+
+## 2026-08-19
 
 ### The last things still called `roaster` were outside the repo
 

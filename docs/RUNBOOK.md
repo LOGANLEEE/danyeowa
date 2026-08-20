@@ -56,7 +56,7 @@ Guarded by a bearer token. The Worker secret and the local copy must match:
 
 ```bash
 export INGEST_TOKEN=...                       # or: source ~/.config/danyeowa/env
-npx wrangler secret put INGEST_TOKEN          # to rotate; update the launchd plists too
+npx wrangler secret put INGEST_TOKEN          # to rotate; then update ~/.config/danyeowa/env
 ```
 
 No configured token means every ingest request is refused — it fails closed on purpose.
@@ -163,6 +163,18 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.danyeowa.harvest.pli
 
 Plists live in `~/Library/LaunchAgents/`. They carry an explicit `PATH` (launchd, like cron, has
 no brew in it) and an absolute `WorkingDirectory`.
+
+**The token is not in the plist.** Both run through `/bin/sh -c` and source it instead:
+
+```sh
+. "$HOME/.config/danyeowa/env" && exec /opt/homebrew/opt/node@22/bin/node <script> <args>
+```
+
+A plist is `0644` — every process on the machine can read one. `~/.config/danyeowa/env` is `0600`,
+so sourcing keeps the token readable only by its owner. The `&&` is load-bearing: with `;` a
+missing env file would let the job run on to hit production with no token, and the failure would
+read as an auth bug rather than a missing file. Rotating the token now means editing that one
+file — the plists never mention it.
 
 ## Push notifications
 
