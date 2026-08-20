@@ -18,13 +18,13 @@ playwright-report/
 .wrangler.bak*/
 *.bak/
 
-# root screenshots dropped by manual/e2e visual checks
-/baseline-landing-390.png
-/e2e-crew-home.png
-/landing-desktop.png
-/v2-crewhome-390.png
-/v2-landing-390.png
-/v2-landing-390b.png
+# The repo root is not a scratch directory. Screenshots from visual checks and one-off Playwright
+# probes both kept landing here and getting committed — six screenshots were already listed by
+# hand before this became a rule. Real scripts live in scripts/, real image assets in web/public/.
+# Both patterns are root-only, so web/public/icons/*.png and scripts/*.mjs are unaffected.
+# Deliberate exception: git add -f.
+/*.png
+/*.mjs
 
 # venv/build artifacts pending manual removal (sandbox rm -rf blocked) — see task-1-report.md
 /.expo/
