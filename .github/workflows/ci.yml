@@ -8,9 +8,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -25,9 +25,9 @@ jobs:
     # was the GOOGLE_CLIENT_SECRET boot bug, which stopped the worker starting at all.
     # Playwright retries once (see e2e/playwright.config.ts), so a genuine blip self-heals.
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: npx playwright install --with-deps chromium
@@ -48,7 +48,7 @@ jobs:
           GOOGLE_CLIENT_SECRET=ci-test-client-secret-not-for-production
           EOF
       - run: pnpm test:e2e
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         # always(), not failure(): this job is continue-on-error, so a failed suite still reports
         # the job as successful and failure() never fires — meaning the report was missing in
         # exactly the case it exists for.
@@ -83,9 +83,9 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @danyeowa/web build
@@ -126,9 +126,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # Schema BEFORE code, always. A migration applied by hand after its code shipped is a
