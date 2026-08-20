@@ -14,7 +14,9 @@ React 19 + Vite + Tailwind v4 (`web/`) · Hono + Cloudflare Workers + D1 + Drizz
 shared types and time helpers (`shared/`) · better-auth (email OTP + Google) · Vitest unit tests ·
 Playwright e2e (`e2e/`) · deployed by GitHub Actions to Cloudflare.
 
-⚠️ `docs/superpowers/plans/*` is accurate but stops at Plan 10 (2026-08-09).
+`docs/superpowers/{plans,specs}/*` is a frozen archive — plans 1–10, ending 2026-08-09,
+kept as a record of what was decided at the time. It is deliberately never updated, so read
+`docs/DECISIONS.md` and `docs/FEATURES.md` for what is true now.
 
 ## Workflow — follow this for any feature or fix
 
