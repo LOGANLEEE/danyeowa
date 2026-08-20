@@ -58,14 +58,26 @@ These are rules, not preferences. Each one exists because breaking it already co
 - **Test data never goes in a real user's roster.** Use an account with no push subscription, and
   delete the rows in the same session.
 
+- **Rotating a credential has an order: the service first, the local copy second. Never destroy
+  the old value before the new one is proven working.** Proven means a real authenticated call
+  answered, not the tool printing success.
+  *Why:* `~/.config/danyeowa/env` was overwritten before Cloudflare had accepted the new
+  `INGEST_TOKEN` — `wrangler secret put` had refused, because an open PR's preview upload makes
+  the newest version differ from the deployed one. For five minutes the scripts presented a token
+  production did not know, and one run was refused. The silent cost was worse: the overwrite
+  destroyed the last copy of the old value, so "the old token is now refused" can only be argued
+  from the string compare in `authorised()`, never demonstrated.
+
 ## Verification discipline
 
 - **Measure, don't eyeball.** Assert widths, computed styles, counts. A screenshot is how the
   calendar-width bug came back three times.
-- **Prove the instrument before trusting a negative result.** Two real examples: `boundingBox()`
+- **Prove the instrument before trusting a negative result.** Three real examples: `boundingBox()`
   ignores clipping by an ancestor's `overflow:hidden`, so a collapsed element still reports its
-  full height; and a bundle fetched mid-deploy returns the *previous* hash, which looks exactly
-  like a failed deploy. Both produced confident, wrong "it's broken" reports.
+  full height; a bundle fetched mid-deploy returns the *previous* hash, which looks exactly
+  like a failed deploy; and a request made seconds after a secret change can reach an edge still
+  serving the old version — the same token returned `200`, `401`, `200`, `200` across 45 seconds.
+  Each produced, or would have produced, a confident and wrong "it's broken" report.
 - When a check comes back empty/zero/not-found, first ask whether the instrument could see it
   at all.
 
