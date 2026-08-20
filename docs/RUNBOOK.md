@@ -56,8 +56,27 @@ Guarded by a bearer token. The Worker secret and the local copy must match:
 
 ```bash
 export INGEST_TOKEN=...                       # or: source ~/.config/danyeowa/env
-npx wrangler secret put INGEST_TOKEN          # to rotate; then update ~/.config/danyeowa/env
 ```
+
+**Rotating: Worker first, local file second.** The reverse leaves the scripts presenting a token
+production does not know, and it destroys the only copy of the old value before you have confirmed
+the new one works.
+
+```bash
+umask 077                                    # or the file is world-readable before chmod runs
+NEW=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')
+printf '%s' "$NEW" | npx wrangler secret put INGEST_TOKEN     # 1. Worker
+printf 'export INGEST_TOKEN=%s\n' "$NEW" > ~/.config/danyeowa/env   # 2. local
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $NEW" \
+  https://danyeowa.com/api/ingest/upcoming-arrivals            # 3. expect 200
+```
+
+`secret put` fails with `the latest version of your Worker isn't currently deployed` whenever an
+open PR's `preview` job has uploaded a newer version. Merge the PR and let CI deploy, then retry.
+Do not take the error's advice to deploy the latest version — that hand-deploys a preview build.
+
+Give a rotation ~60s before trusting a probe. A fresh secret reaches edges unevenly and one `401`
+in that window means nothing.
 
 No configured token means every ingest request is refused — it fails closed on purpose.
 

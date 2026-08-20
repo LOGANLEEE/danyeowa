@@ -245,8 +245,49 @@ refresh logged `nothing arriving in the next 4h`, harvest logged
 `live roster: 147 airborne, 0 new, 571 known total`. The token string no longer appears in either
 plist; the same grep finds it in a pre-change copy, so the search was not blind.
 
-**Not done: rotation.** The value was not changed, so anything that read it while the plists were
-`0644` still holds a working token.
+**Rotation followed the same day** — see the next entry. Moving a credential into a `0600` file
+stops the next read; it does nothing about a read that already happened.
+
+### Rotating that token needed the Worker deployed first
+
+The plist fix stopped the leak, it did not close it, so the value itself was replaced.
+
+**`wrangler secret put` refuses while a PR preview is the newest upload.**
+
+```
+✘ Secret edit failed. You attempted to modify a secret, but the latest version of your Worker
+  isn't currently deployed.
+```
+
+This has nothing to do with the secret. Every PR's `preview` job uploads a version, and an
+uploaded-but-undeployed version is exactly what that check trips on: production was serving
+`b851dd03` (10:58:55Z) while the newest upload was `469c2877` (11:01:52Z) — PR #75's own preview.
+
+The error suggests deploying the latest version first. That means hand-deploying a PR build to
+production, which is not how anything ships here. Merging the PR is the fix — CI's `wrangler
+deploy` makes latest and deployed the same version again, and `secret put` then works.
+
+**Worker first, local file second.** `RUNBOOK.md` already said so, the reverse was done anyway,
+and it cost a run: the local `env` was promoted before the Worker had accepted the new value.
+
+```
+2026-08-20T12:27:47.411Z FAILED: Error: ingest rejected the token (401)
+2026-08-20T12:32:36.224Z nothing arriving in the next 4h
+```
+
+Failing closed contained it — one refused run, no bad write, recovered on the next interval. The
+expensive part was silent: overwriting the local file destroyed the last copy of the old value,
+and with it any way to *demonstrate* that the old token is now refused.
+
+**What is proven, and what is only argued.** `authorised()` in `worker/src/ingest.ts` is an exact
+string compare, the deployed secret is the new value, the new value returns `200` on ten
+consecutive probes, and a garbage token returns `401`. Any value other than the new one is
+therefore refused, the old one included. That conclusion follows from the compare. It is not a
+measurement of the old string, which no longer exists to measure.
+
+**Allow a minute for a secret to settle.** Straight after `secret put` the same token returned
+`200`, `401`, `200`, `200` across 45 seconds as edges picked up the new version. A single `401`
+in that window is propagation, not a failed rotation.
 
 ---
 
