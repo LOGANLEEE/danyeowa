@@ -101,8 +101,9 @@ ever wants the apex, the app moves to a subdomain and URLs break again — accep
    purpose, so the old Worker can stay up as a redirector and so a failed cutover has a way back.
 5. **CI deploy breaks until `CLOUDFLARE_API_TOKEN`** in GitHub is swapped for a danyeowa-account
    token. **User task.**
-6. **The local harvester breaks** — `~/.config/roaster-me/env` and the launchd plists point at
-   `roaster-me.logan-lee.workers.dev`. **User task.**
+6. ~~The local harvester breaks~~ — **done 2026-08-19.** Neither the env file nor the plists
+   ever carried an API URL; `scripts/lib/ingest-client.mjs` defaults to `https://danyeowa.com`.
+   The config dir and the launchd labels were renamed to `danyeowa` in the same pass.
 7. ~~wrangler CLI cannot see the danyeowa account~~ — **done 2026-08-13**, `wrangler login`
    re-run with that account granted. Confirm with `wrangler whoami` before relying on it.
 
@@ -162,7 +163,7 @@ old Worker's `wrangler secret list` before trusting any list in a document, incl
 | `RESEND_API_KEY` | **nowhere on disk.** Must be re-created in the Resend dashboard | **user** |
 | `EMAIL_FROM` | `danyeowa <noreply@danyeowa.com>` — a plain string, not a credential | either |
 | `GOOGLE_CLIENT_SECRET` | `.dev.vars` (same OAuth client as production) | either |
-| `INGEST_TOKEN` | `~/.config/roaster-me/env` — must keep the same value or the harvester breaks | either |
+| `INGEST_TOKEN` | `~/.config/danyeowa/env` — must keep the same value or the harvester breaks | either |
 | `BETTER_AUTH_SECRET` | regenerate; sessions die in the move anyway | either |
 | `VAPID_PRIVATE_KEY` | regenerate via `scripts/generate-vapid.mjs --put`; the public half goes in `wrangler.jsonc`, and push subscriptions die in the move anyway | either |
 
@@ -290,5 +291,3 @@ vouch for times on a leg she was not on. `scheduleLegSeq` is never re-indexed.
   (all at 27e4df5, 8 months old, clean), a prunable `~/.cursor/worktrees/roaster-me/myk`, and
   merged branches `fix/flightno-normalisation`, `fix/scroll-expand-polish`. Left alone on purpose;
   delete only on the user's say-so.
-- **`RoasterMeBot/1.0`** is still the scraper's user-agent (`scrape-fr24.ts`). Cosmetic, and
-  changing it changes the fingerprint we present to fr24, so it was left as is.
