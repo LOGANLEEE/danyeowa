@@ -151,8 +151,28 @@ test("layover brief: free-until-report on the empty middle day, and the copy car
   await expect(weather).toContainText("Thunderstorm");
   await expect(weather).toContainText("13–21°");
   await expect(weather).toContainText("86%");
+  // Sunset rides along with the forecast already fetched — on a layover the question is how
+  // much light is left.
+  await expect(weather).toContainText("↓17:02");
   // CC BY 4.0 requires the credit, and it has to be on the card, not buried in a doc.
   await expect(weather).toContainText("Open-Meteo");
+
+  // --- Pointers rather than a second copy of somebody else's data. ---
+  const lookup = page.getByTestId("layover-lookup");
+  await expect(lookup.getByRole("link", { name: /city guide/i })).toHaveAttribute(
+    "href",
+    /wikivoyage\.org.*Sydney/,
+  );
+  await expect(lookup.getByRole("link", { name: /what's on/i })).toHaveAttribute(
+    "href",
+    /Sydney/,
+  );
+
+  // The extra column must not widen the card.
+  const stillNoOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(stillNoOverflow, "forecast row must not widen the page at 390px").toBeLessThanOrEqual(0);
 
   // The copy carries the real numbers, so the assistant is never asked to guess them.
   await page.getByTestId("copy-layover-brief").click();

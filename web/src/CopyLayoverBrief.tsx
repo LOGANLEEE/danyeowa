@@ -93,6 +93,11 @@ export function CopyLayoverBrief({ rest }: { rest: LayoverRest }) {
               <span className="num shrink-0 text-ink-muted">
                 {day.rainChance == null ? "—" : `${day.rainChance}%`}
               </span>
+              {/* Sunset, not sunrise: on a layover the question is how much light is left,
+                  and it comes free with the forecast already fetched. */}
+              <span className="num shrink-0 text-ink-muted" title="Sunset">
+                ↓{day.sunset.slice(11, 16)}
+              </span>
             </p>
           ))}
           <p className="text-xs text-ink-muted">
@@ -110,6 +115,30 @@ export function CopyLayoverBrief({ rest }: { rest: LayoverRest }) {
           No forecast yet — usually available about two weeks ahead.
         </p>
       ) : null}
+
+      {/* Pointers, not a second copy of the data. A city guide and a what's-on search are
+          two links; mirroring them into this app would mean a licence, a coverage gap and a
+          table that goes stale — and the assistant already answers both from the brief. */}
+      {airport?.city && (
+        <p data-testid="layover-lookup" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <a
+            className="text-accent underline"
+            href={`https://en.wikivoyage.org/w/index.php?search=${encodeURIComponent(airport.city)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            City guide
+          </a>
+          <a
+            className="text-accent underline"
+            href={`https://www.google.com/search?q=${encodeURIComponent(`events in ${airport.city} this week`)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            What's on
+          </a>
+        </p>
+      )}
 
       <label className="flex flex-col gap-1">
         <span className="text-xs text-ink-muted">Hotel (optional — sharpens the answer)</span>
