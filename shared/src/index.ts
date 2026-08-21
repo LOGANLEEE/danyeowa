@@ -76,6 +76,10 @@ export const AirportSchema = z.object({
   city: z.string(),
   name: z.string(),
   tz: z.string(),
+  /** Decimal degrees. Null for a station that self-warmed in from a live provider without
+   * them — the caller must treat null as "no forecast", never substitute a nearby point. */
+  lat: z.number().nullable().optional(),
+  lng: z.number().nullable().optional(),
 });
 
 export type Airport = z.infer<typeof AirportSchema>;

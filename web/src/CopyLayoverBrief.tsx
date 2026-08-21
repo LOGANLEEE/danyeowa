@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { formatDuration } from "@danyeowa/shared";
 import { useAirport } from "./lib/airports";
 import { formatLayoverBrief, type LayoverRest } from "./lib/layoverBrief";
+import { fetchLayoverForecast, layoverDates, type DayForecast } from "./lib/weather";
 
 /**
  * The layover panel: how long she is actually free, and a button that packs the roster context
@@ -34,8 +35,24 @@ export function CopyLayoverBrief({ rest }: { rest: LayoverRest }) {
     setFallbackText(null);
   }, [rest.station, rest.arrUtc]);
 
+  const [forecast, setForecast] = useState<DayForecast[] | null>(null);
+  const lat = airport?.lat;
+  const lng = airport?.lng;
+
+  useEffect(() => {
+    setForecast(null);
+    if (lat == null || lng == null) return;
+    let cancelled = false;
+    void fetchLayoverForecast(lat, lng, rest.arrTz, layoverDates(rest)).then((days) => {
+      if (!cancelled) setForecast(days);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [lat, lng, rest]);
+
   async function copy() {
-    const text = formatLayoverBrief(rest, { city: airport?.city, hotel });
+    const text = formatLayoverBrief(rest, { city: airport?.city, hotel, forecast });
     try {
       await navigator.clipboard.writeText(text);
       setFallbackText(null);
@@ -63,6 +80,36 @@ export function CopyLayoverBrief({ rest }: { rest: LayoverRest }) {
           </span>
         </p>
       </div>
+
+      {forecast ? (
+        <div data-testid="layover-weather" className="flex flex-col gap-1">
+          {forecast.map((day) => (
+            <p key={day.date} className="flex items-baseline gap-2 text-sm">
+              <span className="num w-14 shrink-0 text-ink-muted">{day.date.slice(5)}</span>
+              <span className="num shrink-0 text-ink">
+                {Math.round(day.tempMinC)}–{Math.round(day.tempMaxC)}°
+              </span>
+              <span className="min-w-0 flex-1 truncate text-ink-muted">{day.label}</span>
+              <span className="num shrink-0 text-ink-muted">
+                {day.rainChance == null ? "—" : `${day.rainChance}%`}
+              </span>
+            </p>
+          ))}
+          <p className="text-xs text-ink-muted">
+            Forecast ·{" "}
+            <a href="https://open-meteo.com/" target="_blank" rel="noreferrer" className="underline">
+              Open-Meteo
+            </a>
+          </p>
+        </div>
+      ) : lat != null && lng != null ? (
+        // Not a failure and not worth hiding: forecasts only run about two weeks out, and a
+        // roster is published a month ahead, so this is the normal state for most layovers.
+        // Saying so beats a silent gap — and beats a seasonal average dressed as a forecast.
+        <p data-testid="layover-weather-pending" className="text-sm text-ink-muted">
+          No forecast yet — usually available about two weeks ahead.
+        </p>
+      ) : null}
 
       <label className="flex flex-col gap-1">
         <span className="text-xs text-ink-muted">Hotel (optional — sharpens the answer)</span>

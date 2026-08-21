@@ -103,6 +103,67 @@ test("layover brief: free-until-report on the empty middle day, and the copy car
   await pickCalendarDay(page, OUT_DAY);
   await expect(page.getByTestId("layover-brief")).toBeVisible();
 
+  // --- Weather. Stubbed rather than live: the suite must not depend on a third party being
+  //     up, and the point being tested is what the card does with each answer, not that
+  //     Open-Meteo replies. Both bodies are the shapes the real API actually returns. ---
+  await page.unrouteAll();
+  await page.route("**api.open-meteo.com**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      // Verbatim from the live API for a date past its ~16-day horizon.
+      body: JSON.stringify({
+        error: true,
+        reason: "Parameter 'start_date' is out of allowed range from 2026-05-20 to 2026-09-05",
+      }),
+    }),
+  );
+  await pickCalendarDay(page, LAYOVER_DAY);
+  // No forecast exists this far out — and the card must say so rather than draw a seasonal
+  // average that looks exactly like a real one.
+  await expect(page.getByTestId("layover-weather-pending")).toBeVisible();
+  await expect(page.getByTestId("layover-weather")).toHaveCount(0);
+
+  // Now the same station with a forecast. A refusal is never cached, so this refetches.
+  await page.unrouteAll();
+  await page.route("**api.open-meteo.com**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        daily: {
+          time: ["2027-05-10", "2027-05-11", "2027-05-12"],
+          weather_code: [95, 3, 0],
+          temperature_2m_max: [21.4, 19.8, 22.1],
+          temperature_2m_min: [12.6, 11.9, 13.0],
+          precipitation_probability_max: [86, 20, 0],
+          sunrise: ["2027-05-10T06:30", "2027-05-11T06:31", "2027-05-12T06:32"],
+          sunset: ["2027-05-10T17:02", "2027-05-11T17:01", "2027-05-12T17:00"],
+        },
+      }),
+    }),
+  );
+  await pickCalendarDay(page, OUT_DAY);
+  await pickCalendarDay(page, LAYOVER_DAY);
+
+  const weather = page.getByTestId("layover-weather");
+  await expect(weather).toBeVisible();
+  await expect(weather).toContainText("Thunderstorm");
+  await expect(weather).toContainText("13–21°");
+  await expect(weather).toContainText("86%");
+  // CC BY 4.0 requires the credit, and it has to be on the card, not buried in a doc.
+  await expect(weather).toContainText("Open-Meteo");
+
+  // The copy carries the real numbers, so the assistant is never asked to guess them.
+  await page.getByTestId("copy-layover-brief").click();
+  const withWeather = await page.evaluate(() => navigator.clipboard.readText());
+  expect(withWeather).toContain("WEATHER (actual forecast, Open-Meteo)");
+  expect(withWeather).toContain("Thunderstorm · rain 86%");
+  expect(withWeather).toContain("3. What to pack given that forecast");
+  expect(withWeather).not.toContain("3. The weather across those dates");
+
+  await page.unrouteAll();
+
   // --- And absent once she is home: the day after the return is not a layover. ---
   await pickCalendarDay(page, "2027-05-14");
   await expect(page.getByTestId("layover-brief")).toHaveCount(0);
