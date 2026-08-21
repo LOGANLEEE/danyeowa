@@ -28,6 +28,7 @@ codebase to find out. Status words mean exactly one thing:
 | Delete asks in a modal | Live | Native `<dialog>` + `showModal()`, so Esc, focus trap and inert background come from the platform. jsdom implements none of it, so the behaviour is only ever real in e2e |
 | Which sector is actually hers | Live | A multi-sector service (EK205 DXB→MXP→JFK) can change crew down-route. Non-operating legs are stored so the routing stays true but split out of `flights` into `continuation`, so a consumer that forgets the flag still gets the right times |
 | Layover days marked | Live | Days between two trips of one pairing — she is in EZE, not at home. Computed base-to-base across trips, drawn as one continuous band. See `DECISIONS.md` 2026-08-18 |
+| Layover brief, copied for an assistant | Live | On any day inside a down-route rest: how long she is free (landing → next **report**, not next departure — a 25h layover with a 19:40 report is 22h 35m of usable time) plus a button that copies the roster context as a prompt. Optional hotel field, never stored. See `DECISIONS.md` 2026-08-21 |
 | Today told apart from the tapped day | Live | Today fills the number in `--color-today`; selection rings the cell. They used to be the same colour and shape, one pixel apart |
 
 ## Notifications

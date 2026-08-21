@@ -17,7 +17,10 @@ import AddTripForm from "./AddTripForm";
 import CrewBadges from "./CrewBadges";
 import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
 import { useAirport } from "./lib/airports";
+import { CopyLayoverBrief } from "./CopyLayoverBrief";
 import { humanDateLabel } from "./lib/dateLabel";
+import { HOME_BASE_IATA } from "./lib/homeBase";
+import { layoverRests, restForDay, type LayoverRest } from "./lib/layoverBrief";
 import TripLegsPanel from "./TripLegsPanel";
 import TripsCalendar from "./TripsCalendar";
 import { useTripEntry } from "./useTripEntry";
@@ -537,6 +540,7 @@ function DayDetail({
   isoDate,
   trips,
   homeTz,
+  layoverRest,
   onAdded,
   onChanged,
   readOnly = false,
@@ -544,6 +548,9 @@ function DayDetail({
   isoDate: string;
   trips: TripWithFlights[];
   homeTz: string;
+  /** The down-route rest this day falls inside, when it does. Belongs to the day rather than to
+   * a trip: the middle of a layover has no duty at all, so it cannot hang off a trip card. */
+  layoverRest: LayoverRest | null;
   onAdded: (isoDate: string) => void;
   onChanged: () => void;
   readOnly?: boolean;
@@ -558,14 +565,19 @@ function DayDetail({
   // when `trip` is null, so there is no second add path to keep in step.
   if (trips.length === 0) {
     return (
-      <DayDetailCard
-        isoDate={isoDate}
-        trip={null}
-        homeTz={homeTz}
-        onAdded={onAdded}
-        onChanged={onChanged}
-        readOnly={readOnly}
-      />
+      <div className="flex flex-col gap-3">
+        <DayDetailCard
+          isoDate={isoDate}
+          trip={null}
+          homeTz={homeTz}
+          onAdded={onAdded}
+          onChanged={onChanged}
+          readOnly={readOnly}
+        />
+        {/* The day in the middle of a layover: no duty, and the one she is most likely to be
+            planning. "No duty" alone is true and useless here. */}
+        {layoverRest && <CopyLayoverBrief rest={layoverRest} />}
+      </div>
     );
   }
 
@@ -582,6 +594,8 @@ function DayDetail({
           readOnly={readOnly}
         />
       ))}
+
+      {layoverRest && <CopyLayoverBrief rest={layoverRest} />}
 
       {readOnly ? null : addingAnother ? (
         <div className="hairline flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
@@ -726,6 +740,14 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
     });
   }
 
+  // The down-route rest a date falls inside, walked across EVERY trip rather than the day's own
+  // — a real layover sits between two trips of a pairing, so `tripsForDay` cannot see it, and on
+  // the middle day it returns nothing at all.
+  function layoverRestForDay(iso: string): LayoverRest | null {
+    if (!trips) return null;
+    return restForDay(layoverRests(trips, HOME_BASE_IATA), iso, homeTz);
+  }
+
   // Selects today, or the next trip-free day after today when today already has a trip — used
   // by the tab bar's center + button. Tracks the LAST SEEN token (initialized to the current
   // value, not 0) so a remount with an already-bumped token (e.g. `key` change from an
@@ -782,6 +804,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
               isoDate={selectedIso}
               trips={tripsForDay(selectedIso)}
               homeTz={homeTz}
+              layoverRest={layoverRestForDay(selectedIso)}
               onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
               onChanged={refetch}
               readOnly={readOnly}
@@ -887,6 +910,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
             isoDate={selectedIso}
             trips={tripsForDay(selectedIso)}
             homeTz={homeTz}
+            layoverRest={layoverRestForDay(selectedIso)}
             onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
             onChanged={refetch}
             readOnly={readOnly}
