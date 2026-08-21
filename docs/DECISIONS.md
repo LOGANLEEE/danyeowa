@@ -8,6 +8,58 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-21
+
+### The layover brief is a clipboard button, not four integrations
+
+A layover card wanting weather, attractions, local transport cost and what's on looks like four
+API integrations. Each was priced and read at source before any of it was built, and only one
+survived:
+
+| Want | Source | Verdict |
+|---|---|---|
+| Weather | Open-Meteo | Usable — but free tier is **non-commercial only**, CC BY 4.0 attribution, and it still needs the `lat`/`lng` seed column this repo has never had |
+| Attractions | OpenTripMap / Wikivoyage | Workable; source not chosen |
+| What's on | Ticketmaster Discovery | ~25 markets, effectively US/CA/AU/UK/EU. The gap lines up almost exactly with the Middle East, South Asia and South-East Asia this roster flies to most |
+| Taxi per km | Numbeo | Has the exact figure (`Taxi 1 km (Standard Tariff)`), no free tier, **$260/mo**, and automated collection is prohibited by its terms |
+| Taxi per km | Uber API | Approval-gated; needs pickup AND destination; the `TAXI` product returns `low/high_estimate: null`; and ToS § II B forbids showing its prices beside a competitor's — which is exactly a taxi/Uber/Grab row |
+| Taxi per km | TaxiFareFinder | Municipal rates, good data — but needs origin AND destination, and the key is a contact form |
+
+**The real blocker on the transport half was never price.** Every route-priced source needs two
+coordinates. Crew ride a company shuttle from the airport to a hotel this app does not know and
+has no field for, so there is no route to price. That is also why a *rate* per km is the right
+unit and an airport-to-city fare is the wrong question.
+
+And **Uber publishes no per-km rate at all** — "the base rate is determined by the time and
+distance of a trip", quoted from its own price-estimate page. It is not a sourcing problem; the
+number does not exist.
+
+**So the app packs context and stays out of answering.** `formatLayoverBrief` builds a prompt
+from what the roster already knows and copies it; the assistant she already uses answers all four
+questions, anywhere, at no cost and with nothing to go stale. Nothing is asserted that the app
+does not know, so — unlike the weather tiles prototyped and dropped on 2026-08-18 — there is no
+tile that can be wrong.
+
+**Free time is measured to REPORT, not to departure.** This is the one line no generic prompt can
+produce, and the whole reason the button beats typing the question by hand. `layoverRests` walks
+every leg base-to-base rather than within a trip, because a real down-route rest sits *between*
+two trips of a pairing — same reason `awaySpans` exists.
+
+**Rejected: asking for the hotel.** It is an optional field on the panel, never stored and never
+required. Making it mandatory would buy sharper answers at the cost of typing a hotel name on
+every layover, and the prompt is useful without it.
+
+**Rejected: a per-device prompt language.** The prompt is read by a model, not by her, and every
+assistant replies in whatever language she follows up in. A setting would be a setting for nothing.
+
+Guards all carry a test proven failing-first by mutation: removing the at-base skip, the
+station-match guard, the report-after-landing guard, or swapping report for departure each fails
+exactly one test. The e2e asserts the panel on the day in the MIDDLE of a layover — no duty at
+all, the branch that renders "no duty" and nothing else — plus the 16px control floor and no
+horizontal overflow at 390px.
+
+---
+
 ## 2026-08-19 (later)
 
 ### Deleting an account deletes one row
