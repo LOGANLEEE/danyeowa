@@ -8,6 +8,45 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-21 (last)
+
+### The other three wants get pointers, not tables
+
+Four things were asked for on a layover: transport cost per km, attractions, weather, what's on.
+Weather shipped. This entry is why the other three did not become data in this app.
+
+**The test that decided it.** The copy button was pointed at a real Bangkok layover and the
+resulting answer graded question by question. Transport and attractions came back genuinely
+useful — rates, which app is standard, and three things that fit the hours, correctly picking a
+Saturday-only market because the brief said which day she is free. Weather came back as a
+*seasonal average*, which is what a model has instead of a forecast. What's on came back as "I
+don't know", correctly.
+
+So the gap was weather, and only weather. Building the other two would duplicate an answer that
+is already good, at the cost of a licence, a coverage gap and a table that rots.
+
+**Attractions: rejected as data, shipped as a link.** Wikivoyage's API is free, key-less and
+CORS-open, and its "See"/"Do" sections parse. It was still turned down: a static listing cannot
+know she has 30 hours and that one of them is a Saturday, so it is strictly worse than what the
+brief already elicits. A search link to the city guide costs one line and never goes stale.
+
+**What's on: rejected as data, shipped as a link.** No source covers this network. Ticketmaster
+is the best of them and reaches about 25 markets, thinning out across exactly the Middle East,
+South Asia and South-East Asia that EK flies to most. A tile blank for most destinations is worse
+than no tile.
+
+**Transport: left to the brief.** There is no licensed per-km source (Numbeo prohibits automated
+collection and starts at $260/mo) and Uber publishes no per-km rate at all. Seeding 108 rates
+from memory was considered and rejected outright — plausible, unsourced, partly wrong figures
+with no `checked_at` is the fabricated-tile failure wearing a different hat. The brief asks the
+question; the assistant answers it well.
+
+**Sunset shipped, because it was already paid for.** The forecast call returns it. DECISIONS
+wanted "weather and sunset" from the start, and on a layover the useful half is how much daylight
+is left, so it sits on each forecast row rather than getting a tile.
+
+---
+
 ## 2026-08-21 (later)
 
 ### The forecast is real or it is absent
