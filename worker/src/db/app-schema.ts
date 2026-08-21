@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { user } from "./auth-schema";
 
 export const trips = sqliteTable("trips", {
@@ -65,6 +65,13 @@ export const airports = sqliteTable("airports", {
    * harvester: the fr24 JSON API carries a genuine IANA tz name where the old HTML scraper
    * did not, which was the only reason that path never learned an airport. */
   source: text("source", { enum: ["live-api"] }),
+  /** Decimal degrees, for the destination forecast on a layover. Nullable: the 108 seeded
+   * airports carry coordinates (OurAirports, public domain), but a station that self-warms in
+   * from a live provider arrives without them. NULL means "no forecast for this station" —
+   * never a guessed point, since a confident wrong forecast is the exact failure the weather
+   * tiles were dropped for on 2026-08-18. */
+  lat: real("lat"),
+  lng: real("lng"),
 });
 
 export const tripsRelations = relations(trips, ({ many }) => ({

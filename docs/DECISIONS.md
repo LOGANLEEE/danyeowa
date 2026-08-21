@@ -8,6 +8,58 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-21 (later)
+
+### The forecast is real or it is absent
+
+Weather sat under "Not built, deliberately" since 2026-08-18, blocked on two things: an airport
+`lat`/`lng` column and a weather API. Both are now settled.
+
+**Coordinates** come from OurAirports (public domain), matched on `iata_code`; all 108 seeded
+codes resolved. They ship in migration `0015` for rows that already exist and in
+`scripts/seed-airports.sql` for a fresh database — the migration alone is not enough, because a
+new local DB has no airport rows at the point migrations run, so its `UPDATE`s would hit nothing.
+
+`lat`/`lng` are **nullable and stay nullable**. A station that self-warms in from a live provider
+arrives without them, and NULL has to mean "no forecast here" rather than a guessed point.
+
+**Open-Meteo** is free, needs no key, and its terms name "private or non-profit websites or apps
+that do not have subscriptions or advertising" as qualifying non-commercial use. Limits are
+10,000 calls/day and 300,000/month against two or three users. CC BY 4.0, so the credit is on the
+card itself.
+
+**The constraint that shaped the feature: forecasts reach about 16 days.** A roster is commonly
+published a month out, so *most* layovers have no forecast, and the API says so explicitly:
+
+```
+Parameter 'start_date' is out of allowed range from 2026-05-20 to 2026-09-05
+```
+
+That is the normal case, not an error. The card renders "No forecast yet — usually available
+about two weeks ahead" and draws nothing else. **A seasonal average was rejected outright**: it
+looks exactly like a forecast, and "two fabricated tiles are worse than none" is the reason this
+feature was shelved in the first place. An assistant already supplies climate averages — the only
+thing worth adding is the part it cannot know.
+
+**Only an answer is cached.** A refusal, a network failure and an out-of-range date are not
+evidence that no forecast exists; the same station has one a week later. Caching them would blank
+the card for the rest of the session.
+
+**A missing precipitation figure renders "—", never 0%.** Writing 0% would be a claim about rain
+we did not receive. The same reasoning skips a day with no temperature rather than defaulting it.
+
+**Client-side, not through the Worker.** The schedule providers live server-side because they
+need secrets and a real browser; Open-Meteo needs neither, and a session cache in
+`web/src/lib/weather.ts` mirrors what `lib/airports.ts` already does for airport lookups. A
+Worker route and a D1 cache table would be more moving parts for three users.
+
+Two tests were written badly first and mutation caught both: the `body.error` guard passed with
+the check deleted, because the stubbed refusal carried no `daily` either — it now has a case that
+sets both. And a `=== undefined` guard let a JSON `null` through as a real reading, which is what
+the API actually sends for a value it has no answer for.
+
+---
+
 ## 2026-08-21
 
 ### The layover brief is a clipboard button, not four integrations

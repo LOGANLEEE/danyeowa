@@ -1,5 +1,6 @@
 import { clockShiftHours, formatDuration, formatLocal, localDateKey } from "@danyeowa/shared";
 import type { Flight } from "@danyeowa/shared";
+import type { DayForecast } from "./weather";
 
 type LegLike = Pick<
   Flight,
@@ -119,11 +120,31 @@ export function restForDay(
  */
 export function formatLayoverBrief(
   rest: LayoverRest,
-  opts: { city?: string | null; hotel?: string | null } = {},
+  opts: { city?: string | null; hotel?: string | null; forecast?: readonly DayForecast[] | null } = {},
 ): string {
   const city = opts.city?.trim();
   const hotel = opts.hotel?.trim();
   const shift = `${rest.clockShift >= 0 ? "+" : ""}${rest.clockShift}h`;
+  const forecast = opts.forecast?.length ? opts.forecast : null;
+
+  // With a real forecast in hand there is no point asking for one: an assistant answering from
+  // training data gives a seasonal average, which is what this replaces. Without it, the
+  // question stays — a vague answer beats no answer, as long as nothing pretends otherwise.
+  const weatherLines = forecast
+    ? [
+        "",
+        "WEATHER (actual forecast, Open-Meteo)",
+        ...forecast.map(
+          (day) =>
+            `  ${day.date}  ${Math.round(day.tempMinC)}–${Math.round(day.tempMaxC)}°C · ` +
+            `${day.label} · rain ${day.rainChance == null ? "—" : `${day.rainChance}%`} · ` +
+            `sunset ${day.sunset.slice(11, 16)}`,
+        ),
+      ]
+    : [];
+  const weatherQuestion = forecast
+    ? "3. What to pack given that forecast"
+    : "3. The weather across those dates, and what to pack";
 
   return [
     "I'm cabin crew on a layover. Answer practically and briefly.",
@@ -137,12 +158,13 @@ export function formatLayoverBrief(
     hotel
       ? `HOTEL   ${hotel}`
       : "HOTEL   crew hotel, location unknown — assume somewhere reasonably central",
+    ...weatherLines,
     "",
     "For exactly those hours, tell me:",
     "1. Getting around from the hotel: roughly what a taxi or rideshare costs per km,",
     "   which app works here, and whether a metro or train beats it",
     "2. Three things worth doing that fit the time I actually have",
-    "3. The weather across those dates, and what to pack",
+    weatherQuestion,
     "4. Anything on in the city while I'm there",
     "",
     "Under 200 words. Assume 8h sleep and one proper meal. I take the crew shuttle from the",
