@@ -8,6 +8,63 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-08-22
+
+### The flight card wears the destination's sky, and contrast decided the shape of it
+
+Weather as a row of data was the wrong reading of it. On a card that already carries a route, a
+flight number and three times, one more row is one more thing to parse. The card's own surface
+was doing nothing.
+
+Four directions were drawn and B — the whole card becomes the sky — was chosen.
+
+**Contrast decided everything else, and it was measured before a line of it was built.**
+`lib/contrast.ts` is WCAG 2.1 relative luminance; `lib/contrast.test.ts` reads the gradient
+stops out of `tokens.css` itself and asserts every text token against the LIGHTEST stop of every
+sky. Reading the real file is the point — a copy of the values would keep passing after someone
+lightened a gradient, which is exactly the change that breaks this.
+
+What that measurement found, none of it visible by eye:
+
+| on a sky | dark theme | light theme |
+|---|---|---|
+| `--color-ink` | 10.3–11.1 ✓ | 13–14 ✓ |
+| `--color-ink-muted` | **3.97–4.28 ✗** | **3.89–4.22 ✗** |
+| `--color-report` | 8.8–9.5 ✓ | **3.54–3.84 ✗** |
+
+Two consequences.
+
+**The sky is dark in both themes** — the same licence the departure-board panel already takes.
+Not a style choice: in light mode `--color-report` red-shifts to the accent blue, which lands at
+3.54:1 on a sky. The report time is the single value this app exists to show, and a light sky
+would mean dimming it.
+
+**Three on-sky text tokens exist** because the ordinary ones do not survive the move.
+`--color-ink-muted` misses the floor by half a point on every field. The test carries an
+inverted assertion for this — if the ordinary muted token ever passes, the skies have been
+darkened enough to drop the extra tokens, which is a simplification rather than a failure.
+
+**Text is themed by scoping, not by threading a prop.** `.sky .text-report { … }` beats the
+utility class through the subtree; the alternative was an "on sky?" boolean through every
+element of the card. The e2e proves the override actually wins in a real engine — removing it
+repaints the report time `rgb(47, 111, 237)`, the exact blue measured at 3.54:1.
+
+**Five fields, not eleven.** Grouped from WMO 4677 by what changes what she packs: rain vs storm
+vs snow, not "moderate" vs "dense drizzle".
+
+**Falling weather is static.** Raking hairlines for rain and storm, a dot field for snow, both as
+CSS gradients. Animating them would repaint the whole card every frame, which the layout rules
+here forbid.
+
+**No forecast, plain card** — which is most of the roster, since forecasts reach about 16 days.
+The alternative considered and rejected: a seasonal average behind the card. It would look
+exactly like a real forecast, which is the failure that shelved weather here in the first place.
+
+**Known cost, not yet solved.** A list mixing skied and plain cards can read as though the plain
+ones failed to load. Worth watching once it is in use.
+
+---
+
 ## 2026-08-21 (last)
 
 ### The other three wants get pointers, not tables

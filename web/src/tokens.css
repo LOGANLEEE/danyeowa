@@ -14,6 +14,16 @@
      empty day competes with the roster itself. Amber in both themes — report red-shifts to blue
      in light mode, so it cannot be borrowed here. */
   --color-today: #b06d00;
+
+  /* Text that sits on a weather sky (below). Separate tokens because the ordinary ones do not
+     survive the move, and that was MEASURED, not guessed — see lib/contrast.test.ts:
+     --color-ink-muted (#8b93a3) lands at 3.97:1 on the lightest sky, under the 4.5 floor.
+     These two are the same in both themes, because the sky is. */
+  --color-ink-on-sky: #e8ebf1;
+  --color-ink-muted-on-sky: #9aa3b5;
+  /* --color-report red-shifts to the accent blue in light mode, which measures 3.54:1 on
+     the lightest sky. The amber is the only report colour a sky can carry. */
+  --color-report-on-sky: #ffd57e;
 }
 
 /* Dark overrides: two mechanisms, both must win over the @theme light defaults above.
@@ -248,3 +258,74 @@ body {
     animation-delay: 180ms;
   }
 }
+
+/* Weather skies — the destination forecast as the card's own surface.
+ *
+ * DARK IN BOTH THEMES, same licence the departure-board panel already takes. Not a style
+ * choice: on a light sky the report time (--color-report, which red-shifts to the accent blue
+ * in light mode) measures 3.54–3.84:1, under the 4.5 floor, and the report time is the single
+ * value this app exists to show. A light sky would mean dimming the one thing that matters.
+ *
+ * Five fields, not one per WMO code: what changes what she packs is rain vs storm vs snow, not
+ * "moderate" vs "dense drizzle". `skyKind()` in lib/weather.ts does the grouping.
+ *
+ * Every field's LIGHTEST stop is the worst case for text, and every one of them is asserted
+ * against both on-sky tokens in lib/contrast.test.ts. Do not adjust a stop without re-running
+ * it — a sky that looks fine can fail by half a point.
+ */
+.sky {
+  background-image: var(--sky-field);
+  background-repeat: no-repeat;
+}
+
+.sky[data-sky="storm"] {
+  --sky-field: radial-gradient(120% 80% at 50% 0%, rgba(126, 166, 245, 0.16) 0%, rgba(126, 166, 245, 0) 55%),
+    linear-gradient(180deg, #2b3145 0%, #1b1f2a 58%, #171a22 100%);
+}
+.sky[data-sky="rain"] {
+  --sky-field: linear-gradient(180deg, #26313f 0%, #1a1f27 58%, #161a20 100%);
+}
+.sky[data-sky="cloud"] {
+  --sky-field: linear-gradient(180deg, #2c3038 0%, #1d2027 58%, #191b20 100%);
+}
+.sky[data-sky="clear"] {
+  --sky-field: radial-gradient(110% 70% at 50% 0%, rgba(255, 213, 126, 0.12) 0%, rgba(255, 213, 126, 0) 60%),
+    linear-gradient(180deg, #38333f 0%, #221f28 58%, #1a181d 100%);
+}
+.sky[data-sky="snow"] {
+  --sky-field: linear-gradient(180deg, #2f3540 0%, #1e222a 58%, #181a1f 100%);
+}
+
+/* Falling weather, as raking hairlines rather than an icon — it reads as texture at a glance
+ * and costs no layout. Static on purpose: CLAUDE.md allows transform/opacity animation only,
+ * and a moving full-card background is a repaint every frame. */
+.sky[data-sky="rain"]::before,
+.sky[data-sky="storm"]::before,
+.sky[data-sky="snow"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    74deg,
+    rgba(232, 235, 241, 0.9) 0px,
+    rgba(232, 235, 241, 0.9) 1px,
+    transparent 1px,
+    transparent 9px
+  );
+  opacity: 0.1;
+}
+.sky[data-sky="snow"]::before {
+  background-image: radial-gradient(rgba(232, 235, 241, 0.9) 1px, transparent 1px);
+  background-size: 14px 14px;
+  opacity: 0.14;
+}
+
+/* Text inside a sky. Scoped overrides beat threading an "on sky?" prop through every element
+ * of the card, and they are the whole reason the tokens above exist — see
+ * lib/contrast.test.ts for the measurements that set them. */
+.sky .text-ink { color: var(--color-ink-on-sky); }
+.sky .text-ink-muted { color: var(--color-ink-muted-on-sky); }
+.sky .text-report { color: var(--color-report-on-sky); }
+.sky .border-edge { border-color: rgba(255, 255, 255, 0.14); }
+.sky .divide-edge > :not([hidden]) ~ :not([hidden]) { border-color: rgba(255, 255, 255, 0.14); }

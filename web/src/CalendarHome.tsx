@@ -19,6 +19,7 @@ import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
 import { useAirport } from "./lib/airports";
 import { CopyLayoverBrief } from "./CopyLayoverBrief";
 import { humanDateLabel } from "./lib/dateLabel";
+import { useDestinationSky, type Sky } from "./lib/useSky";
 import { HOME_BASE_IATA } from "./lib/homeBase";
 import { layoverRests, restForDay, type LayoverRest } from "./lib/layoverBrief";
 import TripLegsPanel from "./TripLegsPanel";
@@ -178,8 +179,12 @@ function TripSummaryLines({
   legs,
   actions,
   showTimeline,
+  sky,
 }: {
   legs: TripWithFlights["flights"];
+  /** The destination's forecast for the landing day, when there is one. The field behind the
+   * card carries the feel; this line carries the numbers, because a gradient cannot say 86%. */
+  sky?: Sky | null;
   /** Corner controls, rendered in the header row so they never steal width from the board. */
   actions?: React.ReactNode;
   /** Appends the full duty timeline (TripTimeline) below the board rows — used by the
@@ -210,6 +215,14 @@ function TripSummaryLines({
             {firstLeg.flightNo} · {depDate}
             {tripDays > 1 && ` · ${tripDays} days`}
           </p>
+          {sky && (
+            // Third line rather than a right-hand column: the corner controls already live
+            // there, and two right-aligned blocks collide at 390px.
+            <p data-testid="card-sky" className="num text-sm text-ink-muted">
+              {Math.round(sky.day.tempMinC)}–{Math.round(sky.day.tempMaxC)}° · {sky.day.label}
+              {sky.day.rainChance != null && ` · rain ${sky.day.rainChance}%`}
+            </p>
+          )}
         </div>
         {actions}
       </div>
@@ -277,7 +290,17 @@ function DayDetailCard({
   const [addFormKey, setAddFormKey] = useState(0);
   const legs = trip ? [...trip.flights].sort((a, b) => a.legSeq - b.legSeq) : [];
   const firstLeg = legs[0] ?? null;
+  const lastLeg = legs[legs.length - 1] ?? null;
   const [airlinePrefix] = useState(getAirlinePrefix);
+
+  // The destination's sky for the day this flight lands. Called unconditionally (hook rules)
+  // and inert on a trip-free day, where the empty code short-circuits the airport lookup.
+  // Null for most cards: forecasts reach about 16 days and a roster runs further.
+  const sky = useDestinationSky(
+    lastLeg?.dest ?? "",
+    lastLeg?.arrUtc ?? "",
+    lastLeg?.arrTz ?? "UTC",
+  );
 
   // Drives the pencil's edit mode with the SAME debounced-lookup + autofill + save pipeline
   // as the add sheet (useTripEntry), not a second implementation of it. Called unconditionally
@@ -364,8 +387,16 @@ function DayDetailCard({
   }
 
   return (
-    <div data-testid="day-detail-card" className="hairline flex flex-col rounded-lg border border-edge bg-card p-4">
+    <div
+      data-testid="day-detail-card"
+      data-sky={sky?.kind}
+      className={[
+        "hairline relative flex flex-col overflow-hidden rounded-lg border border-edge p-4",
+        sky ? "sky" : "bg-card",
+      ].join(" ")}
+    >
       <TripSummaryLines
+        sky={sky}
         legs={legs}
         showTimeline
         actions={
