@@ -5,6 +5,7 @@ import {
   getPushConfig,
   subscribePush,
   unsubscribePush,
+  sendTestNotification,
   updateNotificationPrefs,
 } from "./api";
 import { getAirlinePrefix, setAirlinePrefix } from "./lib/airlinePrefix";
@@ -70,6 +71,8 @@ export default function SettingsView({ email, onSignOut }: Props) {
   const [subscribed, setSubscribed] = useState(false);
   const [leadMinutes, setLeadMinutes] = useState(120);
   const [arrivalEnabled, setArrivalEnabled] = useState(true);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
 
   const [installAvailable, setInstallAvailable] = useState(
@@ -160,6 +163,40 @@ export default function SettingsView({ email, onSignOut }: Props) {
       await updateNotificationPrefs({ enabled: true, leadMinutes: next });
     } catch {
       setPushError("Couldn't save your lead time — try again");
+    }
+  }
+
+  /**
+   * Sends a real push to this account's devices and reports the counts.
+   *
+   * The endpoint has existed since push shipped; nothing ever called it. Without it "I'm not
+   * getting notifications" has no first step — the report scan only fires near a real duty, so
+   * waiting is the only other test, and a silent phone looks identical whether the send never
+   * happened, the subscription was dead, or the device swallowed it. The counts separate those.
+   */
+  async function handleSendTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await sendTestNotification();
+      if (result.subscriptions === 0) {
+        setTestResult("This device isn't subscribed yet — turn reminders on above.");
+      } else if (result.sent > 0) {
+        setTestResult(
+          `Sent to ${result.sent} of ${result.subscriptions} device(s). Nothing shown? The device is holding it back, not the app.`,
+        );
+      } else if (result.expiredRemoved) {
+        setTestResult(
+          `${result.expiredRemoved} subscription(s) had expired and were removed — turn reminders off and on again to re-subscribe.`,
+        );
+      } else {
+        const codes = result.failedWithStatus?.join(", ");
+        setTestResult(`The push service refused it${codes ? ` (HTTP ${codes})` : ""}.`);
+      }
+    } catch {
+      setTestResult("Couldn't reach the server — try again.");
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -266,6 +303,25 @@ export default function SettingsView({ email, onSignOut }: Props) {
                   className="h-6 w-6 accent-accent"
                 />
               </label>
+            )}
+
+            {subscribed && (
+              <div className="flex flex-col gap-2 border-t border-edge pt-3">
+                <button
+                  type="button"
+                  data-testid="push-test"
+                  onClick={handleSendTest}
+                  disabled={testing}
+                  className="flex min-h-[44px] items-center justify-center rounded-md border border-edge text-sm text-accent transition-colors duration-[120ms] hover:border-accent disabled:opacity-60"
+                >
+                  {testing ? "Sending…" : "Send a test notification"}
+                </button>
+                {testResult && (
+                  <p data-testid="push-test-result" className="text-sm text-ink-muted">
+                    {testResult}
+                  </p>
+                )}
+              </div>
             )}
 
             {pushError && <p className="text-sm text-danger">{pushError}</p>}
