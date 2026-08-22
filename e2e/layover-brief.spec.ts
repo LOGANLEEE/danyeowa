@@ -124,6 +124,29 @@ test("layover brief: free-until-report on the empty middle day, and the copy car
   await expect(page.getByTestId("layover-weather-pending")).toBeVisible();
   await expect(page.getByTestId("layover-weather")).toHaveCount(0);
 
+  // --- While the lookup is still in flight the card must NOT explain an answer it does not
+  //     have yet. "No forecast yet — usually available about two weeks ahead" is a reason,
+  //     and during the fetch there are no grounds for it. ---
+  await page.unrouteAll();
+  let releaseForecast: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => {
+    releaseForecast = resolve;
+  });
+  await page.route("**api.open-meteo.com**", async (route) => {
+    await held;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ error: true, reason: "still out of range" }),
+    });
+  });
+  await pickCalendarDay(page, OUT_DAY);
+  await pickCalendarDay(page, LAYOVER_DAY);
+  await expect(page.getByTestId("layover-weather-loading")).toBeVisible();
+  await expect(page.getByTestId("layover-weather-pending")).toHaveCount(0);
+  releaseForecast!();
+  await expect(page.getByTestId("layover-weather-pending")).toBeVisible();
+
   // Now the same station with a forecast. A refusal is never cached, so this refetches.
   await page.unrouteAll();
   await page.route("**api.open-meteo.com**", (route) =>

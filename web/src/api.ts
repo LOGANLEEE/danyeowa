@@ -51,6 +51,23 @@ export async function createTrip(input: TripInput): Promise<TripWithFlights> {
   return parseJson<TripWithFlights>(res);
 }
 
+/** What `GET /api/push/test` reports back. The counts matter more than the message: they are
+ * what tells "nothing was ever sent" apart from "sent, and the device swallowed it", which is
+ * the only useful split when someone says notifications are not arriving. */
+export type PushTestResult = {
+  sent: number;
+  subscriptions: number;
+  expiredRemoved?: number;
+  failedWithStatus?: number[];
+  hint?: string;
+};
+
+export async function sendTestNotification(): Promise<PushTestResult> {
+  const res = await fetch("/api/push/test");
+  if (!res.ok) throw new Error("Failed to send a test notification");
+  return parseJson<PushTestResult>(res);
+}
+
 export async function getAirport(iata: string): Promise<Airport | null> {
   const res = await fetch(`/api/airports/${iata}`);
   if (res.status === 404) return null;
