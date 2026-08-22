@@ -19,7 +19,8 @@ export function useAirport(iata: string): Airport | null | undefined {
   const [, bump] = useState(0);
 
   useEffect(() => {
-    if (cache.has(iata)) return;
+    // Callers driven by hook rules pass "" on a day with no trip; that is not a lookup.
+    if (!iata || cache.has(iata)) return;
     let cancelled = false;
 
     let request = inflight.get(iata);

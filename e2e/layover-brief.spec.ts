@@ -166,7 +166,33 @@ test("layover brief: free-until-report on the empty middle day, and the copy car
       }),
     }),
   );
+  // --- The flight card wears the destination's sky for the day it lands. ---
   await pickCalendarDay(page, OUT_DAY);
+  const card = page.getByTestId("day-detail-card").first();
+  await expect(card).toHaveAttribute("data-sky", "storm");
+  await expect(card).toHaveClass(/\bsky\b/);
+  await expect(page.getByTestId("card-sky").first()).toContainText("13–21° · Thunderstorm · rain 86%");
+
+  // The contrast MATHS lives in lib/contrast.test.ts, against the real tokens.css. What only a
+  // real engine can show is whether those tokens are the ones actually in effect — the scoped
+  // `.sky .text-report` override has to beat the plain utility class, or the report time gets
+  // painted in a colour measured at 3.5:1.
+  const onSky = await card.evaluate((el) => {
+    const report = el.querySelector(".text-report") as HTMLElement | null;
+    const muted = el.querySelector(".text-ink-muted") as HTMLElement | null;
+    return {
+      report: report && getComputedStyle(report).color,
+      muted: muted && getComputedStyle(muted).color,
+    };
+  });
+  expect(onSky.report, "report time must use --color-report-on-sky").toBe("rgb(255, 213, 126)");
+  expect(onSky.muted, "muted text must use --color-ink-muted-on-sky").toBe("rgb(154, 163, 181)");
+
+  const skyOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(skyOverflow, "the sky must not widen the card at 390px").toBeLessThanOrEqual(0);
+
   await pickCalendarDay(page, LAYOVER_DAY);
 
   const weather = page.getByTestId("layover-weather");
