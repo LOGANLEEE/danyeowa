@@ -26,7 +26,12 @@ kept as a record of what was decided at the time. It is deliberately never updat
    a duration label colliding at 390px, a calendar shrink-wrapping, an input triggering iOS zoom.
 3. **Write/extend tests** for what you just proved.
 4. **Open a PR.** CI runs typecheck, unit tests, e2e, and posts a **preview URL** per PR.
-5. **Merge on the user's go.** Merging to `main` auto-deploys to production.
+5. **Merge it.** "Raise a PR" means raise it *and* merge it — do not stop to ask on a green PR.
+   Merging to `main` auto-deploys to production, so follow through: verify prod serves the new
+   commit, then say so. Two opt-outs, both explicit: the user says otherwise for that PR, or the
+   PR title says not to merge. The gates that remain are unchanged — `mergeStateStatus` CLEAN,
+   every check green, zero unresolved review threads, and the tests actually run and read this
+   session, step 2 included.
 
 Do not skip step 2 because the tests are green. Green tests have never once caught the class of
 bug that actually shipped here.
