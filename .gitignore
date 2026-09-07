@@ -46,8 +46,10 @@ pyvenv.cfg
 /scripts/.fetch-progress.json
 /scripts/.fetch-schedules-tmp.sql
 
-# One-off diagnostic scratch files, never part of the suite
-worker/test/**/__*.test.ts
+# One-off diagnostic scratch files, never part of the suite. `__`-prefixed test files are
+# scratch by convention here; the pattern was worker/test-only until 2026-09-07, which is
+# how two of them landed in shared/src and had to be worked around in its vitest config.
+**/__*.test.ts
 scripts/.probe-*.mjs
 .verify-*.mjs
 *.test.ts.bak
