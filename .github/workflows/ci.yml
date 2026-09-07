@@ -47,11 +47,27 @@ jobs:
           GOOGLE_CLIENT_ID=ci-test-client-id-not-for-production
           GOOGLE_CLIENT_SECRET=ci-test-client-secret-not-for-production
           EOF
-      - run: pnpm test:e2e
+      - name: Run the e2e suite
+        # WRANGLER_LOG_PATH redirects wrangler's debug log into the workspace so the upload below
+        # can reach it. Its default is the global config dir (`getDebugFileDir` in wrangler's
+        # src/utils/log-file.ts, verified in the installed 4.118.0), which is outside the
+        # workspace and therefore invisible to every CI failure so far.
+        #
+        # This exists because of a specific, repeated gap. Measured 2026-09-07 over the last 100
+        # ci.yml runs: 16 needed a rerun, and 8 of 8 sampled were the same failure — wrangler dev
+        # dies partway through and every remaining spec fails in ~150ms on ERR_CONNECTION_REFUSED.
+        # The fatal line printed to the job log is literally `✘ [ERROR]` with an EMPTY message;
+        # the real one goes to the file this variable now places somewhere we can read.
+        env:
+          WRANGLER_LOG_PATH: ${{ github.workspace }}/wrangler-logs
+        run: pnpm test:e2e
       - uses: actions/upload-artifact@v7
-        # always(), not failure(): this job is continue-on-error, so a failed suite still reports
-        # the job as successful and failure() never fires — meaning the report was missing in
-        # exactly the case it exists for.
+        # always(), not failure(): a cancelled or timed-out run has evidence worth keeping too,
+        # and this is the one place it exists.
+        #
+        # (The previous reason given here — "this job is continue-on-error" — was stale. There is
+        # no continue-on-error anywhere in this file; the job blocks, which it demonstrated on
+        # 2026-09-07 when an e2e failure skipped the deploy.)
         #
         # test-results/ is where the evidence actually lives: per-test error-context.md (the
         # page snapshot at the moment of failure) and trace.zip. playwright-report/ is only
@@ -65,6 +81,7 @@ jobs:
           path: |
             test-results/
             playwright-report/
+            wrangler-logs/
           if-no-files-found: ignore
           retention-days: 7
 

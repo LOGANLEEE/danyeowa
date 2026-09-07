@@ -51,3 +51,7 @@ worker/test/**/__*.test.ts
 scripts/.probe-*.mjs
 .verify-*.mjs
 *.test.ts.bak
+
+# wrangler debug logs, redirected here by ci.yml (WRANGLER_LOG_PATH) so a failed e2e run can
+# upload the fatal error that the job log truncates to an empty "✘ [ERROR]".
+wrangler-logs/
