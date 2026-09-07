@@ -8,6 +8,74 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-09-07 (a hung browser should not outlive its script)
+
+### Both background jobs had been dead for days, and nothing said so
+
+Found while answering "how is the app doing". `refresh-arrivals` had one invocation alive for
+**5 days 17 hours** and `fetch-schedules` for **4 days 1 hour**. Neither was working: 12.97s and
+1.43s of CPU across those spans, no open sockets, an empty kqueue. Each still owned a live
+`launchPersistentContext` Chrome — 42 processes between them.
+
+launchd will not start a new instance of a `StartInterval` job while the previous one lives, so
+both jobs were simply off. The newest row in `flight_schedules` was five days old, and arrival
+alerts had been firing off the uncorrected timetable that whole time — early, for any delayed
+flight, across the 15 upcoming duties in the roster.
+
+Nothing surfaced it. `launchctl list` reported exit status `0` for both, which is the *last*
+exit, not the current state.
+
+### `process.exitCode = 1` is a request; a browser handle ignores it
+
+`refresh-arrivals` already caught its own errors and set `process.exitCode = 1`. That does
+nothing while an open browser holds the event loop, so the catch ran and the process stayed up
+anyway. `fetch-schedules` had no error handling at that level at all.
+
+Two guards now, because these are two different failures:
+
+- **`scripts/lib/watchdog.mjs`** arms a timer that calls `process.exit(75)` — covers `main()`
+  never returning.
+- **`finally { process.exit(process.exitCode ?? 0) }`** at both entry points — covers `main()`
+  returning with handles still open.
+
+`refresh-arrivals` also gained the `try/finally` around its browser that it never had, so a
+throw closes Chrome instead of leaking it.
+
+Proven by a control rather than asserted: the same never-settling process, watchdog swapped in
+and out. Without it, still running at 6004ms. With it, dead at 2s with exit 75.
+
+### The unref() is load-bearing, and so is testing it in the right runtime
+
+`timer.unref()` stops the watchdog from itself keeping the process alive — without it every
+healthy run would idle until its deadline instead of exiting when its work is done. The watchdog
+would become the hang it exists to prevent.
+
+Testing that revealed a second problem. `scripts/lib` helpers were tested only from
+`worker/test/schedule-providers/`, which runs under `@cloudflare/vitest-pool-workers`. workerd's
+`setTimeout` returns a number, so `timer.unref` **is not a function** there. Fine for the pure
+functions already tested that way; silently wrong for anything touching Node built-ins.
+
+`scripts` is now its own workspace package with `environment: "node"`. It had zero test coverage
+before, which is a fair part of why a five-day outage went unnoticed. The three existing
+`scripts/lib` tests were left where they are — they pass, and moving them is not this change.
+
+### Logs moved out of `/tmp`
+
+macOS had cleaned `/tmp` and deleted `danyeowa-refresh.log` while node still held fd 1 and 2, so
+the file was gone from the directory while the process kept writing into the unlinked inode.
+Five days of evidence about a live outage existed and could not be read. Logs are now in
+`~/Library/Logs/danyeowa/`, and the plists set `ExitTimeOut: 30` so launchd `SIGKILL`s a job that
+ignores `SIGTERM` — one did.
+
+### Not a bug: the harvester finding nothing
+
+Worth recording so it is not chased later. `fetch-schedules` logs "nothing to do (all flights
+already in progress file)" on every run. That is saturation, not a stall:
+`scripts/.fetch-progress.json` holds 647 done and 22 missing against a 668-flight roster, and the
+live roster produces no numbers it has not already seen.
+
+---
+
 ## 2026-09-04 (the page that sells is not the page that asks)
 
 ### Reversing yesterday's rejection of a marketing/sign-in split

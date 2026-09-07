@@ -164,10 +164,19 @@ looking for a broken token when this appears in a log.
 
 Both background jobs are launchd user agents, not cron entries:
 
-| Label | Interval | Log |
-|---|---|---|
-| `com.danyeowa.refresh-arrivals` | 900s | `/tmp/danyeowa-refresh.log` |
-| `com.danyeowa.harvest` | 1800s | `/tmp/danyeowa-harvest.log` |
+| Label | Interval | Watchdog | Log |
+|---|---|---|---|
+| `com.danyeowa.refresh-arrivals` | 900s | 600s | `~/Library/Logs/danyeowa/refresh.log` |
+| `com.danyeowa.harvest` | 1800s | 1200s | `~/Library/Logs/danyeowa/harvest.log` |
+
+**Logs are deliberately not in `/tmp`.** macOS cleans `/tmp`, and on 2026-09-07 it had deleted
+`danyeowa-refresh.log` while node still held fd 1 and 2 open — so the file was gone from the
+directory while the process kept writing into the unlinked inode. Five days of evidence about a
+live outage existed and could not be read.
+
+**Each job force-exits before its own next interval.** `scripts/lib/watchdog.mjs` arms a timer
+that calls `process.exit(75)`, and both entry points also force-exit once `main()` returns. This
+is not belt-and-braces — they catch two different failures. See "When a job stops running" below.
 
 `StartInterval` is the reason for the switch. **cron simply skips a slot the machine slept
 through; launchd runs the missed interval once it wakes.** Measured on the cron setup: 1 skipped
@@ -181,7 +190,36 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.danyeowa.harvest.pli
 ```
 
 Plists live in `~/Library/LaunchAgents/`. They carry an explicit `PATH` (launchd, like cron, has
-no brew in it) and an absolute `WorkingDirectory`.
+no brew in it) and an absolute `WorkingDirectory`.  They also set `ExitTimeOut` to 30, so launchd
+`SIGKILL`s a job that ignores `SIGTERM` — one did, on 2026-09-07.
+
+### When a job stops running
+
+**`launchctl list` showing exit `0` does not mean a job is running.** The first column is a PID,
+and a PID there for an interval job means an invocation is *still going*. launchd will not start
+a new instance while the old one lives, so one stuck run takes the job off the air indefinitely,
+silently.
+
+```bash
+launchctl list | grep danyeowa          # first column: "-" is healthy, a PID may not be
+ps -p <pid> -o pid,etime,time,%cpu      # days of ELAPSED against seconds of TIME = hung
+pgrep -f danyeowa-chrome-profile        # orphaned scratch Chrome; 0 is healthy
+```
+
+What this looked like on 2026-09-07: `refresh-arrivals` alive **5d17h** on 12.97s of CPU,
+`fetch-schedules` **4d1h** on 1.43s, each holding a `launchPersistentContext` Chrome, 42
+processes in total. No open sockets, empty kqueue — waiting on a browser that never closed.
+Arrival alerts had been firing off the uncorrected timetable the whole time.
+
+To clear one by hand, kill the node parent and then the scratch Chrome tree. **Match on
+`danyeowa-chrome-profile`, never on "Chrome"** — the second one closes the browser you are
+reading this in:
+
+```bash
+pkill -f "refresh-arrivals.mjs|fetch-schedules.mjs"
+pgrep -f danyeowa-chrome-profile | grep -x <your-chrome-pid> || pkill -9 -f danyeowa-chrome-profile
+launchctl kickstart -k gui/$(id -u)/com.danyeowa.refresh-arrivals
+```
 
 **The token is not in the plist.** Both run through `/bin/sh -c` and source it instead:
 

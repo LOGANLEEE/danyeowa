@@ -107,6 +107,12 @@ the copied brief but has no tile of its own.)
 
 ## Known limits
 
+**A stuck run used to take a job off the air indefinitely.** Fixed 2026-09-07: both scripts
+force-exit, and `scripts/lib/watchdog.mjs` bounds a run at 600s / 1200s, inside each job's own
+interval. Before that, `refresh-arrivals` sat hung for 5d17h and `fetch-schedules` for 4d1h, each
+holding a Chrome that never closed — arrival alerts ran off the uncorrected timetable throughout.
+Triage steps are in `RUNBOOK.md` under "When a job stops running".
+
 **Live status depends on a Mac being awake.** Arrival corrections come from a launchd agent on
 this machine, because fr24's live endpoints refuse a Cloudflare Worker and a direct request alike.
 While the Mac sleeps nothing runs; launchd fires the missed interval on wake, so a nap costs a

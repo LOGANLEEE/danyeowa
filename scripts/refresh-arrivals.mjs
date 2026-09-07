@@ -29,6 +29,10 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 import { borrowChromeProfile, fetchLiveArrival, isMaterialDrift } from "./lib/fr24-live.mjs";
 import { getUpcomingArrivals, postArrivalCorrections } from "./lib/ingest-client.mjs";
+import { armWatchdog } from "./lib/watchdog.mjs";
+
+/** Comfortably inside the 900s StartInterval, so a stuck run can never block the next one. */
+const WATCHDOG_MS = 600_000;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..");
@@ -85,11 +89,15 @@ async function main() {
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
   });
+  const updates = [];
+  // The browser must be closed on the error path too. Without this `finally`, a throw anywhere
+  // below left a live Chrome owning the event loop, and node then never exited — which is how
+  // one invocation stayed up for 5d17h and took the whole job off the air.
+  try {
   const page = ctx.pages()[0] ?? (await ctx.newPage());
   await page.goto("https://www.flightradar24.com/", { waitUntil: "domcontentloaded", timeout: 45_000 });
   await page.waitForTimeout(5000);
 
-  const updates = [];
   for (const flight of upcoming) {
     const live = await fetchLiveArrival(page, flight.flightNo);
 
@@ -122,7 +130,9 @@ async function main() {
     await page.waitForTimeout(1500);
   }
 
-  await ctx.close();
+  } finally {
+    await ctx.close().catch(() => {});
+  }
 
   if (!updates.length) {
     console.log("no corrections needed");
@@ -139,6 +149,7 @@ async function main() {
 
 // Importing this module for parseArgs in tests must not launch a browser.
 if (process.argv[1] && process.argv[1].endsWith("refresh-arrivals.mjs")) {
+  const watchdog = armWatchdog(WATCHDOG_MS, "refresh-arrivals");
   try {
     await main();
   } catch (e) {
@@ -146,5 +157,11 @@ if (process.argv[1] && process.argv[1].endsWith("refresh-arrivals.mjs")) {
     // the next run is fifteen minutes away and nothing was half-written.
     console.log(`${new Date().toISOString()} FAILED: ${String(e).split("\n")[0].slice(0, 200)}`);
     process.exitCode = 1;
+  } finally {
+    clearTimeout(watchdog);
+    // `process.exitCode = 1` above is a REQUEST to exit, and it does nothing while a browser
+    // handle is still open. This is not a request. Two different failures need two guards: the
+    // watchdog covers main() never returning, this covers main() returning with handles left.
+    process.exit(process.exitCode ?? 0);
   }
 }
