@@ -233,6 +233,55 @@ missing env file would let the job run on to hit production with no token, and t
 read as an auth bug rather than a missing file. Rotating the token now means editing that one
 file — the plists never mention it.
 
+## When CI's e2e job fails but the diff is innocent
+
+**Symptom:** a large number of specs fail at once, most of them in 120–210ms, with
+`net::ERR_CONNECTION_REFUSED at http://localhost:8787/`. One earlier spec failed slowly (a real
+timeout) and everything after it failed instantly. `wrangler dev` died partway through the run,
+and Playwright does not restart a dead `webServer` — so every remaining spec fails on a corpse.
+
+**This is not your diff, and there is a one-command control for that claim:**
+
+```bash
+git diff main...HEAD --name-only     # nothing the runtime reads changed → the diff cannot be it
+```
+
+Then reproduce the *seed* spec (the first, slow failure) locally. If it passes, rerun the job:
+
+```bash
+gh run rerun <run-id> --failed
+```
+
+**Do not read the last failure in the log.** It is a casualty. The seed is the first `✘` with a
+duration in seconds rather than milliseconds.
+
+**Measured 2026-09-07**, over the last 100 `ci.yml` runs (`run_attempt > 1` as the filter):
+16 needed a rerun. Of 8 sampled first attempts, **8 carried this signature and none was a real
+test failure.** The seed varied — `crew.spec.ts` four times, then `invite-link`, `layover-brief`,
+`board-partway`, `red-eye-home` once each — so it is not one bad spec.
+
+`[ERROR] ... Broken pipe` from workerd is **not** the cause: one run had 25
+`ERR_CONNECTION_REFUSED` and zero broken pipes, and another logged broken pipes 32 seconds before
+the server actually died. It is noise that happens to be nearby.
+
+**The fatal error is not in the job log.** It prints as `✘ [ERROR]` with an empty message. The
+real one goes to wrangler's debug log, which `ci.yml` now redirects into the workspace with
+`WRANGLER_LOG_PATH` and uploads in the `playwright-report` artifact. Download it and read
+`wrangler-logs/*.log` from the failing attempt:
+
+```bash
+gh run download <run-id> -n playwright-report
+```
+
+**Not yet known:** what actually kills workerd. Nothing here identifies it — this only makes the
+next occurrence readable. Two untested leads, in order of cheapness: the pinned wrangler is
+5 weeks behind (4.118.0 / workerd 1.20260730.1 against 4.129.0 / 1.20260907.1), and a GitHub
+runner has far less memory than a dev machine. **Neither has been shown to change the outcome**,
+so neither is a fix yet.
+
+Local runs are not evidence of a difference: 4 full local runs on 2026-09-07 had no server death,
+but at a 16% rate that outcome has probability 0.84⁴ ≈ 0.50.
+
 ## Push notifications
 
 ```bash

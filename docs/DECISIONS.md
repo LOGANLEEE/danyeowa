@@ -8,6 +8,58 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-09-07 (capture the error that kills the e2e server)
+
+### The recurring CI failure is real, and it has never once been readable
+
+Three e2e failures in one session looked like bad luck. Measured instead of guessed: over the
+last 100 `ci.yml` runs, **16 needed a rerun**, and of 8 sampled first attempts **8 carried the
+same signature and none was a genuine test failure**. `wrangler dev` dies partway through, and
+because Playwright never restarts a dead `webServer`, every remaining spec fails in about 150ms
+on `ERR_CONNECTION_REFUSED`.
+
+The seed spec varied — `crew.spec.ts` four times, then `invite-link`, `layover-brief`,
+`board-partway`, `red-eye-home` — so it is not one bad test. `crew.spec.ts` being the most common
+seed is unsurprising: it is the heaviest spec in the suite and already carries `test.slow()`.
+
+`Broken pipe` from workerd was the obvious suspect and is **not** the cause. One run had 25
+`ERR_CONNECTION_REFUSED` with zero broken pipes; another logged them 32 seconds before the server
+died. Reading it as the cause would have been a one-observation diagnosis.
+
+### What is actually fixed here: nothing, deliberately
+
+The fatal error prints to the job log as `✘ [ERROR]` with an **empty message**. The real one goes
+to wrangler's debug log, which defaults to the global config directory — outside the workspace,
+so no CI failure has ever uploaded it. Every occurrence so far has been diagnosed by inference.
+
+`ci.yml` now sets `WRANGLER_LOG_PATH` into the workspace and adds it to the existing artifact.
+That is the whole change. It does not stop the crash; it makes the next one readable.
+
+Proven before shipping, because an artifact upload that captures nothing is worse than none:
+`WRANGLER_LOG_PATH` is read by `getDebugFileDir` in wrangler's `src/utils/log-file.ts` (grepped
+in the installed 4.118.0, not recalled), and running the real suite through `pnpm test:e2e` with
+it set put four log files in the workspace, 212 lines in the newest. **Not proven:** that the log
+contains this specific fatal error. That can only be shown when the crash recurs.
+
+### Two leads deliberately not acted on
+
+The pinned wrangler is five weeks behind (4.118.0 / workerd 1.20260730.1 against 4.129.0 /
+1.20260907.1), and a GitHub runner has far less memory than the dev machine. Both are plausible.
+**Neither has been shown to change the outcome**, and upgrading a runtime to fix a crash you
+cannot yet read is how a coincidence gets recorded as a cure. The log comes first.
+
+Local runs prove nothing here either: 4 full local runs had no server death, but at a 16% rate
+that has probability 0.84⁴ ≈ 0.50.
+
+### A stale comment removed
+
+`ci.yml` justified `if: always()` on the artifact upload with "this job is continue-on-error".
+There is no `continue-on-error` anywhere in the file — the job blocks, which it demonstrated the
+same day when an e2e failure skipped the deploy. `always()` is still right, for the reason now
+written there instead.
+
+---
+
 ## 2026-09-07 (a hung browser should not outlive its script)
 
 ### Both background jobs had been dead for days, and nothing said so
