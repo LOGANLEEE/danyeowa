@@ -2,3 +2,4 @@ packages:
   - web
   - worker
   - shared
+  - scripts

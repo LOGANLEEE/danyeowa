@@ -62,6 +62,10 @@ import { deriveAirports, deriveLegSchedule } from "./lib/fr24-api.mjs";
 import { borrowChromeProfile, fetchAirlineFlightNumbers } from "./lib/fr24-live.mjs";
 import { postSchedules } from "./lib/ingest-client.mjs";
 import { expandFlights, parseArgs } from "./lib/harvest-args.mjs";
+import { armWatchdog } from "./lib/watchdog.mjs";
+
+/** Comfortably inside the 1800s StartInterval, so a stuck run can never block the next one. */
+const WATCHDOG_MS = 1_200_000;
 
 export { expandFlights, parseArgs };
 
@@ -373,5 +377,21 @@ async function main() {
 // this module for its exports (parseArgs/expandFlights) must not launch a browser as a side
 // effect.
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
+  // Measured 2026-09-07: one invocation of this script stayed alive for 4d1h holding a
+  // `launchPersistentContext` Chrome, on 1.43s of CPU. launchd will not start a new instance of
+  // a StartInterval job while the old one lives, so the harvester was simply off — the newest
+  // schedule row in prod was five days old. `main()` had no error handling at all here.
+  //
+  // Two guards, because these are two different failures: the watchdog covers main() never
+  // returning, and the forced exit covers main() returning with a browser handle still open.
+  const watchdog = armWatchdog(WATCHDOG_MS, "fetch-schedules");
+  try {
+    await main();
+  } catch (e) {
+    console.log(`${new Date().toISOString()} FAILED: ${String(e).split("\n")[0].slice(0, 200)}`);
+    process.exitCode = 1;
+  } finally {
+    clearTimeout(watchdog);
+    process.exit(process.exitCode ?? 0);
+  }
 }
