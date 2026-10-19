@@ -96,6 +96,12 @@ async function waitForMonthSettled(page: Page): Promise<void> {
   });
 }
 
+// The labels `calendar-month` renders (TripsCalendar MONTH_LABELS).
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 export async function pickCalendarDay(page: Page, iso: string): Promise<void> {
   // Wait for the grid before probing a day in it.
   //
@@ -111,13 +117,19 @@ export async function pickCalendarDay(page: Page, iso: string): Promise<void> {
   // overshot it. The debug dump ended on "September 2028" after 24 of them.
   await page.getByTestId("calendar-grid").waitFor();
 
+  // Step TOWARDS the target, read off the month label. Forward-only broke once the fixtures'
+  // fixed September dates fell behind today (2026-10): the walk started past them.
+  const [targetYear, targetMonth] = iso.split("-").map(Number) as [number, number];
   for (let i = 0; i < 24; i++) {
     const cell = page.getByTestId(`calendar-day-${iso}`);
     if (await cell.isVisible().catch(() => false)) {
       await cell.click();
       return;
     }
-    await page.getByTestId("calendar-next").click();
+    const [label, year] = (await page.getByTestId("calendar-month").innerText()).split(" ");
+    const shown = Number(year) * 12 + MONTHS.indexOf(label!);
+    const step = targetYear * 12 + (targetMonth - 1) < shown ? "calendar-prev" : "calendar-next";
+    await page.getByTestId(step).click();
     await waitForMonthSettled(page);
   }
   throw new Error(
