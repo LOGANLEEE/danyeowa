@@ -118,7 +118,7 @@ export default function Marketing() {
 
         {/* Static illustrative sample, not live schedule data — same panel as Landing's, and
             dark in both themes for the same reason. */}
-        <div className="flex flex-col gap-1 rounded-lg border border-white/10 bg-[#0b0d12] p-4 shadow-sm">
+        <div className="flex flex-col gap-1 rounded-lg border border-board-edge bg-[#0b0d12] p-4 shadow-sm">
           <div className="flex items-baseline justify-between">
             <p className="num text-xs uppercase tracking-[0.2em] text-white/50">Next duty</p>
             <p className="num text-xs uppercase tracking-[0.2em] text-white/30">Sat 20 Sep</p>

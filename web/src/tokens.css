@@ -24,6 +24,11 @@
   /* --color-report red-shifts to the accent blue in light mode, which measures 3.54:1 on
      the lightest sky. The amber is the only report colour a sky can carry. */
   --color-report-on-sky: #ffd57e;
+
+  /* Edge of the departure-board panel, which is #0b0d12 in both themes. On the light ground
+     the panel carries itself (18.6:1); on the dark ground it measured 1.08:1 and the 10% white
+     edge 1.17:1, so the board vanished. Dark lifts the edge to 3.5:1 — lib/contrast.test.ts. */
+  --color-board-edge: #23252a;
 }
 
 /* Dark overrides: two mechanisms, both must win over the @theme light defaults above.
@@ -44,6 +49,7 @@
     --color-danger: #e0655f;
     --color-report: #ffd57e;
     --color-today: #ffd57e;
+    --color-board-edge: #6d6e71;
   }
 }
 
@@ -60,6 +66,7 @@
   --color-danger: #e0655f;
   --color-report: #ffd57e;
   --color-today: #ffd57e;
+  --color-board-edge: #6d6e71;
 }
 
 :root[data-theme="light"] {
@@ -75,6 +82,7 @@
   --color-danger: #d9463c;
   --color-report: #2f6fed;
   --color-today: #b06d00;
+  --color-board-edge: #23252a;
 }
 
 .num {
