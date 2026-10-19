@@ -253,7 +253,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
         {THEME_OPTIONS.map((option) => (
           <label
             key={option.value}
-            className="flex items-center gap-2 text-ink"
+            className="flex min-h-11 items-center gap-2 text-ink"
           >
             <input
               type="radio"
@@ -282,7 +282,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
           </p>
         ) : (
           <>
-            <label className="flex items-center justify-between gap-2 text-ink">
+            <label className="flex min-h-11 items-center justify-between gap-2 text-ink">
               <span>Report-time reminders</span>
               <input
                 type="checkbox"
@@ -296,7 +296,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
             </label>
 
             {subscribed && (
-              <label className="flex items-center justify-between gap-2 text-ink">
+              <label className="flex min-h-11 items-center justify-between gap-2 text-ink">
                 <span>Remind me</span>
                 <select
                   data-testid="push-lead"
@@ -314,7 +314,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
             )}
 
             {subscribed && (
-              <label className="flex items-center justify-between gap-2 text-ink">
+              <label className="flex min-h-11 items-center justify-between gap-2 text-ink">
                 <span>
                   Arrival alerts
                   <span className="block text-sm text-ink-muted">
@@ -358,7 +358,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
       <div className="flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
         <p className="px-1 text-xs uppercase text-ink-muted">App</p>
 
-        <label className="flex items-center justify-between gap-2 text-ink">
+        <label className="flex min-h-11 items-center justify-between gap-2 text-ink">
           <span>Airline</span>
           <input
             type="text"
@@ -402,7 +402,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
       <button
         type="button"
         onClick={onSignOut}
-        className="self-start rounded border border-danger px-3 py-2 text-danger transition-colors duration-[120ms] hover:bg-danger/10"
+        className="min-h-[44px] self-start rounded border border-danger px-3 py-2 text-danger transition-colors duration-[120ms] hover:bg-danger/10"
       >
         Sign out
       </button>
