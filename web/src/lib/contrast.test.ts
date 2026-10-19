@@ -112,3 +112,28 @@ describe("the departure board stays visible on the dark ground", () => {
     });
   }
 });
+
+describe("text on the departure board clears 4.5:1", () => {
+  const PANEL = "#0b0d12";
+  // white at alpha a, composited over the panel — what `text-white/N` actually paints.
+  const whiteAt = (alpha: number) =>
+    "#" +
+    [1, 3, 5]
+      .map((i) =>
+        Math.round(alpha * 255 + (1 - alpha) * parseInt(PANEL.slice(i, i + 2), 16))
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("");
+
+  for (const file of ["Landing.tsx", "Marketing.tsx"]) {
+    it(`every text-white/N in ${file}`, () => {
+      const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", file), "utf8");
+      const alphas = [...src.matchAll(/text-white\/(\d+)/g)].map((m) => Number(m[1]));
+      expect(alphas.length).toBeGreaterThan(0);
+      for (const a of alphas) {
+        expect(contrastRatio(whiteAt(a / 100), PANEL), `text-white/${a}`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
+});
