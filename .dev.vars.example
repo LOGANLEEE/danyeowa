@@ -40,3 +40,9 @@ VAPID_PRIVATE_KEY=<your-local-dev-vapid-private-key>
 # Only takes effect when DEV_OTP_FALLBACK=true, which is never set on a deployed Worker.
 # Leave unset to give every address a random code.
 DEV_FIXED_OTP_EMAIL=logan@example.com
+
+# Comma-separated addresses that may open /usage (GET /api/usage). In production this is a Worker
+# secret (`wrangler secret put USAGE_VIEWER_EMAILS`) — NEVER a wrangler.jsonc var: the repo is
+# public and these are real addresses. Unset means /usage 404s for everyone. e2e@local.test is
+# the Playwright suite's account (e2e/usage.spec.ts reads the page as it).
+USAGE_VIEWER_EMAILS=logan@example.com,e2e@local.test

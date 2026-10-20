@@ -5,6 +5,9 @@ import type { Airport } from "@danyeowa/shared";
 import CalendarHome from "./CalendarHome";
 import { confirmSchedule, createTrip, deleteTrip, getAirport, getCrew, getCrewTrips, getTrips, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";
+import { track } from "./lib/track";
+
+vi.mock("./lib/track", () => ({ track: vi.fn() }));
 
 vi.mock("./api", () => ({
   getTrips: vi.fn(),
@@ -660,6 +663,26 @@ describe("CalendarHome", () => {
     await waitFor(() => expect(deleteTrip).toHaveBeenCalledWith("trip-1"));
     // onChanged -> refetch: a second getTrips call beyond the initial render.
     await waitFor(() => expect(getTrips).toHaveBeenCalledTimes(2));
+    expect(track).toHaveBeenCalledWith("trip_deleted", {});
+  });
+
+  // /usage counts form opens. Measured: the calendar mounts an add form for the default day on
+  // every load, so an open is her first keystroke in it — not the mount, and not a trip card.
+  it("records the add form opening when she starts typing, not when the calendar draws it", async () => {
+    vi.mocked(track).mockReset();
+    vi.mocked(getTrips).mockResolvedValueOnce([aklTrip]);
+    vi.mocked(lookupSchedule).mockResolvedValue(null);
+    const user = userEvent.setup();
+    render(<CalendarHome now={now} />);
+
+    await user.click(await screen.findByTestId("calendar-day-2026-08-11"));
+    await screen.findByTestId("day-detail-card");
+    await user.click(screen.getByTestId("calendar-day-2026-08-20"));
+    const input = await screen.findByTestId("flightno-input");
+    expect(track).not.toHaveBeenCalledWith("add_form_opened", {});
+
+    await user.type(input, "4");
+    expect(track).toHaveBeenCalledWith("add_form_opened", {});
   });
 
   it("a delete failure from the day card shows an alert and keeps the confirm row open", async () => {

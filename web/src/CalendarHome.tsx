@@ -11,6 +11,7 @@ import {
   tripDaysInMonth,
 } from "@danyeowa/shared";
 import { deleteTrip, getCrew, getCrewTrips, getTrips } from "./api";
+import { track } from "./lib/track";
 import type { TripWithFlights } from "./api";
 import type { CrewMember } from "@danyeowa/shared";
 import AddTripForm from "./AddTripForm";
@@ -430,6 +431,7 @@ function DayDetailCard({
     setDeleting(true);
     try {
       await deleteTrip(trip.id);
+      track("trip_deleted", {});
       onChanged();
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : "Failed to delete trip");

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export * from "./time";
 export * from "./flight";
+export * from "./usage";
 
 export type HealthResponse = {
   ok: boolean;
@@ -12,7 +13,8 @@ export type HealthResponse = {
    * a merged migration had already dropped. */
   version?: string;
 };
-export type Me = { id: string; email: string; name: string | null };
+/** `canViewUsage`: the session email is on USAGE_VIEWER_EMAILS, so /usage is worth linking. */
+export type Me = { id: string; email: string; name: string | null; canViewUsage: boolean };
 
 const iataSchema = z.string().regex(/^[A-Z]{3}$/i);
 

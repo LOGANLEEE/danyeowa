@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
 import { user } from "./auth-schema";
 
 export const trips = sqliteTable("trips", {
@@ -73,6 +73,25 @@ export const airports = sqliteTable("airports", {
   lat: real("lat"),
   lng: real("lng"),
 });
+
+/** First-party usage events (worker/src/usage.ts). `props` is the event's JSON, validated against
+ * the shared schema on the way in. */
+export const usageEvents = sqliteTable(
+  "usage_events",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").notNull(),
+    name: text("name").notNull(),
+    props: text("props"),
+    at: integer("at", { mode: "number" }).notNull(),
+  },
+  (table) => [index("usage_events_user_at_idx").on(table.userId, table.at)],
+);
 
 export const tripsRelations = relations(trips, ({ many }) => ({
   flights: many(flights),

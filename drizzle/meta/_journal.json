@@ -99,6 +99,13 @@
       "when": 1787319732217,
       "tag": "0015_add_airport_coords",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1792540800000,
+      "tag": "0016_usage_events",
+      "breakpoints": true
     }
   ]
 }

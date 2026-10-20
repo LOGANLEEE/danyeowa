@@ -23,6 +23,8 @@ import type { Theme } from "./theme";
 type Props = {
   email: string;
   onSignOut: () => void;
+  /** From /api/me: only a USAGE_VIEWER_EMAILS address gets the /usage link. */
+  canViewUsage?: boolean;
 };
 
 const THEME_OPTIONS: { value: Theme; label: string }[] = [
@@ -46,7 +48,7 @@ function pushSupported(): boolean {
   );
 }
 
-export default function SettingsView({ email, onSignOut }: Props) {
+export default function SettingsView({ email, onSignOut, canViewUsage = false }: Props) {
   // Deletion is irreversible and has no undo, so the confirmation is the person typing their own
   // address — a button they can hit by accident is the wrong shape for this.
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -246,6 +248,11 @@ export default function SettingsView({ email, onSignOut }: Props) {
       <div className="stagger-1 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
         <p className="text-xs uppercase text-ink-muted">Signed in as</p>
         <p className="text-ink">{email}</p>
+        {canViewUsage ? (
+          <a href="/usage" className="flex min-h-11 items-center text-accent">
+            Usage
+          </a>
+        ) : null}
       </div>
 
       <fieldset className="stagger-2 flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">

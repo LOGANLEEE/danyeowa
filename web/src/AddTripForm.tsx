@@ -94,6 +94,7 @@ export default function AddTripForm({
     pickedDate,
     homeTz,
     onSubmitted: () => onSubmitted(),
+    trackUsage: true,
   });
 
   useEffect(() => {

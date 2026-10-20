@@ -46,6 +46,7 @@ jobs:
           E2E_TEST_MODE=true
           GOOGLE_CLIENT_ID=ci-test-client-id-not-for-production
           GOOGLE_CLIENT_SECRET=ci-test-client-secret-not-for-production
+          USAGE_VIEWER_EMAILS=e2e@local.test
           EOF
       - name: Run the e2e suite
         # WRANGLER_LOG_PATH redirects wrangler's debug log into the workspace so the upload below

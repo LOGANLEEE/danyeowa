@@ -47,7 +47,8 @@ test("layover brief: free-until-report on the empty middle day, and the copy car
   test.slow(); // two manual entries plus clipboard + geometry checks
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"], {
-    origin: "http://localhost:8787",
+    // The configured server, which E2E_PORT can move off :8787 (playwright.config.ts).
+    origin: test.info().project.use.baseURL!,
   });
 
   await page.setViewportSize({ width: 390, height: 844 });

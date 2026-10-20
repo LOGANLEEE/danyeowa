@@ -17,6 +17,8 @@ export default defineConfig(async () => {
             GOOGLE_CLIENT_SECRET: "test-google-client-secret",
             VAPID_PUBLIC_KEY: "test-vapid-public-key",
             AERODATABOX_KEY: "test-aerodatabox-key",
+            // Mixed case and padding on purpose: test/usage.test.ts relies on both being ignored.
+            USAGE_VIEWER_EMAILS: " Usage-Viewer@Example.com , other@example.com",
             // Forwarded from the invoking shell so the live-network integration test can
             // opt in via `LIVE_PROVIDER_TEST=1 pnpm test` — plain `process.env` inside a
             // test file is NOT the invoking shell's env (tests run inside the workerd
