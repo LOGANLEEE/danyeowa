@@ -9,6 +9,7 @@ import {
 } from "@danyeowa/shared";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
 import type { TripWithFlights } from "./api";
+import { track } from "./lib/track";
 
 export type LegDraft = {
   flightNo: string;
@@ -94,6 +95,9 @@ type Options = {
    * included) — callers that need the full saved span (e.g. rapid-entry's next-date
    * suggestion) don't have to re-derive it from client-side draft state. */
   onSubmitted: (trip: TripWithFlights) => void;
+  /** Record this form's steps for /usage. Only the add form sets it: the day card mounts this
+   * hook for every trip whether or not anyone edits, so counting there would invent opens. */
+  trackUsage?: boolean;
 };
 
 /**
@@ -102,7 +106,18 @@ type Options = {
  * fire-and-forget confirmSchedule). `reportUtc` is intentionally never included in the saved
  * payload (Plan 10 Task 3) — the server derives it from `depUtc` on create.
  */
-export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
+export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = false }: Options) {
+  const record: typeof track = (name, props) => {
+    if (trackUsage) track(name, props);
+  };
+  // "Opened" is her first touch, not the mount: the calendar mounts this form for the default
+  // day on every load, so counting mounts would count app opens.
+  const openedAt = useRef<number | null>(null);
+  function markOpened() {
+    if (openedAt.current !== null) return;
+    openedAt.current = Date.now();
+    record("add_form_opened", {});
+  }
   const [mode, setMode] = useState<EntryMode>("flightno");
 
   const [flightNo, setFlightNo] = useState("");
@@ -177,8 +192,13 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     }
     const timer = setTimeout(async () => {
       setResolving(true);
+      const startedAt = Date.now();
       try {
         const result = await lookupSchedule(candidate, pickedDate);
+        record("flight_lookup", {
+          result: result ? "found" : "unknown",
+          ms: Date.now() - startedAt,
+        });
         if (result) {
           setAutofillLegs(autofillLegsFrom(pickedDate, candidate, result.legs));
           // A different flight number is a different routing — never carry a stale pick over.
@@ -196,6 +216,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
           setLookupMiss(true);
         }
       } catch {
+        record("flight_lookup", { result: "error", ms: Date.now() - startedAt });
         // The schedule service is unreachable (e.g. a non-404 error from the live provider
         // chain) — treat it the same as a miss so the user can still fall back to manual
         // entry instead of getting stuck on "checking schedule…" forever.
@@ -305,6 +326,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   }
 
   function switchToManual() {
+    markOpened();
     setLegs([
       {
         ...emptyLeg(),
@@ -313,6 +335,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       },
     ]);
     setMode("manual");
+    record("manual_entry_opened", {});
   }
 
   /** Returns to the flight-no entry screen — used after a successful manual save so the
@@ -369,6 +392,17 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     if (!code) return null;
     if (unknown.has(code)) return `unknown airport: ${code}`;
     return airports.get(code)?.city ?? null;
+  }
+
+  function recordSaved(path: "autofill" | "manual", legCount: number) {
+    const msSinceOpen = openedAt.current === null ? 0 : Date.now() - openedAt.current;
+    record("trip_saved", { path, legs: legCount, msSinceOpen });
+  }
+
+  /** `status` is 0 when the request never got an answer (offline, aborted). */
+  function recordSaveFailed(path: "autofill" | "manual", err: unknown) {
+    const status = (err as { status?: unknown } | null)?.status;
+    record("trip_save_failed", { path, status: typeof status === "number" ? status : 0 });
   }
 
   async function handleAutofillSubmit() {
@@ -441,8 +475,10 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
       for (const payload of confirmPayloads) {
         confirmSchedule(payload).catch(() => {});
       }
+      recordSaved("autofill", resolvedLegs.length);
       onSubmitted(created);
     } catch (err) {
+      recordSaveFailed("autofill", err);
       setError(err instanceof Error ? err.message : "Failed to create trip");
     } finally {
       setSubmitting(false);
@@ -508,8 +544,10 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
     setSubmitting(true);
     try {
       const created = await createTrip(parsed.data);
+      recordSaved("manual", resolvedLegs.length);
       onSubmitted(created);
     } catch (err) {
+      recordSaveFailed("manual", err);
       setError(err instanceof Error ? err.message : "Failed to create trip");
     } finally {
       setSubmitting(false);
@@ -519,7 +557,10 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted }: Options) {
   return {
     mode,
     flightNo,
-    setFlightNo,
+    setFlightNo: (value: string) => {
+      markOpened();
+      setFlightNo(value);
+    },
     autofillLegs,
     finalLegIndex,
     setFinalLegIndex,

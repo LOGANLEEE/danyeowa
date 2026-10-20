@@ -87,6 +87,7 @@ codebase to find out. Status words mean exactly one thing:
 | Zoom disabled app-wide | Live | Requested explicitly; 16px floor on controls is what actually fixes the iOS layout bug |
 | Offline / service worker | Built | Push delivery depends on it |
 | Boot splash | Live | Boarding-pass stub in `index.html`, dismissed by `#root:not(:empty)` alone — one DOM node from first paint to first view |
+| Usage page (`/usage`) | Unmerged | First-party events (`web/src/lib/track.ts` → `POST /api/events` → `usage_events`) summarised per user: add-roster funnel, lookup results, median open → saved, standalone vs browser, tabs, last 30 events. Owner-only: `GET /api/usage` 404s unless the session email is on the `USAGE_VIEWER_EMAILS` Worker secret (unset = nobody). "Add form opened" is her first keystroke in the form, not its mount — the calendar mounts a form for the default day on every load. Events cascade with the account. Signed-out pages record nothing |
 
 ## Deliberately not built
 

@@ -10,6 +10,9 @@ import SettingsView from "./SettingsView";
 import CrewPanel from "./CrewPanel";
 import TabBar from "./TabBar";
 import type { TabName } from "./TabBar";
+import UsagePage from "./UsagePage";
+import { setTrackingEnabled, track } from "./lib/track";
+import { isRunningStandalone } from "./lib/install";
 
 const INVITE_PATH_PREFIX = "/invite/";
 /** The sign-in surface's own route. `/` is the marketing page for a signed-out visitor, so the
@@ -63,6 +66,15 @@ function SignedInApp() {
   // Read once per render, not stored: there is no router, so a move between `/` and `/signin`
   // is a full navigation and this component mounts fresh on the other side.
   const isSignInRoute = location.pathname === SIGNIN_PATH;
+  const isUsageRoute = location.pathname === "/usage";
+
+  const signedIn = me !== null && me !== "loading";
+  useEffect(() => {
+    setTrackingEnabled(signedIn);
+    if (signedIn) {
+      track("app_opened", { standalone: isRunningStandalone() });
+    }
+  }, [signedIn]);
 
   // Someone who signs in on `/signin` should not keep that path in their history — the next
   // reload would put them back on a sign-in form they no longer need. replaceState rather than
@@ -138,10 +150,16 @@ function SignedInApp() {
           ) : (
             <Marketing />
           )
+        ) : isUsageRoute ? (
+          <UsagePage />
         ) : activeTab === "share" ? (
           <CrewPanel />
         ) : activeTab === "settings" ? (
-          <SettingsView email={me.email} onSignOut={handleSignOut} />
+          <SettingsView
+            email={me.email}
+            onSignOut={handleSignOut}
+            canViewUsage={me.canViewUsage}
+          />
         ) : (
           // The calendar is the roster. A separate Trips tab listed the same duties a second
           // time — one row per leg, which read as a chart of unranked things — and was the only
@@ -155,11 +173,13 @@ function SignedInApp() {
         )}
       </main>
 
-      {isSignedIn && (
+      {/* No tab bar on /usage: there is no router, and its own Back link is a full navigation. */}
+      {isSignedIn && !isUsageRoute && (
         <TabBar
           active={activeTab}
           onSelect={(tab) => {
             setActiveTab(tab);
+            track("tab_viewed", { tab });
           }}
           // Opens the day sheet for today (or the next trip-free day) on the calendar tab,
           // regardless of which tab was active when + was tapped.

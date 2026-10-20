@@ -8,6 +8,7 @@ import { runArrivalScan, runReportScan } from "./report-scan";
 import { scheduleRouter } from "./schedule";
 import { crewRouter } from "./crew";
 import { tripsRouter } from "./trips";
+import { canViewUsage, usageRouter } from "./usage";
 
 export type Env = {
   DB: D1Database;
@@ -62,6 +63,13 @@ export type Env = {
    * returns null with no fetch when this is unset, so the app works without a key today.
    */
   AERODATABOX_KEY?: string;
+  /**
+   * Comma-separated addresses allowed to open /usage (GET /api/usage), compared
+   * case-insensitively. A Worker secret (`wrangler secret put USAGE_VIEWER_EMAILS`) or the
+   * gitignored .dev.vars — never wrangler.jsonc `vars`: the repo is public and these are real
+   * addresses. Unset means the route 404s for everyone.
+   */
+  USAGE_VIEWER_EMAILS?: string;
 };
 
 type Session = Awaited<ReturnType<ReturnType<typeof createAuth>["api"]["getSession"]>>;
@@ -98,7 +106,12 @@ app.get("/api/me", (c) => {
   if (!user) {
     return c.json({ error: "unauthenticated" }, 401);
   }
-  const body: Me = { id: user.id, email: user.email, name: user.name ?? null };
+  const body: Me = {
+    id: user.id,
+    email: user.email,
+    name: user.name ?? null,
+    canViewUsage: canViewUsage(c.env, user.email),
+  };
   return c.json(body);
 });
 
@@ -126,6 +139,7 @@ app.route("/api", scheduleRouter);
 app.route("/api", crewRouter);
 app.route("/api", pushRouter);
 app.route("/api", ingestRouter);
+app.route("/api", usageRouter);
 
 async function scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
   const now = Date.now();

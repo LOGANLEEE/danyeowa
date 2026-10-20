@@ -21,6 +21,10 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export const AUTH_FILE = path.join(__dirname, ".auth", "user.json");
 
+/** Override when :8787 is taken: `reuseExistingServer` would otherwise test whatever holds it.
+ * BETTER_AUTH_URL in .dev.vars must name the same port, or sign-in fails with "Invalid origin". */
+const PORT = process.env.E2E_PORT ?? "8787";
+
 export default defineConfig({
   testDir: ".",
   // Timeouts sized for the CI runner, not for a laptop. The suite takes ~1 minute locally and
@@ -39,7 +43,7 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"]],
   use: {
-    baseURL: "http://localhost:8787",
+    baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",
   },
   projects: [
@@ -69,8 +73,8 @@ export default defineConfig({
       " && wrangler d1 execute danyeowa-db --local --file ./scripts/seed-airports.sql" +
       " && wrangler d1 execute danyeowa-db --local --file ./scripts/seed-schedules.sql" +
       " && wrangler d1 execute danyeowa-db --local --file ./scripts/seed-e2e-fixtures.sql" +
-      " && wrangler dev --port 8787",
-    url: "http://localhost:8787/api/health",
+      ` && wrangler dev --port ${PORT}`,
+    url: `http://localhost:${PORT}/api/health`,
     reuseExistingServer: true,
     timeout: 120_000,
   },

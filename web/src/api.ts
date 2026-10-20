@@ -46,7 +46,9 @@ export async function createTrip(input: TripInput): Promise<TripWithFlights> {
     const body = await parseJson<{ error?: string }>(res).catch(
       () => ({}) as { error?: string },
     );
-    throw new Error(body.error ?? "Failed to create trip");
+    throw Object.assign(new Error(body.error ?? "Failed to create trip"), {
+      status: res.status,
+    });
   }
   return parseJson<TripWithFlights>(res);
 }

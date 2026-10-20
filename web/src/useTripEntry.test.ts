@@ -2,6 +2,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTripEntry } from "./useTripEntry";
 import { confirmSchedule, createTrip, getAirport, lookupSchedule } from "./api";
+import { track } from "./lib/track";
+
+vi.mock("./lib/track", () => ({ track: vi.fn() }));
 
 vi.mock("./api", () => ({
   createTrip: vi.fn(),
@@ -535,5 +538,160 @@ describe("useTripEntry", () => {
 
     expect(result.current.legs[1]!.origin).toBe("LHR");
     expect(result.current.legs[1]!.dep.startsWith("2026-08-10")).toBe(true);
+  });
+});
+
+const EK001_LEG = {
+  legSeq: 0,
+  origin: "DXB",
+  dest: "LHR",
+  depLocal: "09:15",
+  arrLocal: "13:35",
+  dayOffset: 0,
+  originTz: "Asia/Dubai",
+  destTz: "Europe/London",
+  confirmCount: 3,
+};
+const SAVED = { id: "trip-1", userId: "u1", label: null, createdAt: 0, flights: [] };
+
+/** What the owner's /usage page is built from: one event per step of adding a roster. */
+describe("useTripEntry usage events", () => {
+  beforeEach(() => {
+    vi.mocked(track).mockReset();
+    vi.mocked(createTrip).mockReset();
+    vi.mocked(lookupSchedule).mockReset();
+    vi.mocked(confirmSchedule).mockResolvedValue(undefined);
+    vi.mocked(getAirport).mockImplementation(async (iata: string) =>
+      iata === "DXB" ? DXB : iata === "LHR" ? LHR : null,
+    );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const names = () => vi.mocked(track).mock.calls.map(([name]) => name);
+  const propsOf = (name: string) =>
+    vi.mocked(track).mock.calls.find(([n]) => n === name)?.[1] as Record<string, unknown> | undefined;
+
+  async function lookUp(result: { current: ReturnType<typeof useTripEntry> }, flightNo: string) {
+    act(() => result.current.setFlightNo(flightNo));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+  }
+
+  it("records nothing unless the caller asks for it (the edit card mounts this hook inertly)", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: [EK001_LEG] });
+    const { result } = renderHook(() =>
+      useTripEntry({ pickedDate: "2026-08-20", homeTz: "Asia/Dubai", onSubmitted: vi.fn() }),
+    );
+    await lookUp(result, "EK001");
+    await waitFor(() => expect(result.current.autofillLegs).not.toBeNull());
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  it("records the form opening, a found lookup with its duration, and the autofill save", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: [EK001_LEG] });
+    vi.mocked(createTrip).mockResolvedValue(SAVED);
+    const { result } = renderHook(() =>
+      useTripEntry({
+        pickedDate: "2026-08-20",
+        homeTz: "Asia/Dubai",
+        onSubmitted: vi.fn(),
+        trackUsage: true,
+      }),
+    );
+    // Mounting is not opening: the calendar mounts this form for the default day on every load.
+    expect(names()).toEqual([]);
+
+    await lookUp(result, "EK001");
+    expect(names()[0]).toBe("add_form_opened");
+    expect(names().filter((n) => n === "add_form_opened")).toHaveLength(1);
+    await waitFor(() => expect(result.current.autofillLegs).not.toBeNull());
+    expect(propsOf("flight_lookup")).toMatchObject({ result: "found" });
+    expect(propsOf("flight_lookup")!.ms).toBeGreaterThanOrEqual(0);
+
+    await act(async () => {
+      await result.current.handleAutofillSubmit();
+    });
+    expect(propsOf("trip_saved")).toMatchObject({ path: "autofill", legs: 1 });
+    expect(propsOf("trip_saved")!.msSinceOpen).toBeGreaterThanOrEqual(400);
+  });
+
+  it("records an unknown lookup, the switch to manual, and the manual save", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue(null);
+    vi.mocked(createTrip).mockResolvedValue(SAVED);
+    const { result } = renderHook(() =>
+      useTripEntry({
+        pickedDate: "2026-08-20",
+        homeTz: "Asia/Dubai",
+        onSubmitted: vi.fn(),
+        trackUsage: true,
+      }),
+    );
+    await lookUp(result, "EK999");
+    await waitFor(() => expect(result.current.lookupMiss).toBe(true));
+    expect(propsOf("flight_lookup")).toMatchObject({ result: "unknown" });
+
+    act(() => result.current.switchToManual());
+    expect(names()).toContain("manual_entry_opened");
+
+    act(() =>
+      result.current.updateLeg(0, {
+        origin: "DXB",
+        dest: "LHR",
+        dep: "2026-08-20T08:45",
+        arr: "2026-08-20T13:10",
+      }),
+    );
+    await act(async () => {
+      await result.current.lookupAirport("DXB");
+    });
+    await act(async () => {
+      await result.current.lookupAirport("LHR");
+    });
+    await act(async () => {
+      await result.current.handleManualSubmit();
+    });
+    expect(propsOf("trip_saved")).toMatchObject({ path: "manual", legs: 1 });
+  });
+
+  it("records a lookup that errored as an error, not as unknown", async () => {
+    vi.mocked(lookupSchedule).mockRejectedValue(new Error("502"));
+    const { result } = renderHook(() =>
+      useTripEntry({
+        pickedDate: "2026-08-20",
+        homeTz: "Asia/Dubai",
+        onSubmitted: vi.fn(),
+        trackUsage: true,
+      }),
+    );
+    await lookUp(result, "EK001");
+    await waitFor(() => expect(result.current.lookupMiss).toBe(true));
+    expect(propsOf("flight_lookup")).toMatchObject({ result: "error" });
+  });
+
+  it("records a failed save with the HTTP status the server answered", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: [EK001_LEG] });
+    vi.mocked(createTrip).mockRejectedValue(
+      Object.assign(new Error("unknown airport: LHR"), { status: 400 }),
+    );
+    const { result } = renderHook(() =>
+      useTripEntry({
+        pickedDate: "2026-08-20",
+        homeTz: "Asia/Dubai",
+        onSubmitted: vi.fn(),
+        trackUsage: true,
+      }),
+    );
+    await lookUp(result, "EK001");
+    await waitFor(() => expect(result.current.autofillLegs).not.toBeNull());
+    await act(async () => {
+      await result.current.handleAutofillSubmit();
+    });
+    expect(propsOf("trip_save_failed")).toEqual({ path: "autofill", status: 400 });
+    expect(names()).not.toContain("trip_saved");
   });
 });
