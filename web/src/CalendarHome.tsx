@@ -27,7 +27,7 @@ import { MIN_LAYOVER_FREE_HOURS } from "./lib/layoverBrief";
 import { useDestinationSky, type Sky } from "./lib/useSky";
 import { HOME_BASE_IATA } from "./lib/homeBase";
 import { getLastRoster, setLastRoster } from "./lib/lastRoster";
-import { freeUntilLabel, layoverRests, restForDay, type LayoverRest } from "./lib/layoverBrief";
+import { clockWithWeekday, freeUntilLabel, layoverRests, restForDay, type LayoverRest } from "./lib/layoverBrief";
 import TripLegsPanel from "./TripLegsPanel";
 import TripsCalendar from "./TripsCalendar";
 import { useTripEntry } from "./useTripEntry";
@@ -60,16 +60,21 @@ function DownRouteLine({
   isoDate,
   homeTz,
   rest,
+  readOnly,
 }: {
   isoDate: string;
   homeTz: string;
   rest: LayoverRest;
+  readOnly: boolean;
 }) {
   const airport = useAirport(rest.station);
   return (
     <p className="num text-sm text-ink-muted">
-      {humanDateLabel(isoDate, homeTz)} — no duty, down-route in {airport?.city ?? rest.station} ·
-      free until {freeUntilLabel(rest)}
+      {humanDateLabel(isoDate, homeTz)} — no duty, down-route in {airport?.city ?? rest.station} ·{" "}
+      {/* His question is when she moves on, in his clock — the same answer DutyStatus gives him. */}
+      {readOnly
+        ? `leaves ${clockWithWeekday(rest.nextDepUtc, homeTz)}`
+        : `free until ${freeUntilLabel(rest)}`}
     </p>
   );
 }
@@ -448,7 +453,7 @@ function DayDetailCard({
     return (
       <div data-testid="day-detail-card" className="hairline flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
         {layoverRest ? (
-          <DownRouteLine isoDate={isoDate} homeTz={homeTz} rest={layoverRest} />
+          <DownRouteLine isoDate={isoDate} homeTz={homeTz} rest={layoverRest} readOnly={readOnly} />
         ) : (
           <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
         )}

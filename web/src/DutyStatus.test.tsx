@@ -170,6 +170,30 @@ describe("DutyStatus", () => {
     expect(screen.getByTestId("duty-status-hero")).not.toHaveTextContent("free");
   });
 
+  it("hands the landing day back to the normal states, for both readers", () => {
+    // The rest reaches EK409's landing day (Mon 21 in Dubai) so the panel stays up, but she is
+    // home by 13:00 that day: neither reader should be told she is down-route.
+    const hers = render(
+      <DutyStatus legs={[home]} homeTz={HOME_TZ} now={at("2026-09-10T08:00:00.000Z")} isoDate="2026-09-21" layoverRest={melRest} />,
+    );
+    expect(screen.getByTestId("duty-status-kicker")).not.toHaveTextContent("Down-route");
+    hers.unmount();
+    render(
+      <DutyStatus legs={[home]} homeTz={HOME_TZ} now={at("2026-09-10T08:00:00.000Z")} isoDate="2026-09-21" layoverRest={melRest} readOnly />,
+    );
+    expect(screen.getByTestId("duty-status-kicker")).not.toHaveTextContent("Down-route");
+    expect(screen.getByTestId("duty-status-hero")).toHaveTextContent("13:00");
+  });
+
+  it("counts what is LEFT when she is already in the rest and taps another day of it", () => {
+    // Now 02:00Z on the 20th, inside the MEL rest; she taps the 19th. The live block says
+    // 15h 45m free, so this must not say the whole 1d 5h.
+    render(
+      <DutyStatus legs={[out]} homeTz={HOME_TZ} now={at("2026-09-20T02:00:00.000Z")} isoDate="2026-09-19" layoverRest={melRest} />,
+    );
+    expect(screen.getByTestId("duty-status-hero")).toHaveTextContent("15h 45m free");
+  });
+
   it("keeps the live state on TODAY even when the day sits inside a rest", () => {
     // Today before she leaves: the question is still "when do I go", answered live.
     render(

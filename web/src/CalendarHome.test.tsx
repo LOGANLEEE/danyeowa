@@ -903,6 +903,32 @@ describe("CalendarHome", () => {
       expect(screen.getByTestId("duty-status-hero")).toHaveTextContent("1d 22h free");
       expect(screen.getByTestId("duty-status")).toHaveTextContent("until report 19:40 Sun · EK435");
     });
+
+    it("does not call the landing day at home down-route", async () => {
+      // EK435 lands Dubai 06:00 Mon 24. The rest still covers that day so the panel stays up
+      // the morning a red-eye lands, but she is not in Brisbane any more.
+      vi.mocked(getTrips).mockResolvedValue([bneOut, bneBack]);
+      const user = userEvent.setup();
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-24"));
+      expect(await screen.findByTestId("duty-status-kicker")).not.toHaveTextContent("Down-route");
+      expect(screen.getByTestId("duty-status-hero")).not.toHaveTextContent("free");
+    });
+
+    it("gives HIM the no-duty day's time in his own clock: when she leaves", async () => {
+      const member = { userId: "u-bne", email: "bne@example.com", name: "Isis", inviteId: "inv-bne" };
+      vi.mocked(getCrew).mockResolvedValue({ members: [member], sent: [], received: [] });
+      vi.mocked(getTrips).mockResolvedValue([]);
+      vi.mocked(getCrewTrips).mockResolvedValue([bneOut, bneBack]);
+      const user = userEvent.setup();
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("crew-badge-u-bne"));
+      await user.click(await screen.findByTestId("calendar-day-2026-08-22"));
+      // EK435 leaves Brisbane 12:10Z on the 23rd: 16:10 Sun in Dubai.
+      const card = await screen.findByTestId("day-detail-card");
+      expect(card).toHaveTextContent("down-route in BNE · leaves 16:10 Sun");
+      expect(card).not.toHaveTextContent("free until 19:40");
+    });
   });
 
   describe("duty timeline", () => {

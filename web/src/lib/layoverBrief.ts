@@ -128,10 +128,15 @@ export function restForDay(
   );
 }
 
-/** "19:40 Sun": the next report in the station's own clock, which is where she reads it. */
-export function freeUntilLabel(rest: LayoverRest): string {
-  const [weekday, , , time] = formatLocal(rest.nextReportUtc, rest.nextDepTz, { withDate: true }).split(" ");
+/** "19:40 Sun". */
+export function clockWithWeekday(utcIso: string, tz: string): string {
+  const [weekday, , , time] = formatLocal(utcIso, tz, { withDate: true }).split(" ");
   return `${time} ${weekday}`;
+}
+
+/** The next report in the station's own clock, which is where she reads it. */
+export function freeUntilLabel(rest: LayoverRest): string {
+  return clockWithWeekday(rest.nextReportUtc, rest.nextDepTz);
 }
 
 /**
