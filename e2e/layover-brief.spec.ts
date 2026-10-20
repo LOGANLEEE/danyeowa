@@ -67,6 +67,8 @@ test("layover brief: free-until-report on the empty middle day, and the copy car
   // "Layover · Sydney". The line says where she actually is now.
   await expect(page.getByTestId("day-detail-card")).toContainText(/no duty/i);
   await expect(page.getByTestId("day-detail-card")).toContainText(/down-route in Sydney/i);
+  // And until when, in Sydney's clock: report is 90 minutes before the 18:00 departure.
+  await expect(page.getByTestId("day-detail-card")).toContainText("free until 16:30 Wed");
 
   // A layover day has no leg DEPARTING on it, so it falls into the empty-day branch — but it is
   // not a free day. Opening the add form here put the cursor straight into the flight-number box

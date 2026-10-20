@@ -873,6 +873,64 @@ describe("CalendarHome", () => {
     await waitFor(() => expect(screen.getByTestId("delete-trip")).toBeInTheDocument());
   });
 
+  describe("a day inside a future rest", () => {
+    // EK434 lands Brisbane Fri 21 Aug 21:05; EK435 reports Sun 23 Aug 19:40 Brisbane. Two trips, and
+    // Sat 22 belongs to neither. `now` is the 10th, so nothing here is live.
+    const sector = (id: string, flightNo: string, o: string, d: string, dep: string, arr: string, report: string, depTz: string, arrTz: string): TripWithFlights => ({
+      id, userId: "u1", label: null, createdAt: now.getTime(),
+      flights: [{ id: `${id}-f`, tripId: id, userId: "u1", flightNo, origin: o, dest: d, depUtc: dep, arrUtc: arr, reportUtc: report, depTz, arrTz, source: "manual", notes: null, legSeq: 0, operating: true }],
+    });
+    const bneOut = sector("bne-out", "EK434", "DXB", "BNE", "2026-08-20T21:00:00.000Z", "2026-08-21T11:05:00.000Z", "2026-08-20T19:30:00.000Z", "Asia/Dubai", "Australia/Brisbane");
+    const bneBack = sector("bne-back", "EK435", "BNE", "DXB", "2026-08-23T12:10:00.000Z", "2026-08-24T02:00:00.000Z", "2026-08-23T09:40:00.000Z", "Australia/Brisbane", "Asia/Dubai");
+
+    it("says when she is free until on the no-duty day in the middle", async () => {
+      vi.mocked(getTrips).mockResolvedValue([bneOut, bneBack]);
+      const user = userEvent.setup();
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-22"));
+      expect(await screen.findByTestId("day-detail-card")).toHaveTextContent(
+        "no duty, down-route in BNE · free until 19:40 Sun",
+      );
+    });
+
+    it("answers the duty day that starts the rest with the rest, not with 'leaves in 11d'", async () => {
+      vi.mocked(getTrips).mockResolvedValue([bneOut, bneBack]);
+      const user = userEvent.setup();
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-21"));
+      expect(await screen.findByTestId("duty-status-kicker")).toHaveTextContent("Down-route · BNE");
+      // 11:05Z landing to the 09:40Z report two days on: 46h 35m.
+      expect(screen.getByTestId("duty-status-hero")).toHaveTextContent("1d 22h free");
+      expect(screen.getByTestId("duty-status")).toHaveTextContent("until report 19:40 Sun · EK435");
+    });
+
+    it("does not call the landing day at home down-route", async () => {
+      // EK435 lands Dubai 06:00 Mon 24. The rest still covers that day so the panel stays up
+      // the morning a red-eye lands, but she is not in Brisbane any more.
+      vi.mocked(getTrips).mockResolvedValue([bneOut, bneBack]);
+      const user = userEvent.setup();
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("calendar-day-2026-08-24"));
+      expect(await screen.findByTestId("duty-status-kicker")).not.toHaveTextContent("Down-route");
+      expect(screen.getByTestId("duty-status-hero")).not.toHaveTextContent("free");
+    });
+
+    it("gives HIM the no-duty day's time in his own clock: when she leaves", async () => {
+      const member = { userId: "u-bne", email: "bne@example.com", name: "Isis", inviteId: "inv-bne" };
+      vi.mocked(getCrew).mockResolvedValue({ members: [member], sent: [], received: [] });
+      vi.mocked(getTrips).mockResolvedValue([]);
+      vi.mocked(getCrewTrips).mockResolvedValue([bneOut, bneBack]);
+      const user = userEvent.setup();
+      render(<CalendarHome now={now} />);
+      await user.click(await screen.findByTestId("crew-badge-u-bne"));
+      await user.click(await screen.findByTestId("calendar-day-2026-08-22"));
+      // EK435 leaves Brisbane 12:10Z on the 23rd: 16:10 Sun in Dubai.
+      const card = await screen.findByTestId("day-detail-card");
+      expect(card).toHaveTextContent("down-route in BNE · leaves 16:10 Sun");
+      expect(card).not.toHaveTextContent("free until 19:40");
+    });
+  });
+
   describe("duty timeline", () => {
     it("shows the full duty timeline inline as soon as a trip day is selected, no scroll or extra tap needed", async () => {
       vi.mocked(getTrips).mockResolvedValue([aklTrip]);

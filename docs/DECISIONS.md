@@ -8,6 +8,51 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-10-20 (the day card answers a rest day you are planning, not only the one you are in)
+
+### Direction A was chosen, and was mostly built already
+
+`.design/card-directions.html` (untracked, 2026-09-01 20:31) offered three day cards. **A**, one
+answer line on top, was chosen over **B** (card above the calendar: fixes reading, not truth) and
+**C** (one card per pairing: the biggest change, and built on a premise that is wrong, below). A
+was the cheapest, and 90 minutes after the file was written `f8d0836` shipped it as `DutyStatus`:
+the answer above the detail, a duration for her and a date for him.
+
+What was left: `DutyStatus` was tied to `now`. Tapping a future day inside a rest — the day she is
+most likely planning — showed "Departs from DXB · leaves in 11d". A non-today day inside a rest
+now answers from the rest itself: "1d 18h free · until report 16:30 Wed · EK413" for her, the
+departure date and time in his own clock for him. Today keeps the live states. The no-duty
+middle day's "down-route in Sydney" line gained "· free until 16:30 Wed". The report clock is the
+station's, matching the report line the card already printed.
+
+Three edges, each caught in review and each now a test:
+
+- **Only on days BEFORE the one she leaves.** `restForDay` reaches the outbound flight's LANDING
+  day on purpose (the panel stays up the morning a red-eye lands). Answering that day "Down-route ·
+  BNE … free" told both readers she was still away when she was home by 06:00. The departure day
+  is excluded too: it is the outbound duty's own card, and "until report 19:40" there is that
+  duty's report time, which came off the card on 2026-08-31. `duty-card-report.spec.ts` caught it
+  in CI (`/report/gi` count 1, expected 0); both days now keep their normal duty states.
+- **What is left, not the whole rest,** when she is already inside it and taps another of its
+  days — otherwise today's live "15h 45m free" and the next day's "1d 5h free" disagree.
+- **His line is his clock.** The no-duty line says "· leaves 16:10 Sun" in his home zone, not her
+  report in the station's: a report time is her planning number, and the 2026-09-01 rule gives him
+  a date and time he can put in a diary. Same answer `DutyStatus` gives him on a duty day.
+
+Not a second headline: A's own mock stacked a new line above a card that already led with one.
+
+### The design file's "rides on, not working" is wrong — do not build C on it
+
+Its "Now" frame says the SEZ→TNR leg "she rides" is invisible to `layoverRests`, and C says the
+fix is to walk `continuation`. Per 2026-09-01 above, `operating = 0` means she is **not on that
+aeroplane**; there is no "riding along" state in the model. Measured this time rather than
+argued: walking `flights + continuation` over a crew member who gets off at SEZ (aircraft
+continues to TNR) turned her real 32.8h SEZ layover into **no rest at all**; entering the pairing
+as she flew it (get off at TNR) already yields the TNR night with no code change. So
+`layoverRests` stays as it is.
+
+---
+
 ## 2026-09-07 (capture the error that kills the e2e server)
 
 ### The recurring CI failure is real, and it has never once been readable

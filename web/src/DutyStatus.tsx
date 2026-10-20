@@ -1,7 +1,7 @@
 import { formatDuration, formatLocal, localDateKey } from "@danyeowa/shared";
 import type { Flight } from "@danyeowa/shared";
 import { humanDateLabel } from "./lib/dateLabel";
-import type { LayoverRest } from "./lib/layoverBrief";
+import { freeUntilLabel, type LayoverRest } from "./lib/layoverBrief";
 
 /**
  * The answer, above the detail.
@@ -88,6 +88,7 @@ export function DutyStatus({
   homeTz,
   now,
   layoverRest,
+  isoDate,
   /** True when this is someone else's roster — the person at home reading hers. */
   readOnly = false,
 }: {
@@ -97,6 +98,8 @@ export function DutyStatus({
   /** The down-route rest this day falls inside, when it does. Crosses trips, so it cannot be
    * derived from `legs`. */
   layoverRest?: LayoverRest | null;
+  /** The day the card is for. Omitted means today. */
+  isoDate?: string;
   readOnly?: boolean;
 }) {
   const nowMs = now.getTime();
@@ -113,6 +116,32 @@ export function DutyStatus({
     nowMs < Date.parse(layoverRest.nextReportUtc)
       ? layoverRest
       : null;
+
+  // Any other day inside a rest is being planned or looked back on, not lived: answer it from
+  // the rest itself. Today keeps the live states below, because "now" is the question there.
+  // Only BEFORE the day she leaves: that day is the outbound duty (its own report is off the
+  // card), and `restForDay` also reaches the landing day, when she is home.
+  const isToday = !isoDate || isoDate === localDateKey(now.toISOString(), homeTz);
+  if (layoverRest && isoDate && !isToday && isoDate < localDateKey(layoverRest.nextDepUtc, homeTz)) {
+    const leaves = layoverRest.nextDepUtc;
+    return (
+      <StatusBlock
+        kicker={`Down-route · ${layoverRest.station}`}
+        hero={
+          readOnly
+            ? `${humanDateLabel(localDateKey(leaves, homeTz), homeTz)} · ${formatLocal(leaves, homeTz)}`
+            : `${formatDuration(restingNow ? now.toISOString() : layoverRest.arrUtc, layoverRest.nextReportUtc)} free`
+        }
+        sub={
+          readOnly
+            ? `in ${layoverRest.station} until then`
+            : `until report ${freeUntilLabel(layoverRest)} · ${layoverRest.outboundFlightNo}`
+        }
+        rail={null}
+        nowMs={nowMs}
+      />
+    );
+  }
 
   // His hero, whatever the state: when she is back. Spelled with its weekday, because the
   // roster's own date is the departure's, and every homecoming in her September lands on the
