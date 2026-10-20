@@ -242,7 +242,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
   }
 
   return (
-    <div className="entrance flex w-full max-w-xl flex-col gap-6">
+    <div data-testid="settings-view" className="entrance flex w-full max-w-xl flex-col gap-6">
       <div className="stagger-1 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
         <p className="text-xs uppercase text-ink-muted">Signed in as</p>
         <p className="text-ink">{email}</p>
@@ -382,7 +382,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
             type="button"
             data-testid="install-button"
             onClick={handleInstall}
-            className="self-start rounded border border-accent px-3 py-2 text-accent transition-colors duration-[120ms] hover:bg-accent/10"
+            className="min-h-11 self-start rounded border border-accent px-3 py-2 text-accent transition-colors duration-[120ms] hover:bg-accent/10"
           >
             Install app
           </button>
