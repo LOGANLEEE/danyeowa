@@ -632,7 +632,7 @@ function DayDetailCard({
                   inputMode="numeric"
                   value={digitsOf(entry.flightNo, airlinePrefix)}
                   onChange={(e) => entry.setFlightNo(airlinePrefix + e.target.value.replace(/\D/g, ""))}
-                  className="num w-full bg-transparent text-lg text-ink outline-none focus-visible:outline-none"
+                  className="num w-full bg-transparent text-lg text-ink outline-none focus-visible:outline-none!"
                 />
               </div>
             </div>

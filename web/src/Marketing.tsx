@@ -118,10 +118,10 @@ export default function Marketing() {
 
         {/* Static illustrative sample, not live schedule data — same panel as Landing's, and
             dark in both themes for the same reason. */}
-        <div className="flex flex-col gap-1 rounded-lg border border-white/10 bg-[#0b0d12] p-4 shadow-sm">
+        <div className="flex flex-col gap-1 rounded-lg border border-board-edge bg-[#0b0d12] p-4 shadow-sm">
           <div className="flex items-baseline justify-between">
             <p className="num text-xs uppercase tracking-[0.2em] text-white/50">Next duty</p>
-            <p className="num text-xs uppercase tracking-[0.2em] text-white/30">Sat 20 Sep</p>
+            <p className="num text-xs uppercase tracking-[0.2em] text-white/50">Sat 20 Sep</p>
           </div>
           <dl className="num flex flex-col text-sm text-white/90">
             {BOARD.map((row) => (
@@ -141,7 +141,7 @@ export default function Marketing() {
               <dd className="text-[#ffd57e]">22h 35m</dd>
             </div>
           </dl>
-          <div className="num mt-2 flex items-baseline justify-between border-t border-white/10 pt-2 text-xs text-white/40">
+          <div className="num mt-2 flex items-baseline justify-between border-t border-white/10 pt-2 text-xs text-white/50">
             <span>THEN EK449</span>
             <span>AKL → DXB · MON 22</span>
           </div>

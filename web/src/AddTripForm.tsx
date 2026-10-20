@@ -23,7 +23,7 @@ function AppendFlightControl({ entry, airlinePrefix }: { entry: UseTripEntryRetu
         type="button"
         data-testid="append-flight"
         onClick={() => setExpanded(true)}
-        className="w-fit text-sm text-ink-muted underline transition-colors duration-[120ms] hover:text-ink"
+        className="min-h-11 w-fit text-sm text-ink-muted underline transition-colors duration-[120ms] hover:text-ink"
       >
         + add flight
       </button>
@@ -48,7 +48,7 @@ function AppendFlightControl({ entry, airlinePrefix }: { entry: UseTripEntryRetu
               }
             }}
             placeholder="098"
-            className="num w-16 bg-transparent text-ink outline-none focus-visible:outline-none"
+            className="num w-16 bg-transparent text-ink outline-none focus-visible:outline-none!"
           />
         </span>
         <button
@@ -127,7 +127,7 @@ export default function AddTripForm({
               value={digitsOf(entry.flightNo, airlinePrefix)}
               onChange={(e) => entry.setFlightNo(airlinePrefix + e.target.value.replace(/\D/g, ""))}
               placeholder="412"
-              className="num w-full bg-transparent text-lg text-ink outline-none focus-visible:outline-none"
+              className="num w-full bg-transparent text-lg text-ink outline-none focus-visible:outline-none!"
             />
           </div>
 

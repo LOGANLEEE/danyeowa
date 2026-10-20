@@ -122,7 +122,7 @@ export default function Landing({
           visually dark in both the light and dark app themes on purpose — it's meant to read
           as a physical airport board, not as themed app chrome — so it uses fixed color values
           instead of the ink/card/edge tokens, which flip between themes. */
-        <div className="stagger-2 flex w-full flex-col gap-1 rounded-lg border border-white/10 bg-[#0b0d12] p-4 text-left shadow-sm">
+        <div className="stagger-2 flex w-full flex-col gap-1 rounded-lg border border-board-edge bg-[#0b0d12] p-4 text-left shadow-sm">
           <p className="text-xs uppercase tracking-[0.2em] text-white/50">
             Next duty
           </p>
