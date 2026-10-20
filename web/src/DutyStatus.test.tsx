@@ -170,6 +170,19 @@ describe("DutyStatus", () => {
     expect(screen.getByTestId("duty-status-hero")).not.toHaveTextContent("free");
   });
 
+  it("hands the day she flies out of the rest back to the normal duty states, for both readers", () => {
+    // EK409 leaves Melbourne 23:15 Sun 20 in Dubai. On that day the card is EK409's duty, and
+    // "until report" would be that duty's own report time, which came off the card on 2026-08-31.
+    for (const readOnly of [false, true]) {
+      const view = render(
+        <DutyStatus legs={[home]} homeTz={HOME_TZ} now={at("2026-09-10T08:00:00.000Z")} isoDate="2026-09-20" layoverRest={melRest} readOnly={readOnly} />,
+      );
+      expect(screen.getByTestId("duty-status-kicker")).not.toHaveTextContent("Down-route");
+      expect(screen.getByTestId("duty-status").textContent).not.toMatch(/report/i);
+      view.unmount();
+    }
+  });
+
   it("hands the landing day back to the normal states, for both readers", () => {
     // The rest reaches EK409's landing day (Mon 21 in Dubai) so the panel stays up, but she is
     // home by 13:00 that day: neither reader should be told she is down-route.

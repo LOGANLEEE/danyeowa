@@ -119,9 +119,10 @@ export function DutyStatus({
 
   // Any other day inside a rest is being planned or looked back on, not lived: answer it from
   // the rest itself. Today keeps the live states below, because "now" is the question there.
-  // Only up to the day she leaves: `restForDay` also covers the landing day, when she is home.
+  // Only BEFORE the day she leaves: that day is the outbound duty (its own report is off the
+  // card), and `restForDay` also reaches the landing day, when she is home.
   const isToday = !isoDate || isoDate === localDateKey(now.toISOString(), homeTz);
-  if (layoverRest && isoDate && !isToday && isoDate <= localDateKey(layoverRest.nextDepUtc, homeTz)) {
+  if (layoverRest && isoDate && !isToday && isoDate < localDateKey(layoverRest.nextDepUtc, homeTz)) {
     const leaves = layoverRest.nextDepUtc;
     return (
       <StatusBlock
