@@ -79,3 +79,61 @@ describe("weather skies clear the 4.5:1 floor", () => {
     expect(contrastRatio("#8b93a3", worst)).toBeLessThan(4.5);
   });
 });
+
+/** A token's value inside one `selector { … }` block — the dark overrides live in two of them. */
+function tokenIn(selector: string, name: string): string {
+  const start = TOKENS.indexOf(`${selector} {`);
+  expect(start, `${selector} block should exist in tokens.css`).toBeGreaterThanOrEqual(0);
+  const block = TOKENS.slice(start, TOKENS.indexOf("}", start));
+  const found = block.match(new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6})`, "i"));
+  expect(found, `--color-${name} should be set in ${selector}`).not.toBeNull();
+  return found![1]!;
+}
+
+describe("the departure board stays visible on the dark ground", () => {
+  // The panel colour is a literal in Landing.tsx and Marketing.tsx, not a token.
+  const PANEL = "#0b0d12";
+  const DARK = [
+    ':root:not([data-theme="light"]):not([data-theme="dark"])',
+    ':root[data-theme="dark"]',
+  ];
+
+  it("is the reason the edge needed its own token", () => {
+    // The panel alone all but matches the dark ground — this is the bug the token fixes.
+    expect(contrastRatio(PANEL, tokenIn(DARK[1]!, "ground"))).toBeLessThan(1.5);
+  });
+
+  for (const selector of DARK) {
+    it(`edge clears 3:1 against the ground in ${selector}`, () => {
+      // 3:1 is WCAG 1.4.11 for a graphic the content depends on.
+      expect(
+        contrastRatio(tokenIn(selector, "board-edge"), tokenIn(selector, "ground")),
+      ).toBeGreaterThanOrEqual(3);
+    });
+  }
+});
+
+describe("text on the departure board clears 4.5:1", () => {
+  const PANEL = "#0b0d12";
+  // white at alpha a, composited over the panel — what `text-white/N` actually paints.
+  const whiteAt = (alpha: number) =>
+    "#" +
+    [1, 3, 5]
+      .map((i) =>
+        Math.round(alpha * 255 + (1 - alpha) * parseInt(PANEL.slice(i, i + 2), 16))
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("");
+
+  for (const file of ["Landing.tsx", "Marketing.tsx"]) {
+    it(`every text-white/N in ${file}`, () => {
+      const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", file), "utf8");
+      const alphas = [...src.matchAll(/text-white\/(\d+)/g)].map((m) => Number(m[1]));
+      expect(alphas.length).toBeGreaterThan(0);
+      for (const a of alphas) {
+        expect(contrastRatio(whiteAt(a / 100), PANEL), `text-white/${a}`).toBeGreaterThanOrEqual(4.5);
+      }
+    });
+  }
+});
