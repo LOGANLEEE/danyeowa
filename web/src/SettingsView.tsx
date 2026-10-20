@@ -242,7 +242,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
   }
 
   return (
-    <div className="entrance flex w-full max-w-xl flex-col gap-6">
+    <div data-testid="settings-view" className="entrance flex w-full max-w-xl flex-col gap-6">
       <div className="stagger-1 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
         <p className="text-xs uppercase text-ink-muted">Signed in as</p>
         <p className="text-ink">{email}</p>
@@ -253,7 +253,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
         {THEME_OPTIONS.map((option) => (
           <label
             key={option.value}
-            className="flex items-center gap-2 text-ink"
+            className="flex min-h-11 items-center gap-2 text-ink"
           >
             <input
               type="radio"
@@ -282,7 +282,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
           </p>
         ) : (
           <>
-            <label className="flex items-center justify-between gap-2 text-ink">
+            <label className="flex min-h-11 items-center justify-between gap-2 text-ink">
               <span>Report-time reminders</span>
               <input
                 type="checkbox"
@@ -296,7 +296,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
             </label>
 
             {subscribed && (
-              <label className="flex items-center justify-between gap-2 text-ink">
+              <label className="flex min-h-11 items-center justify-between gap-2 text-ink">
                 <span>Remind me</span>
                 <select
                   data-testid="push-lead"
@@ -314,7 +314,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
             )}
 
             {subscribed && (
-              <label className="flex items-center justify-between gap-2 text-ink">
+              <label className="flex min-h-11 items-center justify-between gap-2 text-ink">
                 <span>
                   Arrival alerts
                   <span className="block text-sm text-ink-muted">
@@ -358,7 +358,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
       <div className="flex flex-col gap-2 rounded-lg border border-edge bg-card p-4">
         <p className="px-1 text-xs uppercase text-ink-muted">App</p>
 
-        <label className="flex items-center justify-between gap-2 text-ink">
+        <label className="flex min-h-11 items-center justify-between gap-2 text-ink">
           <span>Airline</span>
           <input
             type="text"
@@ -382,7 +382,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
             type="button"
             data-testid="install-button"
             onClick={handleInstall}
-            className="self-start rounded border border-accent px-3 py-2 text-accent transition-colors duration-[120ms] hover:bg-accent/10"
+            className="min-h-11 self-start rounded border border-accent px-3 py-2 text-accent transition-colors duration-[120ms] hover:bg-accent/10"
           >
             Install app
           </button>
@@ -402,7 +402,7 @@ export default function SettingsView({ email, onSignOut }: Props) {
       <button
         type="button"
         onClick={onSignOut}
-        className="self-start rounded border border-danger px-3 py-2 text-danger transition-colors duration-[120ms] hover:bg-danger/10"
+        className="min-h-[44px] self-start rounded border border-danger px-3 py-2 text-danger transition-colors duration-[120ms] hover:bg-danger/10"
       >
         Sign out
       </button>

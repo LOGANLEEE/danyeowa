@@ -106,6 +106,29 @@ test.describe("layout invariants at phone width", () => {
     // bug, since the interaction would then be unreachable on a tall phone with a short roster.
     // Left out rather than guess-fixed: an assertion I cannot explain is worse than none.
   });
+
+  test("every Settings control is at least 44px tall", async ({ page }) => {
+    await signInThroughUi(page, `layout-settings-${Date.now()}@local.test`);
+    await page.getByTestId("tab-settings").click();
+    const view = page.getByTestId("settings-view");
+    await expect(view).toBeVisible();
+
+    const controls = view.locator(
+      "button, a, select, label:has(input[type=radio]), label:has(input[type=checkbox])",
+    );
+    const measured = await controls.evaluateAll((els) =>
+      els
+        .filter((el) => el.getClientRects().length > 0)
+        .map((el) => ({
+          name: el.getAttribute("data-testid") ?? (el.textContent ?? "").trim().slice(0, 40),
+          height: el.getBoundingClientRect().height,
+        })),
+    );
+    expect(measured.length, "no Settings controls found").toBeGreaterThan(0);
+    // 43.5, not 44: min-h-11 lays out at 43.9999px, which is a 44px target.
+    const short = measured.filter((c) => c.height < 43.5).map((c) => `${c.name}=${c.height}px`);
+    expect(short, "Settings controls under 44px").toEqual([]);
+  });
 });
 
 /**
