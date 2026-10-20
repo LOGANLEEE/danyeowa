@@ -27,7 +27,7 @@ import { MIN_LAYOVER_FREE_HOURS } from "./lib/layoverBrief";
 import { useDestinationSky, type Sky } from "./lib/useSky";
 import { HOME_BASE_IATA } from "./lib/homeBase";
 import { getLastRoster, setLastRoster } from "./lib/lastRoster";
-import { layoverRests, restForDay, type LayoverRest } from "./lib/layoverBrief";
+import { freeUntilLabel, layoverRests, restForDay, type LayoverRest } from "./lib/layoverBrief";
 import TripLegsPanel from "./TripLegsPanel";
 import TripsCalendar from "./TripsCalendar";
 import { useTripEntry } from "./useTripEntry";
@@ -59,16 +59,17 @@ function StationLine({ iata, shift }: { iata: string; shift?: number }) {
 function DownRouteLine({
   isoDate,
   homeTz,
-  station,
+  rest,
 }: {
   isoDate: string;
   homeTz: string;
-  station: string;
+  rest: LayoverRest;
 }) {
-  const airport = useAirport(station);
+  const airport = useAirport(rest.station);
   return (
-    <p className="text-sm text-ink-muted">
-      {humanDateLabel(isoDate, homeTz)} — no duty, down-route in {airport?.city ?? station}
+    <p className="num text-sm text-ink-muted">
+      {humanDateLabel(isoDate, homeTz)} — no duty, down-route in {airport?.city ?? rest.station} ·
+      free until {freeUntilLabel(rest)}
     </p>
   );
 }
@@ -447,7 +448,7 @@ function DayDetailCard({
     return (
       <div data-testid="day-detail-card" className="hairline flex flex-col gap-3 rounded-lg border border-edge bg-card p-4">
         {layoverRest ? (
-          <DownRouteLine isoDate={isoDate} homeTz={homeTz} station={layoverRest.station} />
+          <DownRouteLine isoDate={isoDate} homeTz={homeTz} rest={layoverRest} />
         ) : (
           <p className="text-sm text-ink-muted">{humanDateLabel(isoDate, homeTz)} — no duty</p>
         )}
@@ -503,7 +504,7 @@ function DayDetailCard({
       {sky && <WeatherField kind={sky.kind} code={sky.day.code} />}
       {/* The answer first, the detail under it. */}
       <div className="mb-4">
-        <DutyStatus legs={legs} homeTz={homeTz} now={now} layoverRest={layoverRest} readOnly={readOnly} />
+        <DutyStatus legs={legs} homeTz={homeTz} now={now} layoverRest={layoverRest} isoDate={isoDate} readOnly={readOnly} />
       </div>
       <TripSummaryLines
         sky={sky}

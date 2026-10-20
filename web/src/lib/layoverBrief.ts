@@ -128,6 +128,12 @@ export function restForDay(
   );
 }
 
+/** "19:40 Sun": the next report in the station's own clock, which is where she reads it. */
+export function freeUntilLabel(rest: LayoverRest): string {
+  const [weekday, , , time] = formatLocal(rest.nextReportUtc, rest.nextDepTz, { withDate: true }).split(" ");
+  return `${time} ${weekday}`;
+}
+
 /**
  * The text handed to the clipboard, for the crew member to paste into whichever assistant she
  * already uses.

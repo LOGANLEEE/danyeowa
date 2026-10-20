@@ -134,6 +134,56 @@ describe("DutyStatus", () => {
     expect(screen.getByTestId("duty-status-kicker")).not.toHaveTextContent("Down-route");
   });
 
+  it("answers a FUTURE day inside a rest from the rest itself, not from now", () => {
+    // Planning next week's Melbourne day from home: `now` is nowhere near the rest, and the
+    // card used to say "Departs from DXB · leaves in 8d", which is not what she tapped it for.
+    render(
+      <DutyStatus
+        legs={[out]}
+        homeTz={HOME_TZ}
+        now={at("2026-09-10T08:00:00.000Z")}
+        isoDate="2026-09-19"
+        layoverRest={melRest}
+      />,
+    );
+    expect(screen.getByTestId("duty-status-kicker")).toHaveTextContent("Down-route · MEL");
+    // Landing 11:50Z to the 17:45Z report next day: 29h 55m.
+    expect(screen.getByTestId("duty-status-hero")).toHaveTextContent("1d 5h free");
+    // Report in Melbourne's own clock, with its weekday: 17:45Z is 03:45 Mon there.
+    expect(screen.getByTestId("duty-status")).toHaveTextContent("until report 03:45 Mon · EK409");
+  });
+
+  it("gives HIM a date and time on that same future rest day, never a duration", () => {
+    render(
+      <DutyStatus
+        legs={[out]}
+        homeTz={HOME_TZ}
+        now={at("2026-09-10T08:00:00.000Z")}
+        isoDate="2026-09-19"
+        layoverRest={melRest}
+        readOnly
+      />,
+    );
+    // EK409 leaves Melbourne 19:15Z on the 20th: 23:15 Sun in Dubai, his clock.
+    expect(screen.getByTestId("duty-status-hero")).toHaveTextContent(/Sun 20 Sept? · 23:15/);
+    expect(screen.getByTestId("duty-status")).toHaveTextContent("in MEL until then");
+    expect(screen.getByTestId("duty-status-hero")).not.toHaveTextContent("free");
+  });
+
+  it("keeps the live state on TODAY even when the day sits inside a rest", () => {
+    // Today before she leaves: the question is still "when do I go", answered live.
+    render(
+      <DutyStatus
+        legs={[out]}
+        homeTz={HOME_TZ}
+        now={at("2026-09-18T21:00:00.000Z")} // 01:00 Sat 19 in Dubai, before the 22:40Z dep
+        isoDate="2026-09-19"
+        layoverRest={melRest}
+      />,
+    );
+    expect(screen.getByTestId("duty-status-kicker")).toHaveTextContent("Departs from DXB");
+  });
+
   it("prints no clock that the timeline below it already prints", () => {
     // The DEP/ARR board was deleted for being the timeline twice. This block must not become it.
     render(<DutyStatus legs={[out]} homeTz={HOME_TZ} now={at("2026-09-16T08:00:00.000Z")} />);
