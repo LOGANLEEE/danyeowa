@@ -11,6 +11,7 @@ const sessionId = crypto.randomUUID();
 let enabled = false;
 let queue: UsageEvent[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
+let lastAt = 0;
 
 /** On once /api/me says someone is signed in; a signed-out page records nothing. */
 export function setTrackingEnabled(on: boolean): void {
@@ -20,7 +21,9 @@ export function setTrackingEnabled(on: boolean): void {
 
 export function track<N extends UsageEventName>(name: N, props: UsageEventProps<N>): void {
   if (!enabled) return;
-  queue.push({ name, props, at: Date.now() } as UsageEvent);
+  // Strictly increasing, so the server can read a form's steps back in the order they happened.
+  lastAt = Math.max(Date.now(), lastAt + 1);
+  queue.push({ name, props, at: lastAt } as UsageEvent);
   timer ??= setTimeout(flush, FLUSH_AFTER_MS);
 }
 
@@ -44,8 +47,10 @@ function flush(): void {
   }
 }
 
-if (typeof document !== "undefined") {
-  document.addEventListener("visibilitychange", () => {
+// On window, not document: visibilitychange fires at document and bubbles here, so every
+// document listener (the add form's form_left) has queued its event before this flushes.
+if (typeof window !== "undefined") {
+  window.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flush();
   });
 }

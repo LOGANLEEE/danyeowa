@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { addDaysIso } from "@danyeowa/shared";
+import type { FormEntry } from "@danyeowa/shared";
 import { digitsOf, getAirlinePrefix } from "./lib/airlinePrefix";
 import { humanDateLabel } from "./lib/dateLabel";
 import { useTripEntry } from "./useTripEntry";
@@ -22,7 +23,10 @@ function AppendFlightControl({ entry, airlinePrefix }: { entry: UseTripEntryRetu
       <button
         type="button"
         data-testid="append-flight"
-        onClick={() => setExpanded(true)}
+        onClick={() => {
+          entry.recordStep("append_opened");
+          setExpanded(true);
+        }}
         className="min-h-11 w-fit text-sm text-ink-muted underline transition-colors duration-[120ms] hover:text-ink"
       >
         + add flight
@@ -76,11 +80,14 @@ export default function AddTripForm({
   isoDate,
   homeTz,
   onSubmitted,
+  entry: formEntry,
 }: {
   isoDate: string;
   homeTz: string;
   /** Fires once, right after a successful save (autofill or manual). */
   onSubmitted: () => void;
+  /** Which control put this form on screen, for /usage. */
+  entry?: FormEntry;
 }) {
   const flightNoInputRef = useRef<HTMLInputElement>(null);
   const pickedDate = isoDate;
@@ -95,6 +102,7 @@ export default function AddTripForm({
     homeTz,
     onSubmitted: () => onSubmitted(),
     trackUsage: true,
+    entry: formEntry,
   });
 
   useEffect(() => {

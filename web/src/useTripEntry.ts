@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Airport, LegInput, ScheduleLeg } from "@danyeowa/shared";
+import type { Airport, FormEntry, FormLastStep, FormStep, LegInput, ScheduleLeg } from "@danyeowa/shared";
 import {
   TripInputSchema,
   addDaysIso,
@@ -52,6 +52,9 @@ export type AutofillLegDraft = {
   depDate: string; // YYYY-MM-DD, from legDatesFromPicked
   depTime: string; // HH:MM, editable
   arrTime: string; // HH:MM, editable
+  /** What the schedule said, so a save can tell whether she corrected it. */
+  scheduledDepTime: string;
+  scheduledArrTime: string;
   dayOffset: number;
 };
 
@@ -81,6 +84,8 @@ function autofillLegsFrom(
     depDate: depDates[i]!,
     depTime: leg.depLocal,
     arrTime: leg.arrLocal,
+    scheduledDepTime: leg.depLocal,
+    scheduledArrTime: leg.arrLocal,
     dayOffset: leg.dayOffset,
   }));
 }
@@ -98,6 +103,8 @@ type Options = {
   /** Record this form's steps for /usage. Only the add form sets it: the day card mounts this
    * hook for every trip whether or not anyone edits, so counting there would invent opens. */
   trackUsage?: boolean;
+  /** Which control put this form on screen, recorded with the open. */
+  entry?: FormEntry;
 };
 
 /**
@@ -106,18 +113,55 @@ type Options = {
  * fire-and-forget confirmSchedule). `reportUtc` is intentionally never included in the saved
  * payload (Plan 10 Task 3) — the server derives it from `depUtc` on create.
  */
-export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = false }: Options) {
+export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = false, entry }: Options) {
   const record: typeof track = (name, props) => {
     if (trackUsage) track(name, props);
   };
   // "Opened" is her first touch, not the mount: the calendar mounts this form for the default
   // day on every load, so counting mounts would count app opens.
   const openedAt = useRef<number | null>(null);
+  const lastStep = useRef<FormLastStep>("opened");
+  const saved = useRef(false);
   function markOpened() {
     if (openedAt.current !== null) return;
     openedAt.current = Date.now();
-    record("add_form_opened", {});
+    record("add_form_opened", entry ? { entry } : {});
   }
+  const msSinceOpen = () => (openedAt.current === null ? 0 : Date.now() - openedAt.current);
+  /** One event per control she uses. A run of the same step (each keystroke in a time field)
+   * is one step: the timeline is about which controls cost her time, not how many key presses. */
+  function recordStep(step: FormStep) {
+    if (openedAt.current === null || lastStep.current === step) return;
+    lastStep.current = step;
+    record("form_step", { step, msSinceOpen: msSinceOpen() });
+  }
+
+  // Attention: the page going hidden mid-form (she switched app, locked the phone) and the form
+  // going away unsaved. Refs only, so one listener serves the form's whole life.
+  useEffect(() => {
+    if (!trackUsage) return;
+    const unsavedOpen = () => openedAt.current !== null && !saved.current;
+    const leave = (reason: "hidden" | "closed") =>
+      track("form_left", { lastStep: lastStep.current, msSinceOpen: msSinceOpen(), reason });
+    let hiddenAt: number | null = null;
+    // On document, so it runs before track.ts's window listener flushes the queue on hidden.
+    const onVisibility = () => {
+      if (!unsavedOpen()) return;
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+        leave("hidden");
+      } else if (hiddenAt !== null) {
+        track("form_resumed", { awayMs: Date.now() - hiddenAt });
+        hiddenAt = null;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (unsavedOpen()) leave("closed");
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackUsage]);
   const [mode, setMode] = useState<EntryMode>("flightno");
 
   const [flightNo, setFlightNo] = useState("");
@@ -198,7 +242,9 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
         record("flight_lookup", {
           result: result ? "found" : "unknown",
           ms: Date.now() - startedAt,
+          flightNo: candidate,
         });
+        lastStep.current = result ? "lookup_found" : "lookup_unknown";
         if (result) {
           setAutofillLegs(autofillLegsFrom(pickedDate, candidate, result.legs));
           // A different flight number is a different routing — never carry a stale pick over.
@@ -216,7 +262,8 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
           setLookupMiss(true);
         }
       } catch {
-        record("flight_lookup", { result: "error", ms: Date.now() - startedAt });
+        record("flight_lookup", { result: "error", ms: Date.now() - startedAt, flightNo: candidate });
+        lastStep.current = "lookup_error";
         // The schedule service is unreachable (e.g. a non-404 error from the live provider
         // chain) — treat it the same as a miss so the user can still fall back to manual
         // entry instead of getting stuck on "checking schedule…" forever.
@@ -266,9 +313,11 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
     const anchorDate = addDaysIso(lastLeg.depDate, lastLeg.dayOffset);
     const result = await lookupSchedule(candidate, anchorDate);
     if (!result) {
+      recordStep("append_missed");
       setAppendLookupMiss(true);
       return;
     }
+    recordStep("flight_appended");
     const appended = autofillLegsFrom(
       anchorDate,
       candidate,
@@ -284,6 +333,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
    * with the appended flight number. */
   function removeAppendedFlight() {
     if (!appendedFlightNo) return;
+    recordStep("appended_removed");
     setAutofillLegs((prev) =>
       prev ? prev.filter((leg) => leg.flightNo !== appendedFlightNo) : prev,
     );
@@ -298,6 +348,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
    * as they currently stand, so a time the crew has already corrected by hand survives the move.
    */
   function setBoardingLeg(index: number) {
+    recordStep("boarding_picked");
     setAutofillLegs((prev) => {
       if (!prev) return prev;
       const dates = legDatesFromPicked(
@@ -317,6 +368,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
   }
 
   function updateAutofillLeg(index: number, patch: Partial<AutofillLegDraft>) {
+    if (patch.depTime !== undefined || patch.arrTime !== undefined) recordStep("time_edited");
     setAutofillLegs((prev) => {
       if (!prev) return prev;
       const next = [...prev];
@@ -336,6 +388,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
     ]);
     setMode("manual");
     record("manual_entry_opened", {});
+    recordStep("manual_opened");
   }
 
   /** Returns to the flight-no entry screen — used after a successful manual save so the
@@ -346,6 +399,9 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
   }
 
   function updateLeg(index: number, patch: Partial<LegDraft>) {
+    if (patch.flightNo !== undefined) recordStep("manual_flightno_edited");
+    if (patch.origin !== undefined || patch.dest !== undefined) recordStep("airport_edited");
+    if (patch.dep !== undefined || patch.arr !== undefined) recordStep("manual_time_edited");
     setLegs((prev) => {
       const current = prev[index];
       if (!current) return prev;
@@ -378,6 +434,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
   }
 
   function addLeg() {
+    recordStep("leg_added");
     setLegs((prev) => {
       const last = prev[prev.length - 1];
       const leg = emptyLeg();
@@ -394,10 +451,20 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
     return airports.get(code)?.city ?? null;
   }
 
-  function recordSaved(path: "autofill" | "manual", legCount: number) {
-    const msSinceOpen = openedAt.current === null ? 0 : Date.now() - openedAt.current;
-    record("trip_saved", { path, legs: legCount, msSinceOpen });
+  function recordSaved(path: "autofill" | "manual", legCount: number, legsEdited?: number) {
+    saved.current = true;
+    record("trip_saved", {
+      path,
+      legs: legCount,
+      msSinceOpen: msSinceOpen(),
+      ...(legsEdited === undefined ? {} : { legsEdited }),
+    });
   }
+
+  useEffect(() => {
+    if (error) recordStep("error_shown");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error]);
 
   /** `status` is 0 when the request never got an answer (offline, aborted). */
   function recordSaveFailed(path: "autofill" | "manual", err: unknown) {
@@ -475,7 +542,13 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
       for (const payload of confirmPayloads) {
         confirmSchedule(payload).catch(() => {});
       }
-      recordSaved("autofill", resolvedLegs.length);
+      recordSaved(
+        "autofill",
+        resolvedLegs.length,
+        autofillLegs.filter(
+          (leg) => leg.depTime !== leg.scheduledDepTime || leg.arrTime !== leg.scheduledArrTime,
+        ).length,
+      );
       onSubmitted(created);
     } catch (err) {
       recordSaveFailed("autofill", err);
@@ -490,6 +563,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
    * above) so the crew never has to wait out the debounce + fetch before acting. */
   function requestSubmit() {
     if (!FLIGHT_NO_PATTERN.test(flightNo.toUpperCase())) return;
+    recordStep("submit_pressed");
     if (!resolving && autofillLegs && autofillFlightNo) {
       void handleAutofillSubmit();
     } else {
@@ -498,6 +572,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
   }
 
   async function handleManualSubmit() {
+    recordStep("submit_pressed");
     setError(null);
 
     // Let any lookup this trip depends on finish first. Without it, a fast typist — or a slow
@@ -558,12 +633,17 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
     mode,
     flightNo,
     setFlightNo: (value: string) => {
+      recordStep("flightno_edited");
       markOpened();
       setFlightNo(value);
     },
     autofillLegs,
     finalLegIndex,
-    setFinalLegIndex,
+    setFinalLegIndex: (index: number | null) => {
+      recordStep("final_picked");
+      setFinalLegIndex(index);
+    },
+    recordStep,
     boardingLegIndex,
     setBoardingLeg,
     autofillFlightNo,

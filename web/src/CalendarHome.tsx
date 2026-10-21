@@ -13,7 +13,7 @@ import {
 import { deleteTrip, getCrew, getCrewTrips, getTrips } from "./api";
 import { track } from "./lib/track";
 import type { TripWithFlights } from "./api";
-import type { CrewMember } from "@danyeowa/shared";
+import type { CrewMember, FormEntry } from "@danyeowa/shared";
 import AddTripForm from "./AddTripForm";
 import CrewBadges from "./CrewBadges";
 import { WeatherGlyph } from "./WeatherGlyph";
@@ -340,6 +340,7 @@ function DayDetailCard({
   onAdded,
   onChanged,
   readOnly = false,
+  formEntry = "default",
 }: {
   isoDate: string;
   trip: TripWithFlights | null;
@@ -359,6 +360,8 @@ function DayDetailCard({
   /** Viewing a crew member's roster: their day is readable, never editable. The API refuses
    * the writes regardless — this only keeps controls that would always fail off the screen. */
   readOnly?: boolean;
+  /** How this day came to be on screen, recorded when she opens its add form (/usage). */
+  formEntry?: FormEntry;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -488,6 +491,7 @@ function DayDetailCard({
           key={`${isoDate}-${addFormKey}`}
           isoDate={isoDate}
           homeTz={homeTz}
+          entry={addingHere ? "add_duty_here" : addFormKey > 0 ? "after_save" : formEntry}
           onSubmitted={() => {
             onAdded(isoDate);
             onChanged();
@@ -705,6 +709,7 @@ function DayDetail({
   onAdded,
   onChanged,
   readOnly = false,
+  formEntry,
 }: {
   isoDate: string;
   trips: TripWithFlights[];
@@ -719,6 +724,7 @@ function DayDetail({
   onAdded: (isoDate: string) => void;
   onChanged: () => void;
   readOnly?: boolean;
+  formEntry?: FormEntry;
 }) {
   const [addingAnother, setAddingAnother] = useState(false);
   // Picking a different day must not leave the second-duty form open on it.
@@ -744,6 +750,7 @@ function DayDetail({
           onAdded={onAdded}
           onChanged={onChanged}
           readOnly={readOnly}
+          formEntry={formEntry}
         />
       </div>
     );
@@ -773,6 +780,7 @@ function DayDetail({
           <AddTripForm
             isoDate={isoDate}
             homeTz={homeTz}
+            entry="add_another"
             onSubmitted={() => {
               onAdded(isoDate);
               onChanged();
@@ -821,6 +829,13 @@ function CalendarSkeleton() {
 export default function CalendarHome({ now, openTodayToken }: Props) {
   const [trips, setTrips] = useState<TripWithFlights[] | null>(null);
   const [selectedIso, setSelectedIso] = useState<string | null>(null);
+  // What last chose the day: a tap on the grid or the tab bar's +. Nothing chosen = "default".
+  const [pickedBy, setPickedBy] = useState<"day" | "plus">("day");
+  const formEntry: FormEntry = selectedIso === null ? "default" : pickedBy;
+  const pickDay = (iso: string) => {
+    setSelectedIso(iso);
+    setPickedBy("day");
+  };
   // Days added inline, marked on the grid immediately ahead of the refetch each add triggers
   // (cleared once that refetch's own data covers them).
   const [optimisticDays, setOptimisticDays] = useState<Set<string>>(new Set());
@@ -998,6 +1013,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
     // already had a duty could not take another one — now that it can, skipping would send you
     // to the wrong date to add the second duty of the day you are looking at.
     setSelectedIso(localDateKey(now.toISOString(), homeTz));
+    setPickedBy("plus");
     return;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openTodayToken, trips]);
@@ -1048,7 +1064,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           now={now}
           trips={trips}
           homeTz={homeTz}
-          onPickDay={setSelectedIso}
+          onPickDay={pickDay}
           optimisticIsoDates={optimisticDays}
           selectedIso={selectedIso}
         />
@@ -1066,6 +1082,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
             onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
             onChanged={refetch}
             readOnly={readOnly}
+            formEntry={formEntry}
           />
         </div>
       </div>
@@ -1098,7 +1115,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
         now={now}
         trips={trips}
         homeTz={homeTz}
-        onPickDay={setSelectedIso}
+        onPickDay={pickDay}
         optimisticIsoDates={optimisticDays}
         selectedIso={selectedIso}
       />
@@ -1159,6 +1176,7 @@ export default function CalendarHome({ now, openTodayToken }: Props) {
           onAdded={(iso) => setOptimisticDays((prev) => new Set(prev).add(iso))}
           onChanged={refetch}
           readOnly={readOnly}
+          formEntry={formEntry}
         />
       </div>
     </div>

@@ -161,6 +161,102 @@ describe("GET /api/usage", () => {
     expect(body.users.find((u) => u.email === CREW)!.medianMsToSave).toBe(2000);
   });
 
+  it("accepts the old shapes and the new props, and 400s on an unknown step or a bad flight no", async () => {
+    const ok = await postEvents(crewCookie, {
+      sessionId: "s1",
+      events: [
+        ev("add_form_opened", {}),
+        ev("add_form_opened", { entry: "plus" }),
+        ev("flight_lookup", { result: "found", ms: 1 }),
+        ev("flight_lookup", { result: "unknown", ms: 1, flightNo: "EK9999" }),
+        ev("trip_saved", { path: "autofill", legs: 2, msSinceOpen: 5, legsEdited: 1 }),
+        ev("form_step", { step: "time_edited", msSinceOpen: 5 }),
+        ev("form_left", { lastStep: "lookup_unknown", msSinceOpen: 5, reason: "hidden" }),
+        ev("form_resumed", { awayMs: 5 }),
+      ],
+    });
+    expect(ok.status).toBe(204);
+    for (const bad of [
+      ev("form_step", { step: "clicked_ad", msSinceOpen: 5 }),
+      ev("flight_lookup", { result: "unknown", ms: 1, flightNo: "ek 12; drop" }),
+      ev("flight_lookup", { result: "unknown", ms: 1, flightNo: "EK1234567" }),
+      ev("add_form_opened", { entry: "billboard" }),
+      ev("form_left", { lastStep: "opened", msSinceOpen: 5, reason: "bored" }),
+    ]) {
+      expect((await postEvents(crewCookie, { sessionId: "s1", events: [bad] })).status).toBe(400);
+    }
+  });
+
+  it("summarises missing flights, time edits, entries, abandons, sittings and form timelines", async () => {
+    const t = now - 100_000;
+    await postEvents(crewCookie, {
+      sessionId: "a",
+      events: [
+        // Form 1: opened from a day tap, a time edited, saved.
+        ev("add_form_opened", { entry: "day" }, t),
+        ev("flight_lookup", { result: "found", ms: 100, flightNo: "EK001" }, t + 1000),
+        ev("form_step", { step: "time_edited", msSinceOpen: 9000 }, t + 9000),
+        ev("form_step", { step: "submit_pressed", msSinceOpen: 10000 }, t + 10000),
+        ev("trip_saved", { path: "autofill", legs: 2, msSinceOpen: 10500, legsEdited: 1 }, t + 10500),
+        // Form 2: the blank form after the save; an unknown flight, hidden, back, closed.
+        ev("add_form_opened", { entry: "after_save" }, t + 20000),
+        ev("flight_lookup", { result: "unknown", ms: 100, flightNo: "EK999" }, t + 21000),
+        ev("form_left", { lastStep: "lookup_unknown", msSinceOpen: 2000, reason: "hidden" }, t + 22000),
+        ev("form_resumed", { awayMs: 60000 }, t + 82000),
+        ev("flight_lookup", { result: "error", ms: 100, flightNo: "EK999" }, t + 83000),
+        ev("form_left", { lastStep: "lookup_error", msSinceOpen: 64000, reason: "closed" }, t + 84000),
+        // Form 3: an old page, no entry; saved.
+        ev("add_form_opened", {}, t + 90000),
+        ev("trip_saved", { path: "manual", legs: 1, msSinceOpen: 5000 }, t + 95000),
+      ],
+    });
+    await postEvents(crewCookie, {
+      sessionId: "b",
+      events: [ev("flight_lookup", { result: "unknown", ms: 1, flightNo: "EK777" }, t - 50_000)],
+    });
+
+    const crew = ((await (await getUsage(viewerCookie)).json()) as UsageResponse).users.find(
+      (u) => u.email === CREW,
+    )!;
+    expect(crew.missingFlights).toEqual([
+      { flightNo: "EK999", unknown: 1, error: 1 },
+      { flightNo: "EK777", unknown: 1, error: 0 },
+    ]);
+    // The manual save carries no legsEdited and counts on neither side.
+    expect(crew.timeEdits).toEqual({ legsEdited: 1, legsAutofilled: 2 });
+    expect(crew.entries).toEqual({ day: 1, after_save: 1, unrecorded: 1 });
+    expect(crew.formLeft).toEqual({ closed: { lookup_error: 1 }, hidden: { lookup_unknown: 1 } });
+    // Saves at t+10500 and t+95000 in session a; b saved nothing.
+    expect(crew.sittings).toEqual([{ startedAt: t, saved: 2, medianGapMs: 84500 }]);
+
+    expect(crew.forms.map((f) => [f.entry, f.outcome])).toEqual([
+      ["unrecorded", "saved"],
+      ["after_save", "left"],
+      ["day", "saved"],
+    ]);
+    const first = crew.forms[2]!;
+    expect(first.steps.map((s) => [s.label, s.gapMs])).toEqual([
+      ["opened", 0],
+      ["lookup_found", 1000],
+      ["time_edited", 8000],
+      ["submit_pressed", 1000],
+      ["saved", 500],
+    ]);
+    expect(first.steps.filter((s) => s.longest).map((s) => s.label)).toEqual(["time_edited"]);
+    // The 60s away is shown, but the longest WORKING gap is the 1s ones around it.
+    const second = crew.forms[1]!;
+    expect(second.steps.map((s) => s.label)).toEqual([
+      "opened",
+      "lookup_unknown",
+      "left_hidden",
+      "resumed",
+      "lookup_error",
+      "left_closed",
+    ]);
+    expect(second.steps.find((s) => s.label === "resumed")!.gapMs).toBe(60000);
+    expect(second.steps.find((s) => s.longest)!.label).not.toBe("resumed");
+  });
+
   it("caps recent events at 30", async () => {
     const events = Array.from({ length: 20 }, () => ev("tab_viewed", { tab: "share" }));
     await postEvents(crewCookie, { sessionId: "s1", events });

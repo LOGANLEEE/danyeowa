@@ -1,19 +1,83 @@
 import { useEffect, useState } from "react";
-import type { UsageResponse, UsageUserSummary } from "@danyeowa/shared";
+import type { UsageFormTimeline, UsageResponse, UsageUserSummary } from "@danyeowa/shared";
 
 /** Owner-only: how adding a roster actually goes for the people using the app. The API 404s for
  * anyone not on USAGE_VIEWER_EMAILS, which is the gate — this page only renders what it gets. */
 
-const seconds = (ms: number | null) => (ms === null ? "—" : `${(ms / 1000).toFixed(1)}s`);
+function duration(ms: number | null): string {
+  if (ms === null) return "—";
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  const total = Math.round(ms / 1000);
+  return total < 3600
+    ? `${Math.floor(total / 60)}m ${total % 60}s`
+    : `${Math.floor(total / 3600)}h ${Math.floor((total % 3600) / 60)}m`;
+}
 
-function Row({ label, value, testId }: { label: string; value: string | number; testId?: string }) {
+const when = (at: number) =>
+  new Date(at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+
+function Row({
+  label,
+  value,
+  testId,
+  rowTestId,
+  emphasis = false,
+}: {
+  label: string;
+  value: string | number;
+  testId?: string;
+  rowTestId?: string;
+  emphasis?: boolean;
+}) {
   return (
-    <div className="flex min-h-11 items-center justify-between gap-4 border-b border-edge last:border-b-0">
+    <div
+      data-testid={rowTestId}
+      className="flex min-h-11 items-center justify-between gap-4 border-b border-edge last:border-b-0"
+    >
       <dt className="text-ink-muted">{label}</dt>
       {/* The value never wraps ("1 / 0 /" then "0" read as two numbers); the label does. */}
-      <dd data-testid={testId} className="num shrink-0 whitespace-nowrap text-ink">
+      <dd
+        data-testid={testId}
+        className={`num shrink-0 whitespace-nowrap ${emphasis ? "font-semibold text-report" : "text-ink"}`}
+      >
         {value}
       </dd>
+    </div>
+  );
+}
+
+function Heading({ children }: { children: string }) {
+  return <h3 className="text-xs uppercase text-ink-muted">{children}</h3>;
+}
+
+const STEP_LABELS: Record<string, string> = {
+  opened: "opened (first keystroke)",
+  left_hidden: "left: page hidden",
+  left_closed: "left: form closed",
+  resumed: "back after",
+};
+const stepLabel = (label: string) => STEP_LABELS[label] ?? label.replaceAll("_", " ");
+
+function FormTimeline({ form }: { form: UsageFormTimeline }) {
+  return (
+    <div data-testid="usage-form" className="flex flex-col">
+      <p className="text-sm text-ink">
+        <span className="num">{when(form.openedAt)}</span> · from {form.entry.replaceAll("_", " ")} ·{" "}
+        {form.outcome}
+      </p>
+      <dl className="flex flex-col">
+        {form.steps.map((s, i) => (
+          <Row
+            key={i}
+            rowTestId="usage-form-step"
+            testId={s.longest ? "usage-form-longest" : undefined}
+            emphasis={s.longest}
+            label={stepLabel(s.label)}
+            // Away time is how long she was gone, not a step she spent on the form.
+            value={i === 0 ? "—" : s.label === "resumed" ? duration(s.gapMs) : `+${duration(s.gapMs)}`}
+          />
+        ))}
+      </dl>
     </div>
   );
 }
@@ -42,12 +106,85 @@ function UserUsage({ u }: { u: UsageUserSummary }) {
         />
         <Row label="…by autofill / manual" value={`${f.tripSaved.autofill} / ${f.tripSaved.manual}`} />
         <Row label="Save failed" value={f.tripSaveFailed} />
-        <Row label="Median open → saved" value={seconds(u.medianMsToSave)} testId="usage-median" />
+        <Row label="Median open → saved" value={duration(u.medianMsToSave)} testId="usage-median" />
+        <Row
+          label="Legs time-edited / autofilled"
+          value={`${u.timeEdits.legsEdited} / ${u.timeEdits.legsAutofilled}`}
+          testId="usage-time-edits"
+        />
         {Object.entries(u.tabViewed).map(([tab, n]) => (
           <Row key={tab} label={`Tab: ${tab}`} value={n} />
         ))}
       </dl>
-      <h3 className="text-xs uppercase text-ink-muted">Recent</h3>
+      {u.missingFlights.length > 0 && (
+        <>
+          <Heading>Missing flights</Heading>
+          <dl className="flex flex-col">
+            {u.missingFlights.map((m) => (
+              <Row
+                key={m.flightNo}
+                label={m.flightNo}
+                value={`${m.unknown} unknown / ${m.error} error`}
+                testId={`usage-missing-${m.flightNo}`}
+              />
+            ))}
+          </dl>
+        </>
+      )}
+      {Object.keys(u.entries).length > 0 && (
+        <>
+          <Heading>Add form opened from</Heading>
+          <dl className="flex flex-col">
+            {Object.entries(u.entries).map(([entry, n]) => (
+              <Row key={entry} label={entry.replaceAll("_", " ")} value={n} testId={`usage-entry-${entry}`} />
+            ))}
+          </dl>
+        </>
+      )}
+      {(() => {
+        const steps = [...new Set([...Object.keys(u.formLeft.closed), ...Object.keys(u.formLeft.hidden)])];
+        return steps.length === 0 ? null : (
+          <>
+            <Heading>Left the form after — closed / hidden</Heading>
+            <dl className="flex flex-col">
+              {steps.map((step) => (
+                <Row
+                  key={step}
+                  label={stepLabel(step)}
+                  value={`${u.formLeft.closed[step] ?? 0} / ${u.formLeft.hidden[step] ?? 0}`}
+                  testId={`usage-left-${step}`}
+                />
+              ))}
+            </dl>
+          </>
+        );
+      })()}
+      {u.sittings.length > 0 && (
+        <>
+          <Heading>Sittings — saved · median gap</Heading>
+          <dl className="flex flex-col">
+            {u.sittings.map((s) => (
+              <Row
+                key={s.startedAt}
+                label={when(s.startedAt)}
+                value={`${s.saved} saved · ${duration(s.medianGapMs)}`}
+                testId="usage-sitting"
+              />
+            ))}
+          </dl>
+        </>
+      )}
+      {u.forms.length > 0 && (
+        <>
+          <Heading>Last forms, step by step</Heading>
+          <div className="flex flex-col gap-4">
+            {u.forms.map((form) => (
+              <FormTimeline key={form.openedAt} form={form} />
+            ))}
+          </div>
+        </>
+      )}
+      <Heading>Recent</Heading>
       <ol className="flex flex-col gap-1 text-sm">
         {u.recent.map((e, i) => (
           <li key={i} className="flex flex-wrap gap-x-2 text-ink">
