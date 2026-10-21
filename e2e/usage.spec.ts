@@ -35,7 +35,10 @@ test("a trip added through the form, and a form she walked away from, show up st
   await crew.getByTestId("flightno-input").fill(FIXTURE.flightNo.slice(2));
   await expect(crew.getByTestId("autofill-card")).toBeVisible();
   // Her roster says a different departure than the schedule: one leg corrected by hand.
-  await crew.getByTestId("autofill-dep").fill("10:15");
+  // Always a different time from the one shown. A fixed "10:15" stopped being an edit: the save
+  // confirms the time to the crowd layer, so the next run's lookup autofilled 10:15 itself.
+  const dep = crew.getByTestId("autofill-dep");
+  await dep.fill((await dep.inputValue()) === "10:15" ? "10:16" : "10:15");
   await crew.getByRole("button", { name: /add to roster/i }).click();
   await expectRosterCount(crew, 1);
 
