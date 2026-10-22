@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -94,8 +94,9 @@ describe("App", () => {
     stubSignedInFetch();
     render(<App />);
     await screen.findByTestId("tab-calendar");
-    // Otherwise the next reload puts them back on a sign-in form they no longer need.
-    expect(window.location.pathname).toBe("/");
+    // Otherwise the next reload puts them back on a sign-in form they no longer need. Waited for:
+    // the rewrite is a passive effect, and under load the tab can be found before it has run.
+    await waitFor(() => expect(window.location.pathname).toBe("/"));
   });
 
   it("hides the tab bar when signed out", async () => {

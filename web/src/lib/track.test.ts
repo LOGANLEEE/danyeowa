@@ -12,7 +12,8 @@ function posted(call: number) {
 
 function setVisibility(state: "hidden" | "visible") {
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
-  document.dispatchEvent(new Event("visibilitychange"));
+  // Bubbles, as the browser's own does (HTML spec: "with its bubbles attribute initialized to true").
+  document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
 }
 
 beforeEach(async () => {
@@ -70,6 +71,32 @@ describe("track", () => {
     mod.track("trip_deleted", {});
     setVisibility("hidden");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets an event recorded by the page's own hidden handler into the flush on hidden", async () => {
+    mod.setTrackingEnabled(true);
+    // The add form registers its listener long after this module loaded, and records form_left
+    // from it. Hidden may be the last moment the page runs, so that event must leave now.
+    const formLeft = () =>
+      mod.track("form_left", { lastStep: "opened", msSinceOpen: 1, reason: "hidden" });
+    document.addEventListener("visibilitychange", formLeft);
+    try {
+      setVisibility("hidden");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(posted(0).body.events.map((e: { name: string }) => e.name)).toEqual(["form_left"]);
+    } finally {
+      document.removeEventListener("visibilitychange", formLeft);
+    }
+  });
+
+  it("keeps events in the order they were recorded, even within one millisecond", async () => {
+    mod.setTrackingEnabled(true);
+    vi.setSystemTime(1_800_000_000_000);
+    mod.track("add_form_opened", {});
+    mod.track("form_step", { step: "time_edited", msSinceOpen: 0 });
+    await vi.advanceTimersByTimeAsync(2000);
+    const [a, b] = posted(0).body.events as { at: number }[];
+    expect(b!.at).toBeGreaterThan(a!.at);
   });
 
   it("splits more than 20 queued events into batches the server accepts", async () => {

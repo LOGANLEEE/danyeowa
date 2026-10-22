@@ -695,3 +695,175 @@ describe("useTripEntry usage events", () => {
     expect(names()).not.toContain("trip_saved");
   });
 });
+
+/** The step-by-step half of /usage: which controls she used inside one add form, and when she
+ * walked away from it. */
+describe("useTripEntry form steps and attention", () => {
+  beforeEach(() => {
+    vi.mocked(track).mockReset();
+    vi.mocked(createTrip).mockReset();
+    vi.mocked(lookupSchedule).mockReset();
+    vi.mocked(confirmSchedule).mockResolvedValue(undefined);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    vi.useRealTimers();
+  });
+
+  const calls = () => vi.mocked(track).mock.calls.map(([name, props]) => [name, props] as const);
+  const steps = () =>
+    calls()
+      .filter(([n]) => n === "form_step")
+      .map(([, p]) => (p as { step: string }).step);
+  const propsOf = (name: string) =>
+    calls().find(([n]) => n === name)?.[1] as Record<string, unknown> | undefined;
+  function setVisibility(state: "hidden" | "visible") {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => state });
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+  }
+
+  function mount(entry?: "day" | "plus") {
+    return renderHook(() =>
+      useTripEntry({
+        pickedDate: "2026-08-20",
+        homeTz: "Asia/Dubai",
+        onSubmitted: vi.fn(),
+        trackUsage: true,
+        entry,
+      }),
+    );
+  }
+
+  async function lookUp(result: { current: ReturnType<typeof useTripEntry> }, flightNo: string) {
+    act(() => result.current.setFlightNo(flightNo));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+  }
+
+  it("names the control that opened the form, and the flight number a lookup asked for", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue(null);
+    const { result } = mount("plus");
+    await lookUp(result, "EK999");
+    await waitFor(() => expect(result.current.lookupMiss).toBe(true));
+    expect(propsOf("add_form_opened")).toEqual({ entry: "plus" });
+    expect(propsOf("flight_lookup")).toMatchObject({ result: "unknown", flightNo: "EK999" });
+  });
+
+  it("counts the legs whose time she changed from the schedule's when the autofill is saved", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: [EK001_LEG, { ...EK001_LEG, legSeq: 1 }] });
+    vi.mocked(createTrip).mockResolvedValue(SAVED);
+    const { result } = mount();
+    await lookUp(result, "EK001");
+    await waitFor(() => expect(result.current.autofillLegs).not.toBeNull());
+    act(() => result.current.updateAutofillLeg(1, { depTime: "10:00" }));
+    act(() => result.current.updateAutofillLeg(1, { arrTime: "14:00" }));
+    // Set back to what the schedule said: not an edit.
+    act(() => result.current.updateAutofillLeg(0, { depTime: "10:00" }));
+    act(() => result.current.updateAutofillLeg(0, { depTime: "09:15" }));
+    await act(async () => {
+      await result.current.handleAutofillSubmit();
+    });
+    expect(propsOf("trip_saved")).toMatchObject({ path: "autofill", legs: 2, legsEdited: 1 });
+  });
+
+  it("records one step per control she uses, never the same step twice in a row", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: [EK001_LEG, { ...EK001_LEG, legSeq: 1 }] });
+    const { result } = mount();
+    await lookUp(result, "EK001");
+    await waitFor(() => expect(result.current.autofillLegs).not.toBeNull());
+    act(() => result.current.setFlightNo("EK0011"));
+    act(() => result.current.setFlightNo("EK001"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    await waitFor(() => expect(result.current.autofillLegs).not.toBeNull());
+    act(() => result.current.updateAutofillLeg(0, { depTime: "10:00" }));
+    act(() => result.current.updateAutofillLeg(0, { arrTime: "14:00" }));
+    act(() => result.current.setBoardingLeg(1));
+    act(() => result.current.setFinalLegIndex(1));
+    act(() => result.current.recordStep("append_opened"));
+    act(() => result.current.requestSubmit());
+    expect(steps()).toEqual([
+      "flightno_edited",
+      "time_edited",
+      "boarding_picked",
+      "final_picked",
+      "append_opened",
+      "submit_pressed",
+    ]);
+  });
+
+  it("records the manual path's controls and an error once it is on screen", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue(null);
+    vi.mocked(getAirport).mockResolvedValue(null);
+    const { result } = mount();
+    await lookUp(result, "EK999");
+    act(() => result.current.switchToManual());
+    act(() => result.current.updateLeg(0, { origin: "XXX" }));
+    act(() => result.current.updateLeg(0, { dep: "2026-08-20T08:00" }));
+    act(() => result.current.updateLeg(0, { flightNo: "EK9" }));
+    act(() => result.current.addLeg());
+    await act(async () => {
+      await result.current.handleManualSubmit();
+    });
+    expect(steps()).toEqual([
+      "manual_opened",
+      "airport_edited",
+      "manual_time_edited",
+      "manual_flightno_edited",
+      "leg_added",
+      "submit_pressed",
+      "error_shown",
+    ]);
+  });
+
+  it("records nothing before the form is opened, and nothing when an unopened form goes away", () => {
+    const { unmount } = mount();
+    setVisibility("hidden");
+    setVisibility("visible");
+    unmount();
+    expect(track).not.toHaveBeenCalled();
+  });
+
+  it("records leaving when the page is hidden mid-form, and coming back", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue(null);
+    const { result } = mount();
+    await lookUp(result, "EK999");
+    await waitFor(() => expect(result.current.lookupMiss).toBe(true));
+
+    setVisibility("hidden");
+    expect(propsOf("form_left")).toMatchObject({ reason: "hidden", lastStep: "lookup_unknown" });
+    expect(propsOf("form_left")!.msSinceOpen).toBeGreaterThanOrEqual(400);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    setVisibility("visible");
+    expect(propsOf("form_resumed")!.awayMs).toBeGreaterThanOrEqual(3000);
+  });
+
+  it("records leaving when an opened form unmounts unsaved, and not when it was saved", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: [EK001_LEG] });
+    vi.mocked(createTrip).mockResolvedValue(SAVED);
+    const first = mount();
+    await lookUp(first.result, "EK001");
+    await waitFor(() => expect(first.result.current.autofillLegs).not.toBeNull());
+    act(() => first.result.current.updateAutofillLeg(0, { depTime: "10:00" }));
+    first.unmount();
+    expect(propsOf("form_left")).toMatchObject({ reason: "closed", lastStep: "time_edited" });
+
+    vi.mocked(track).mockReset();
+    const second = mount();
+    await lookUp(second.result, "EK001");
+    await waitFor(() => expect(second.result.current.autofillLegs).not.toBeNull());
+    await act(async () => {
+      await second.result.current.handleAutofillSubmit();
+    });
+    setVisibility("hidden");
+    second.unmount();
+    expect(calls().map(([n]) => n)).not.toContain("form_left");
+  });
+});

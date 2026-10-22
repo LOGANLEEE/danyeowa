@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UsageResponse } from "@danyeowa/shared";
@@ -29,6 +29,25 @@ const USAGE: UsageResponse = {
       },
       medianMsToSave: 12_500,
       tabViewed: { settings: 2 },
+      missingFlights: [{ flightNo: "EK999", unknown: 2, error: 1 }],
+      timeEdits: { legsEdited: 1, legsAutofilled: 4 },
+      entries: { day: 3, plus: 2 },
+      formLeft: { closed: { lookup_unknown: 1 }, hidden: { time_edited: 2 } },
+      sittings: [{ startedAt: 1_790_000_000_000, saved: 3, medianGapMs: 45_000 }],
+      forms: [
+        {
+          openedAt: 1_790_000_000_000,
+          entry: "day",
+          outcome: "saved",
+          steps: [
+            { label: "opened", gapMs: 0, longest: false },
+            { label: "time_edited", gapMs: 8000, longest: true },
+            { label: "left_hidden", gapMs: 1000, longest: false },
+            { label: "resumed", gapMs: 125_000, longest: false },
+            { label: "saved", gapMs: 500, longest: false },
+          ],
+        },
+      ],
       recent: [{ name: "trip_saved", props: { path: "autofill", legs: 1, msSinceOpen: 9000 }, at: 1_790_000_000_000 }],
     },
   ],
@@ -65,7 +84,8 @@ describe("usage tracking in the app shell", () => {
     stubFetch(false);
     render(<App />);
     await screen.findByTestId("tab-calendar");
-    expect(setTrackingEnabled).toHaveBeenCalledWith(true);
+    // The tab can paint before the passive effect that turns tracking on runs, under a loaded suite.
+    await waitFor(() => expect(setTrackingEnabled).toHaveBeenLastCalledWith(true));
     expect(track).toHaveBeenCalledWith("app_opened", { standalone: false });
   });
 
@@ -99,5 +119,24 @@ describe("usage tracking in the app shell", () => {
     expect(within(user).getByTestId("usage-add_form_opened")).toHaveTextContent("5");
     expect(within(user).getByTestId("usage-trip_saved")).toHaveTextContent("4");
     expect(within(user).getByTestId("usage-median")).toHaveTextContent("12.5s");
+  });
+
+  it("renders where the add flow is slow: misses, entries, abandons, sittings, timelines", async () => {
+    window.history.pushState({}, "", "/usage");
+    stubFetch(true);
+    render(<App />);
+    const user = await screen.findByTestId("usage-user");
+    expect(within(user).getByTestId("usage-missing-EK999")).toHaveTextContent("2 unknown / 1 error");
+    expect(within(user).getByTestId("usage-time-edits")).toHaveTextContent("1 / 4");
+    expect(within(user).getByTestId("usage-entry-plus")).toHaveTextContent("2");
+    expect(within(user).getByTestId("usage-left-time_edited")).toHaveTextContent("0 / 2");
+    expect(within(user).getByTestId("usage-sitting")).toHaveTextContent("3 saved · 45.0s");
+
+    const timeline = within(user).getByTestId("usage-form");
+    expect(within(timeline).getAllByTestId("usage-form-step")).toHaveLength(5);
+    expect(within(timeline).getByTestId("usage-form-longest")).toHaveTextContent("+8.0s");
+    // Time away reads as time away, in minutes once it is that long.
+    expect(within(timeline).getByText(/back after/i)).toBeInTheDocument();
+    expect(timeline).toHaveTextContent("2m 5s");
   });
 });

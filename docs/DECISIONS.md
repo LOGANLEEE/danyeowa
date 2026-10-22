@@ -8,6 +8,48 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-10-22 (the add form records named steps, never a replay)
+
+### Named steps, not session replay
+
+To see where adding a roster is slow, `/usage` now gets one `form_step` per control she uses in
+the add form, from a zod allowlist in `shared/src/usage.ts` (`FORM_STEPS`): `time_edited`,
+`boarding_picked`, `manual_opened`, `submit_pressed`, `error_shown`, and so on. A name not on the
+list is a 400. Step events carry the step and the ms since the form opened, and nothing else: no
+field values, no times, no airport codes. The one value recorded is the flight number on a lookup,
+because "which flights are missing" is the question that needs it.
+
+Session replay / DOM recording was ruled out: the screen she is on IS her roster, so a recording
+captures exactly what the tracking must not hold. A step name answers "which control cost her
+time" without any of it.
+
+A run of the same step (each keystroke in a time field) is one event. The timeline is about which
+controls cost time, not how many key presses they took, and it stops one time field from
+writing dozens of rows.
+
+### What "attention lost" means
+
+`form_left` fires in two cases, and only for a form she has opened (first keystroke) and not saved:
+
+- **`hidden`:** the page went hidden while the form was open. She switched app, locked the phone,
+  or went to her roster screenshot. It is not an abandon. `form_resumed {awayMs}` follows if she
+  comes back to the same form, and the timeline shows that gap as time away. It never counts as
+  the longest gap she spent working.
+- **`closed`:** the form unmounted unsaved. She tapped another day, changed tab, or closed "add
+  another". This is the abandon, and `lastStep` says what she had just done.
+
+Hidden can be the last moment a page runs, so the event has to leave in that same flush.
+`track.ts` now listens on `window`. `visibilitychange` fires at `document` and bubbles to `window`,
+so the form's own `document` listener has queued `form_left` before the flush runs. With both on
+`document`, the flush ran first and sent an empty queue (`track.test.ts` caught this when the
+listener was moved back).
+
+Not proven in a real browser: headless Chrome never makes a page hidden. `bringToFront` and a
+minimised window both left `visibilityState` at "visible" (measured 2026-10-22). So the e2e sends
+the same bubbling event the browser sends, and does not prove iOS sends it on app switch.
+
+---
+
 ## 2026-10-20 (the day card answers a rest day you are planning, not only the one you are in)
 
 ### Direction A was chosen, and was mostly built already

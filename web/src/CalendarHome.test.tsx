@@ -679,10 +679,10 @@ describe("CalendarHome", () => {
     await screen.findByTestId("day-detail-card");
     await user.click(screen.getByTestId("calendar-day-2026-08-20"));
     const input = await screen.findByTestId("flightno-input");
-    expect(track).not.toHaveBeenCalledWith("add_form_opened", {});
+    expect(track).not.toHaveBeenCalledWith("add_form_opened", expect.anything());
 
     await user.type(input, "4");
-    expect(track).toHaveBeenCalledWith("add_form_opened", {});
+    expect(track).toHaveBeenCalledWith("add_form_opened", { entry: "day" });
   });
 
   it("a delete failure from the day card shows an alert and keeps the confirm row open", async () => {
@@ -1325,5 +1325,38 @@ describe("CalendarHome", () => {
       );
       expect(screen.getByTestId("day-detail-card")).not.toHaveTextContent("AKL");
     });
+  });
+});
+
+describe("CalendarHome — which control opened the add form (/usage)", () => {
+  const openedWith = () =>
+    vi.mocked(track).mock.calls.filter(([n]) => n === "add_form_opened").map(([, p]) => p);
+
+  async function typeDigit() {
+    await userEvent.type(await screen.findByTestId("flightno-input"), "1");
+  }
+
+  it("tells the day she opened on, a tapped day, the + button and add-another apart", async () => {
+    vi.mocked(getTrips).mockResolvedValue([aklTrip]);
+    vi.mocked(lookupSchedule).mockResolvedValue(null);
+    vi.mocked(track).mockClear();
+    const { rerender } = render(<CalendarHome now={now} openTodayToken={0} />);
+
+    await typeDigit();
+    await userEvent.click(screen.getByTestId("calendar-day-2026-08-14"));
+    await typeDigit();
+    rerender(<CalendarHome now={now} openTodayToken={1} />);
+    await waitFor(() => expect(screen.getByTestId("day-detail-card")).toHaveTextContent("Mon 10 Aug"));
+    await typeDigit();
+    await userEvent.click(screen.getByTestId("calendar-day-2026-08-11"));
+    await userEvent.click(await screen.findByTestId("add-another-duty"));
+    await typeDigit();
+
+    expect(openedWith()).toEqual([
+      { entry: "default" },
+      { entry: "day" },
+      { entry: "plus" },
+      { entry: "add_another" },
+    ]);
   });
 });
