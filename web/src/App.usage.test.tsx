@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UsageResponse } from "@danyeowa/shared";
@@ -84,7 +84,8 @@ describe("usage tracking in the app shell", () => {
     stubFetch(false);
     render(<App />);
     await screen.findByTestId("tab-calendar");
-    expect(setTrackingEnabled).toHaveBeenCalledWith(true);
+    // The tab can paint before the passive effect that turns tracking on runs, under a loaded suite.
+    await waitFor(() => expect(setTrackingEnabled).toHaveBeenLastCalledWith(true));
     expect(track).toHaveBeenCalledWith("app_opened", { standalone: false });
   });
 
