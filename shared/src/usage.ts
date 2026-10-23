@@ -71,6 +71,10 @@ const UsageEventVariants = z.discriminatedUnion("name", [
     name: z.literal("trip_save_failed"),
     props: z.object({ path, status: z.number().int().min(0).max(599) }),
   }),
+  z.object({
+    name: z.literal("queued_submit_dropped"),
+    props: z.object({ reason: z.enum(["lookup_unknown", "lookup_error", "save_failed"]) }),
+  }),
   z.object({ name: z.literal("trip_deleted"), props: z.object({}) }),
   z.object({
     name: z.literal("form_step"),

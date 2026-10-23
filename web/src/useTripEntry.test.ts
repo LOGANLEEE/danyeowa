@@ -867,3 +867,133 @@ describe("useTripEntry form steps and attention", () => {
     expect(calls().map(([n]) => n)).not.toContain("form_left");
   });
 });
+
+/** The prod loss of 2026-10-23: Add pressed before the lookup answered, then the day changed
+ * and the form unmounted, so the queued submit never ran and nothing was recorded. */
+describe("useTripEntry submit queued across an unmount", () => {
+  beforeEach(() => {
+    vi.mocked(track).mockReset();
+    vi.mocked(createTrip).mockReset();
+    vi.mocked(lookupSchedule).mockReset();
+    vi.mocked(confirmSchedule).mockReset();
+    vi.mocked(confirmSchedule).mockResolvedValue(undefined);
+    vi.mocked(createTrip).mockResolvedValue(SAVED);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const dropped = () =>
+    vi.mocked(track).mock.calls.filter(([n]) => n === "queued_submit_dropped").map(([, p]) => p);
+
+  function mount(onSubmitted = vi.fn()) {
+    return renderHook(() =>
+      useTripEntry({ pickedDate: "2026-08-20", homeTz: "Asia/Dubai", onSubmitted, trackUsage: true }),
+    );
+  }
+
+  const flush = () =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+
+  it("saves when the form unmounts while the lookup is in flight", async () => {
+    let answer!: (v: { legs: (typeof EK001_LEG)[] }) => void;
+    vi.mocked(lookupSchedule).mockReturnValue(new Promise((r) => (answer = r)));
+    const onSubmitted = vi.fn();
+    const { result, unmount } = mount(onSubmitted);
+    act(() => result.current.setFlightNo("EK001"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    act(() => result.current.requestSubmit());
+    unmount();
+    answer({ legs: [EK001_LEG] });
+    await flush();
+
+    expect(lookupSchedule).toHaveBeenCalledTimes(1);
+    expect(createTrip).toHaveBeenCalledTimes(1);
+    const sent = vi.mocked(createTrip).mock.calls[0]![0];
+    expect(sent.legs).toHaveLength(1);
+    expect(sent.legs[0]).toMatchObject({ flightNo: "EK1", origin: "DXB", dest: "LHR", operating: true });
+    expect(confirmSchedule).toHaveBeenCalledTimes(1);
+    expect(onSubmitted).toHaveBeenCalledWith(SAVED);
+    expect(vi.mocked(track).mock.calls.map(([n]) => n)).toContain("trip_saved");
+  });
+
+  it("saves when the form unmounts before the debounce fires", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: [EK001_LEG] });
+    const onSubmitted = vi.fn();
+    const { result, unmount } = mount(onSubmitted);
+    act(() => result.current.setFlightNo("EK001"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    act(() => result.current.requestSubmit());
+    unmount();
+    await flush();
+
+    expect(lookupSchedule).toHaveBeenCalledTimes(1);
+    expect(lookupSchedule).toHaveBeenCalledWith("EK1", "2026-08-20");
+    expect(createTrip).toHaveBeenCalledTimes(1);
+    expect(onSubmitted).toHaveBeenCalledTimes(1);
+  });
+
+  it("records one queued_submit_dropped and saves nothing when the lookup finds no flight", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue(null);
+    const { result, unmount } = mount();
+    act(() => result.current.setFlightNo("EK999"));
+    act(() => result.current.requestSubmit());
+    unmount();
+    await flush();
+
+    expect(createTrip).not.toHaveBeenCalled();
+    expect(dropped()).toEqual([{ reason: "lookup_unknown" }]);
+  });
+
+  it("records lookup_error when the lookup throws", async () => {
+    vi.mocked(lookupSchedule).mockRejectedValue(new Error("down"));
+    const { result, unmount } = mount();
+    act(() => result.current.setFlightNo("EK001"));
+    act(() => result.current.requestSubmit());
+    unmount();
+    await flush();
+
+    expect(createTrip).not.toHaveBeenCalled();
+    expect(dropped()).toEqual([{ reason: "lookup_error" }]);
+  });
+
+  it("records save_failed (and the save failure) when createTrip throws", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: [EK001_LEG] });
+    vi.mocked(createTrip).mockRejectedValue(Object.assign(new Error("boom"), { status: 500 }));
+    const onSubmitted = vi.fn();
+    const { result, unmount } = mount(onSubmitted);
+    act(() => result.current.setFlightNo("EK001"));
+    act(() => result.current.requestSubmit());
+    unmount();
+    await flush();
+
+    expect(dropped()).toEqual([{ reason: "save_failed" }]);
+    expect(vi.mocked(track)).toHaveBeenCalledWith("trip_save_failed", { path: "autofill", status: 500 });
+    expect(onSubmitted).not.toHaveBeenCalled();
+  });
+
+  it("while mounted, the queued submit still saves exactly once", async () => {
+    vi.mocked(lookupSchedule).mockResolvedValue({ legs: [EK001_LEG] });
+    const onSubmitted = vi.fn();
+    const { result, unmount } = mount(onSubmitted);
+    act(() => result.current.setFlightNo("EK001"));
+    act(() => result.current.requestSubmit());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    await waitFor(() => expect(onSubmitted).toHaveBeenCalledTimes(1));
+    unmount();
+    await flush();
+
+    expect(createTrip).toHaveBeenCalledTimes(1);
+    expect(dropped()).toEqual([]);
+  });
+});
