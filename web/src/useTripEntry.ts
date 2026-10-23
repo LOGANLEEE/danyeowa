@@ -90,6 +90,70 @@ function autofillLegsFrom(
   }));
 }
 
+type ConfirmPayload = {
+  flightNo: string;
+  legSeq: number;
+  origin: string;
+  dest: string;
+  depLocal: string;
+  arrLocal: string;
+  dayOffset: number;
+};
+
+/** Pure: the trip payload and crowd-confirm payloads for a set of autofilled legs. Shared by the
+ * mounted submit and the unmount-time one, so both save identical trips. */
+function buildAutofillTrip(
+  autofillLegs: AutofillLegDraft[],
+  boardingLegIndex: number | null,
+  finalLegIndex: number | null,
+) {
+  const resolvedLegs: LegInput[] = [];
+  const confirmPayloads: ConfirmPayload[] = [];
+
+  // Everything outside the sectors she works is the aircraft's own routing — what it flew to
+  // reach her, and where it goes after she gets off. Stored so the routing stays true, flagged
+  // so no derived time (landing, report, day marks, alerts) counts it.
+  const firstOperating = boardingLegIndex ?? 0;
+  const lastOperating = finalLegIndex ?? autofillLegs.length - 1;
+
+  for (const [index, leg] of autofillLegs.entries()) {
+    const operating = index >= firstOperating && index <= lastOperating;
+    const depUtc = wallToUtc(
+      `${leg.depDate}T${leg.depTime}:00`,
+      leg.originTz,
+    );
+    // Arrival date = this leg's own dep date + this leg's own dayOffset (arr date - dep date).
+    const arrDate = addDaysIso(leg.depDate, leg.dayOffset);
+    const arrUtc = wallToUtc(`${arrDate}T${leg.arrTime}:00`, leg.destTz);
+
+    // reportUtc intentionally omitted — the server derives it (dep - 90min) when absent.
+    resolvedLegs.push({
+      flightNo: leg.flightNo,
+      origin: leg.origin,
+      dest: leg.dest,
+      depUtc,
+      arrUtc,
+      operating,
+    });
+    // Only sectors she actually worked are reported back to the crowd layer. She can vouch
+    // for the times she flew; a sector she got off before is hearsay, and `scheduleLegSeq` is
+    // this leg's index within the flight's OWN schedule, so it is never re-indexed here.
+    if (operating) {
+      confirmPayloads.push({
+        flightNo: leg.flightNo,
+        legSeq: leg.scheduleLegSeq,
+        origin: leg.origin,
+        dest: leg.dest,
+        depLocal: leg.depTime,
+        arrLocal: leg.arrTime,
+        dayOffset: leg.dayOffset,
+      });
+    }
+  }
+
+  return { resolvedLegs, confirmPayloads };
+}
+
 export type EntryMode = "flightno" | "manual";
 
 type Options = {
@@ -194,7 +258,16 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
   // True once the user presses Add before a lookup has resolved (requestSubmit) — the effect
   // below consumes it as soon as autofillLegs arrives (submit) or the lookup misses (drop it).
   // Cleared immediately if the flight number changes, so an edited-away number never saves.
-  const [pendingSubmit, setPendingSubmit] = useState(false);
+  const [pendingSubmit, setPendingSubmitState] = useState(false);
+  // Mirrors of live values for the unmount cleanup, which closes over the first render only.
+  const queuedSubmit = useRef(false);
+  const setPendingSubmit = (value: boolean) => {
+    queuedSubmit.current = value;
+    setPendingSubmitState(value);
+  };
+  const latest = useRef({ flightNo, mode, pickedDate, onSubmitted });
+  latest.current = { flightNo, mode, pickedDate, onSubmitted };
+  const lookupInFlight = useRef<{ key: string; promise: ReturnType<typeof lookupSchedule> } | null>(null);
 
   // Turnaround chaining (Task 2): an appended second flight's own flight number and legs,
   // tracked separately from the outbound so the "✕ remove appended" revert can drop exactly
@@ -238,7 +311,9 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
       setResolving(true);
       const startedAt = Date.now();
       try {
-        const result = await lookupSchedule(candidate, pickedDate);
+        const lookup = lookupSchedule(candidate, pickedDate);
+        lookupInFlight.current = { key: `${candidate}|${pickedDate}`, promise: lookup };
+        const result = await lookup;
         record("flight_lookup", {
           result: result ? "found" : "unknown",
           ms: Date.now() - startedAt,
@@ -289,6 +364,45 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
       setPendingSubmit(false);
     }
   }, [pendingSubmit, autofillLegs, autofillFlightNo, lookupMiss]);
+
+  // A submit still queued when the form goes away (she tapped another day) would otherwise be
+  // lost: the effect above no longer runs. Finish it from refs and never touch state.
+  useEffect(
+    () => () => {
+      if (!queuedSubmit.current || saved.current || latest.current.mode !== "flightno") return;
+      const { flightNo: typed, pickedDate: date, onSubmitted: done } = latest.current;
+      const candidate = normaliseFlightNo(typed);
+      const key = `${candidate}|${date}`;
+      const lookup =
+        lookupInFlight.current?.key === key ? lookupInFlight.current.promise : lookupSchedule(candidate, date);
+      void (async () => {
+        const dropped = (reason: "lookup_unknown" | "lookup_error" | "save_failed") =>
+          record("queued_submit_dropped", { reason });
+        let result;
+        try {
+          result = await lookup;
+        } catch {
+          return dropped("lookup_error");
+        }
+        if (!result) return dropped("lookup_unknown");
+        const legs = autofillLegsFrom(date, candidate, result.legs);
+        const { resolvedLegs, confirmPayloads } = buildAutofillTrip(legs, null, null);
+        try {
+          const parsed = TripInputSchema.safeParse({ legs: resolvedLegs });
+          if (!parsed.success) throw new Error("Invalid trip");
+          const created = await createTrip(parsed.data);
+          for (const payload of confirmPayloads) confirmSchedule(payload).catch(() => {});
+          recordSaved("autofill", resolvedLegs.length, 0);
+          done(created);
+        } catch (err) {
+          recordSaveFailed("autofill", err);
+          dropped("save_failed");
+        }
+      })();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   /**
    * Chains a second, schedule-known flight onto the current autofill preview as one combined
@@ -476,57 +590,7 @@ export function useTripEntry({ pickedDate, homeTz, onSubmitted, trackUsage = fal
     setError(null);
     if (!autofillLegs || !autofillFlightNo) return;
 
-    const resolvedLegs: LegInput[] = [];
-    const confirmPayloads: {
-      flightNo: string;
-      legSeq: number;
-      origin: string;
-      dest: string;
-      depLocal: string;
-      arrLocal: string;
-      dayOffset: number;
-    }[] = [];
-
-    // Everything outside the sectors she works is the aircraft's own routing — what it flew to
-    // reach her, and where it goes after she gets off. Stored so the routing stays true, flagged
-    // so no derived time (landing, report, day marks, alerts) counts it.
-    const firstOperating = boardingLegIndex ?? 0;
-    const lastOperating = finalLegIndex ?? autofillLegs.length - 1;
-
-    for (const [index, leg] of autofillLegs.entries()) {
-      const operating = index >= firstOperating && index <= lastOperating;
-      const depUtc = wallToUtc(
-        `${leg.depDate}T${leg.depTime}:00`,
-        leg.originTz,
-      );
-      // Arrival date = this leg's own dep date + this leg's own dayOffset (arr date - dep date).
-      const arrDate = addDaysIso(leg.depDate, leg.dayOffset);
-      const arrUtc = wallToUtc(`${arrDate}T${leg.arrTime}:00`, leg.destTz);
-
-      // reportUtc intentionally omitted — the server derives it (dep - 90min) when absent.
-      resolvedLegs.push({
-        flightNo: leg.flightNo,
-        origin: leg.origin,
-        dest: leg.dest,
-        depUtc,
-        arrUtc,
-        operating,
-      });
-      // Only sectors she actually worked are reported back to the crowd layer. She can vouch
-      // for the times she flew; a sector she got off before is hearsay, and `scheduleLegSeq` is
-      // this leg's index within the flight's OWN schedule, so it is never re-indexed here.
-      if (operating) {
-        confirmPayloads.push({
-          flightNo: leg.flightNo,
-          legSeq: leg.scheduleLegSeq,
-          origin: leg.origin,
-          dest: leg.dest,
-          depLocal: leg.depTime,
-          arrLocal: leg.arrTime,
-          dayOffset: leg.dayOffset,
-        });
-      }
-    }
+    const { resolvedLegs, confirmPayloads } = buildAutofillTrip(autofillLegs, boardingLegIndex, finalLegIndex);
 
     const parsed = TripInputSchema.safeParse({ legs: resolvedLegs });
     if (!parsed.success) {
