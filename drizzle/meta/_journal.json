@@ -106,6 +106,13 @@
       "when": 1792540800000,
       "tag": "0016_usage_events",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1793534560000,
+      "tag": "0017_roster_watches",
+      "breakpoints": true
     }
   ]
 }

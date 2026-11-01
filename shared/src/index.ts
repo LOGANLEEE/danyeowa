@@ -308,7 +308,11 @@ export type CrewMember = {
   name: string | null;
   /** The accepted invite that established the pairing; revoking it ends the sharing. */
   inviteId: string;
+  /** Does the signed-in user get a push when this person's roster changes? Off by default; always sent by the server. */
+  notifyRosterChanges?: boolean;
 };
+
+export const RosterPushToggleSchema = z.object({ enabled: z.boolean() });
 
 /** What an unauthenticated visitor holding an invite link is allowed to see. Deliberately
  * carries nothing about the roster — see the route's comment in worker/src/crew.ts. */

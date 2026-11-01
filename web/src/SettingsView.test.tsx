@@ -8,6 +8,8 @@ import * as theme from "./theme";
 
 vi.mock("./api", () => ({
   getPushConfig: vi.fn(),
+  getCrew: vi.fn(),
+  setCrewRosterPush: vi.fn(),
   subscribePush: vi.fn(),
   unsubscribePush: vi.fn(),
   updateNotificationPrefs: vi.fn(),
@@ -21,6 +23,7 @@ vi.mock("./api", () => ({
 describe("SettingsView", () => {
   beforeEach(() => {
     localStorage.clear();
+    vi.mocked(api.getCrew).mockResolvedValue({ members: [], sent: [], received: [] });
   });
 
   it("shows the signed-in user's email", () => {
@@ -376,6 +379,78 @@ describe("SettingsView", () => {
       expect(
         screen.getByText(/couldn't save arrival alerts/i),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("roster-change alerts", () => {
+    const member = {
+      userId: "u-b",
+      email: "bee@example.com",
+      name: "Bee",
+      inviteId: "i-1",
+      notifyRosterChanges: false,
+    };
+
+    function stubPush() {
+      vi.stubGlobal("Notification", { permission: "granted", requestPermission: vi.fn() });
+      vi.stubGlobal("PushManager", class {});
+      vi.mocked(api.getPushConfig).mockResolvedValue({
+        publicKey: "pubkey",
+        enabled: true,
+        leadMinutes: 120,
+        arrivalEnabled: true,
+        subscribed: true,
+      });
+      Object.defineProperty(navigator, "serviceWorker", {
+        value: { getRegistration: vi.fn().mockResolvedValue({ pushManager: {} }) },
+        configurable: true,
+      });
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it("shows nothing when there is no pairing", async () => {
+      stubPush();
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+      await screen.findByTestId("arrival-alerts-toggle");
+      expect(screen.queryByText(/tell me when their roster changes/i)).not.toBeInTheDocument();
+    });
+
+    it("shows one toggle per paired person, off by default, and saves a change", async () => {
+      stubPush();
+      vi.mocked(api.getCrew).mockResolvedValue({
+        members: [member, { ...member, userId: "u-c", name: "Cee" }],
+        sent: [],
+        received: [],
+      });
+      vi.mocked(api.setCrewRosterPush).mockResolvedValue();
+      const user = userEvent.setup();
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      const toggle = await screen.findByTestId("roster-push-toggle-u-b");
+      expect(screen.getByTestId("roster-push-toggle-u-c")).not.toBeChecked();
+      expect(toggle).not.toBeChecked();
+
+      await user.click(toggle);
+      expect(api.setCrewRosterPush).toHaveBeenCalledWith("u-b", true);
+      await waitFor(() => expect(toggle).toBeChecked());
+      expect(screen.getByTestId("roster-push-toggle-u-c")).not.toBeChecked();
+    });
+
+    it("puts the switch back when the save fails", async () => {
+      stubPush();
+      vi.mocked(api.getCrew).mockResolvedValue({ members: [member], sent: [], received: [] });
+      vi.mocked(api.setCrewRosterPush).mockRejectedValueOnce(new Error("offline"));
+      const user = userEvent.setup();
+      render(<SettingsView email="pilot@example.com" onSignOut={vi.fn()} />);
+
+      const toggle = await screen.findByTestId("roster-push-toggle-u-b");
+      await user.click(toggle);
+      await waitFor(() => expect(toggle).not.toBeChecked());
+      expect(screen.getByText(/couldn't save roster alerts/i)).toBeInTheDocument();
     });
   });
 

@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import type { CrewMember } from "@danyeowa/shared";
 import {
   SessionTooOldError,
   deleteAccount,
+  getCrew,
   getPushConfig,
+  setCrewRosterPush,
   subscribePush,
   unsubscribePush,
   sendTestNotification,
@@ -73,6 +76,7 @@ export default function SettingsView({ email, onSignOut, canViewUsage = false }:
   const [subscribed, setSubscribed] = useState(false);
   const [leadMinutes, setLeadMinutes] = useState(120);
   const [arrivalEnabled, setArrivalEnabled] = useState(true);
+  const [crewMembers, setCrewMembers] = useState<CrewMember[]>([]);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [pushError, setPushError] = useState<string | null>(null);
@@ -102,6 +106,11 @@ export default function SettingsView({ email, onSignOut, canViewUsage = false }:
       })
       .catch(() => {
         // Leave defaults in place — the toggle simply starts off.
+      });
+    getCrew()
+      .then((crew) => setCrewMembers(crew.members))
+      .catch(() => {
+        // No list, no toggles: the section stays hidden rather than showing a guess.
       });
   }, [supported]);
 
@@ -243,6 +252,20 @@ export default function SettingsView({ email, onSignOut, canViewUsage = false }:
     }
   }
 
+  async function handleRosterPushToggle(member: CrewMember, next: boolean) {
+    const setOne = (value: boolean) =>
+      setCrewMembers((all) =>
+        all.map((m) => (m.userId === member.userId ? { ...m, notifyRosterChanges: value } : m)),
+      );
+    setOne(next);
+    try {
+      await setCrewRosterPush(member.userId, next);
+    } catch {
+      setOne(!next);
+      setPushError("Couldn't save roster alerts — try again");
+    }
+  }
+
   return (
     <div data-testid="settings-view" className="entrance flex w-full max-w-xl flex-col gap-6">
       <div className="stagger-1 flex flex-col gap-1 rounded-lg border border-edge bg-card p-4">
@@ -337,6 +360,30 @@ export default function SettingsView({ email, onSignOut, canViewUsage = false }:
                 />
               </label>
             )}
+
+            {subscribed &&
+              crewMembers.map((member) => (
+                <label
+                  key={member.userId}
+                  className="flex min-h-11 items-center justify-between gap-2 text-ink"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">
+                      {member.name?.trim() || member.email.split("@")[0]}
+                    </span>
+                    <span className="block text-sm text-ink-muted">
+                      Tell me when their roster changes
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    data-testid={`roster-push-toggle-${member.userId}`}
+                    checked={member.notifyRosterChanges === true}
+                    onChange={(e) => handleRosterPushToggle(member, e.target.checked)}
+                    className="h-6 w-6 shrink-0 accent-accent"
+                  />
+                </label>
+              ))}
 
             {subscribed && (
               <div className="flex flex-col gap-2 border-t border-edge pt-3">
