@@ -1,7 +1,7 @@
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { Hono } from "hono";
-import { CrewInviteCreateSchema } from "@danyeowa/shared";
+import { CrewInviteCreateSchema, RosterPushToggleSchema } from "@danyeowa/shared";
 import type { CrewMember, CrewResponse } from "@danyeowa/shared";
 import { sendCrewInviteEmail } from "./email";
 import * as schema from "./db/schema";
@@ -53,7 +53,7 @@ const isActive = (row: typeof schema.crewInvites.$inferSelect) =>
  * single gate on reading someone else's roster — every crew read route goes through it, so
  * there is one place to get the check right rather than one per route.
  */
-async function activePairing(
+export async function activePairing(
   database: ReturnType<typeof db>,
   userId: string,
   otherUserId: string,
@@ -131,6 +131,20 @@ crewRouter.get("/crew", async (c) => {
     }
   }
 
+  const watchedIds = new Set(
+    (
+      await database
+        .select({ id: schema.rosterWatches.watchedUserId })
+        .from(schema.rosterWatches)
+        .where(
+          and(
+            eq(schema.rosterWatches.watcherUserId, user.id),
+            eq(schema.rosterWatches.enabled, true),
+          ),
+        )
+    ).map((w) => w.id),
+  );
+
   const lookupIds = new Set([...partnerIds, ...senderIds.values()]);
   if (lookupIds.size > 0) {
     const accounts = await database
@@ -161,6 +175,7 @@ crewRouter.get("/crew", async (c) => {
         email: account.email,
         name: account.name ?? null,
         inviteId: row.id,
+        notifyRosterChanges: watchedIds.has(account.id),
       });
     }
 
@@ -424,6 +439,23 @@ crewRouter.post("/crew/invites/:id/revoke", async (c) => {
     );
 
   if (otherUserId) {
+    // The pairing is the only authority to watch, so ending it ends the watch in both
+    // directions. Deleted here as well as re-checked in the scan: a re-pairing inside the
+    // cron gap must not resume a toggle nobody remembers turning on.
+    await database
+      .delete(schema.rosterWatches)
+      .where(
+        or(
+          and(
+            eq(schema.rosterWatches.watcherUserId, user.id),
+            eq(schema.rosterWatches.watchedUserId, otherUserId),
+          ),
+          and(
+            eq(schema.rosterWatches.watcherUserId, otherUserId),
+            eq(schema.rosterWatches.watchedUserId, user.id),
+          ),
+        ),
+      );
     await database
       .update(schema.crewInvites)
       .set({ revokedAt: now })
@@ -471,4 +503,45 @@ crewRouter.get("/crew/:userId/trips", async (c) => {
     c.req.query("to"),
   );
   return c.json({ trips });
+});
+
+/**
+ * Turns "tell me when this person's roster changes" on or off. Authorised by the same pairing
+ * check as the roster read above; an unpaired id is a 404, indistinguishable from an unknown one.
+ *
+ * Enabling clears the baseline, so the next scan records the roster as it is and sends nothing
+ * for flights that already existed.
+ */
+crewRouter.put("/crew/:userId/roster-push", async (c) => {
+  const user = c.var.user;
+  if (!user) return c.json({ error: "unauthenticated" }, 401);
+
+  const body = RosterPushToggleSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!body.success) return c.json({ error: body.error.message }, 400);
+
+  const watchedUserId = c.req.param("userId");
+  const database = db(c.env);
+  if (!(await activePairing(database, user.id, watchedUserId))) {
+    return c.json({ error: "not_found" }, 404);
+  }
+
+  if (body.data.enabled) {
+    await database
+      .insert(schema.rosterWatches)
+      .values({ watcherUserId: user.id, watchedUserId, enabled: true, lastFingerprint: null })
+      .onConflictDoUpdate({
+        target: [schema.rosterWatches.watcherUserId, schema.rosterWatches.watchedUserId],
+        set: { enabled: true, lastFingerprint: null },
+      });
+  } else {
+    await database
+      .delete(schema.rosterWatches)
+      .where(
+        and(
+          eq(schema.rosterWatches.watcherUserId, user.id),
+          eq(schema.rosterWatches.watchedUserId, watchedUserId),
+        ),
+      );
+  }
+  return c.json({ enabled: body.data.enabled });
 });

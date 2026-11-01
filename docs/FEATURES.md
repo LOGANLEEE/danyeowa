@@ -50,6 +50,7 @@ codebase to find out. Status words mean exactly one thing:
 | Arrival alerts on/off in Settings | Built | `notification_prefs.arrival_enabled`, independent of report alerts |
 | Lead time 30–360 min | Built | Applies to report alerts only; arrival stages are fixed |
 | Self-test push | Live | `GET /api/push/test` sends to the caller's own devices |
+| Roster-change push per paired person | Built | Settings → Notifications, one toggle per paired person, off by default, hidden with no pairing. `roster_watches` holds the watcher, the person watched and the last roster fingerprint; the 15-minute cron compares it, so an edit (delete + create) or a bulk month entry is one push. The first scan after turning it on stores a baseline and sends nothing. Text is the name plus "updated their roster", no flight details. Revoking the pairing deletes the watch. Not yet verified on a real device |
 | Delay / early-arrival tracking | Built | `scripts/refresh-arrivals.mjs` on a Mac cron corrects `arr_utc` from live data and re-arms the alert stages. Verified on an airborne EK4 |
 
 ## Schedule data

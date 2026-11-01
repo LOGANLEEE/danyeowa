@@ -8,6 +8,43 @@ obviously better until you know what's underneath it.
 
 ---
 
+## 2026-11-01 (a paired person's roster change can push, per person, from the cron)
+
+### Where the change is detected, and what counts as one
+
+Until now a push only ever reached the flight's owner. A watcher can now pick which paired person
+notifies them (`roster_watches`: watcher, watched, enabled, last roster fingerprint). Default off.
+
+Detected in the existing 15-minute scan, not on `POST /trips`. An edit is create then delete, so a
+hook on the route fires twice, and a bulk month entry fires once per trip. The scan compares one
+fingerprint per watch, so both read as one change.
+
+The fingerprint is a SHA-256 of the worked sectors' flight number, route, and dep/arr/report
+times, sorted. Row ids and notes are left out: re-saving the same roster under new ids is not a
+change. Seen state sits on the watch row, not on flights, because the flight rows are deleted on
+every edit.
+
+### Rules that fall out of it
+
+- The first scan after enabling stores the baseline and sends nothing; the toggle clears it.
+- The claim is made before the send and put back if no device took the push, the shape
+  `report-scan` uses. An expired device is deleted on the failing send, after which the watcher has
+  no subscription and the scan skips them: no retry loop on a dead endpoint. A live service that
+  keeps answering 5xx is retried each cron, as report alerts are.
+- Authorised by the same `activePairing` as the crew read route, re-checked in the scan, and the
+  revoke route deletes the watch in both directions. A re-pairing never resumes an old toggle.
+- Text is the person's name plus "updated their roster". Report and landing times are the data
+  the share-link decision (2026-08-14) kept out of forwardable places; a lock screen is one.
+
+Consistent with the 2026-09-02 shape (payment attached to sharing, since sharing is what costs a
+push subscription and a second person's reads): this adds one more push per pairing and is free
+for now, with no price implied.
+
+**Known ceiling:** a scan that lands between the create and the delete of an edit sees both
+versions, pushes once, then pushes again for the final roster. The window is milliseconds.
+
+---
+
 ## 2026-10-22 (the add form records named steps, never a replay)
 
 ### Named steps, not session replay

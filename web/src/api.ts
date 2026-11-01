@@ -182,6 +182,16 @@ export async function getCrew(): Promise<CrewResponse> {
   return parseJson<CrewResponse>(res);
 }
 
+/** Opt in or out of a push when this paired person's roster changes. Off by default. */
+export async function setCrewRosterPush(userId: string, enabled: boolean): Promise<void> {
+  const res = await fetch(`/api/crew/${encodeURIComponent(userId)}/roster-push`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) throw new Error("Failed to update roster alerts");
+}
+
 /** A crew member's roster. Read-only by construction — there is no write counterpart to this
  * call, and the API resolves the owner of any mutation from the session, never from an id. */
 export async function getCrewTrips(userId: string): Promise<TripWithFlights[]> {

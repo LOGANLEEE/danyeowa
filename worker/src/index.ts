@@ -5,6 +5,7 @@ import { getLastDevOtp } from "./email";
 import { pushRouter } from "./push";
 import { ingestRouter } from "./ingest";
 import { runArrivalScan, runReportScan } from "./report-scan";
+import { runRosterWatchScan } from "./roster-watch";
 import { scheduleRouter } from "./schedule";
 import { crewRouter } from "./crew";
 import { tripsRouter } from "./trips";
@@ -143,7 +144,7 @@ app.route("/api", usageRouter);
 
 async function scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
   const now = Date.now();
-  ctx.waitUntil(Promise.all([runReportScan(env, now), runArrivalScan(env, now)]));
+  ctx.waitUntil(Promise.all([runReportScan(env, now), runArrivalScan(env, now), runRosterWatchScan(env, now)]));
 }
 
 export default {
