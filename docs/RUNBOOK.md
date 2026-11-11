@@ -151,8 +151,10 @@ adding the automation-marker flags is what finally works.
 node scripts/chrome-login.mjs   # from repo root; sign in to flightradar24, then close the window
 ```
 
-The profile lives at `~/.local/share/danyeowa/chrome-profile` (override: `DANYEOWA_CHROME_PROFILE_DIR`).
-Never delete that dir, it holds the sign-in. The harvest and `refresh-arrivals` share it.
+One profile per job under `~/.local/share/danyeowa/chrome-profile/<job>` (`fetch-schedules`,
+`refresh-arrivals`; base override: `DANYEOWA_CHROME_PROFILE_DIR`), because Chrome locks a running
+profile and the jobs overlap. `chrome-login.mjs` opens one window per job, one after another;
+sign in and quit Chrome (Cmd+Q) each time. Never delete these dirs, they hold the sign-in.
 
 Runs headless, so a cron job throws no windows at you. It only rewrites a time when the drift is
 at least 10 minutes — every flight is a minute or two off its timetable and churning the row for

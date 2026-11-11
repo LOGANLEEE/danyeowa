@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,7 +34,7 @@ describe("harvestChromeProfileDir", () => {
       return { ...fs, ...wrapped, default: { ...fs, ...wrapped } };
     });
     const live = await import("./fr24-live.mjs");
-    live.harvestChromeProfileDir({ DANYEOWA_CHROME_PROFILE_DIR: tempDir("danyeowa-profile-") });
+    live.harvestChromeProfileDir("fetch-schedules", { DANYEOWA_CHROME_PROFILE_DIR: tempDir("danyeowa-profile-") });
 
     expect(touched.filter((p) => p.startsWith(REAL_CHROME))).toEqual([]);
   });
@@ -44,18 +44,36 @@ describe("harvestChromeProfileDir", () => {
     vi.spyOn(os, "homedir").mockReturnValue(fakeHome);
     const { harvestChromeProfileDir } = await import("./fr24-live.mjs");
 
-    const dir = harvestChromeProfileDir({});
-    expect(dir).toBe(path.join(fakeHome, ".local/share/danyeowa/chrome-profile"));
+    const dir = harvestChromeProfileDir("fetch-schedules", {});
+    expect(dir).toBe(path.join(fakeHome, ".local/share/danyeowa/chrome-profile/fetch-schedules"));
     expect(existsSync(dir)).toBe(true);
   });
 
   it("keeps an existing sign-in: files already in the profile survive", async () => {
-    const dir = tempDir("danyeowa-profile-");
+    const base = tempDir("danyeowa-profile-");
+    const dir = path.join(base, "fetch-schedules");
+    mkdirSync(dir);
     writeFileSync(path.join(dir, "Cookies"), "session");
     const { harvestChromeProfileDir } = await import("./fr24-live.mjs");
 
-    expect(harvestChromeProfileDir({ DANYEOWA_CHROME_PROFILE_DIR: dir })).toBe(dir);
+    expect(harvestChromeProfileDir("fetch-schedules", { DANYEOWA_CHROME_PROFILE_DIR: base })).toBe(dir);
     expect(readFileSync(path.join(dir, "Cookies"), "utf8")).toBe("session");
+  });
+
+  // Chrome locks a profile while it runs. Harvest (1800 s) and refresh-arrivals (900 s) overlap,
+  // and on one shared profile the second launch fails that cycle.
+  it("gives each job its own profile, so overlapping runs never share a Chrome lock", async () => {
+    const base = tempDir("danyeowa-profile-");
+    const { harvestChromeProfileDir } = await import("./fr24-live.mjs");
+    const env = { DANYEOWA_CHROME_PROFILE_DIR: base };
+
+    const harvest = harvestChromeProfileDir("fetch-schedules", env);
+    const arrivals = harvestChromeProfileDir("refresh-arrivals", env);
+    expect(harvest).toBe(path.join(base, "fetch-schedules"));
+    expect(arrivals).toBe(path.join(base, "refresh-arrivals"));
+    for (const [file, job] of [["fetch-schedules.mjs", "fetch-schedules"], ["refresh-arrivals.mjs", "refresh-arrivals"]]) {
+      expect(readFileSync(path.join(SCRIPTS, file), "utf8"), file).toContain(`harvestChromeProfileDir("${job}")`);
+    }
   });
 
   it("no fr24 script points at the real profile or still borrows from it", () => {

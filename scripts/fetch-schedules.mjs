@@ -161,7 +161,7 @@ async function fetchFlight(page, flight) {
 }
 
 async function newPrimedContext() {
-  const ctx = await chromium.launchPersistentContext(harvestChromeProfileDir(), FR24_LAUNCH_OPTIONS);
+  const ctx = await chromium.launchPersistentContext(harvestChromeProfileDir("fetch-schedules"), FR24_LAUNCH_OPTIONS);
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
   });

@@ -36,11 +36,13 @@ export const FR24_LAUNCH_OPTIONS = {
  * fr24 refuses fresh automated browsers; the signed-in session is what gets past it. Reading the
  * real Chrome profile needs Full Disk Access, which launchd jobs lack, so the jobs own a profile
  * signed in once via scripts/chrome-login.mjs. Never wipe it - that is the sign-in.
+ * One dir per job because Chrome locks a profile and the jobs overlap.
  */
-export function harvestChromeProfileDir(env = process.env) {
-  const dir =
-    env.DANYEOWA_CHROME_PROFILE_DIR ||
-    path.join(os.homedir(), ".local/share/danyeowa/chrome-profile");
+export function harvestChromeProfileDir(job, env = process.env) {
+  const dir = path.join(
+    env.DANYEOWA_CHROME_PROFILE_DIR || path.join(os.homedir(), ".local/share/danyeowa/chrome-profile"),
+    job
+  );
   mkdirSync(dir, { recursive: true });
   return dir;
 }

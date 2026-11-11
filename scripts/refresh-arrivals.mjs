@@ -74,7 +74,7 @@ async function main() {
   // without them:
   //   - a signed-in session from the jobs' own profile
   //   - automation markers off, since navigator.webdriver is what a bot check reads first
-  const ctx = await chromium.launchPersistentContext(harvestChromeProfileDir(), FR24_LAUNCH_OPTIONS);
+  const ctx = await chromium.launchPersistentContext(harvestChromeProfileDir("refresh-arrivals"), FR24_LAUNCH_OPTIONS);
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
   });
