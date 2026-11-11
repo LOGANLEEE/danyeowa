@@ -13,44 +13,38 @@
  * not assumed — six long-haul flights, all airborne, all null.
  */
 
-import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const CHROME_PROFILE = path.join(
-  os.homedir(),
-  "Library/Application Support/Google/Chrome"
-);
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
+
+/** Launch options that get past fr24's bot check; sign-in and harvest must share them. */
+export const FR24_LAUNCH_OPTIONS = {
+  headless: true,
+  channel: "chrome",
+  userAgent: UA,
+  locale: "en-GB",
+  args: ["--disable-blink-features=AutomationControlled"],
+  ignoreDefaultArgs: ["--enable-automation"],
+};
 
 /**
- * Builds a throwaway Chrome profile carrying only the real one's cookies.
+ * Persistent Chrome profile owned by the harvest jobs.
  *
- * Both endpoints refuse a fresh automated browser — 403 in headless AND headed Playwright — while
- * the same calls from the user's own signed-in Chrome succeed. The difference is the session, so
- * the session is what gets borrowed.
- *
- * Copying rather than pointing at the profile directly matters: Chrome holds a singleton lock on
- * a live profile, and the user should not have to close their browser for a cron job. Only three
- * files are needed — the cookie database, the Local State that holds its encryption key, and
- * Preferences — so this stays small instead of duplicating a multi-gigabyte profile.
+ * fr24 refuses fresh automated browsers; the signed-in session is what gets past it. Reading the
+ * real Chrome profile needs Full Disk Access, which launchd jobs lack, so the jobs own a profile
+ * signed in once via scripts/chrome-login.mjs. Never wipe it - that is the sign-in.
+ * One dir per job because Chrome locks a profile and the jobs overlap.
  */
-export function borrowChromeProfile(scratchDir, profileName = "Default") {
-  if (!existsSync(CHROME_PROFILE)) {
-    throw new Error(`Chrome profile not found at ${CHROME_PROFILE}`);
-  }
-  rmSync(scratchDir, { recursive: true, force: true });
-  mkdirSync(path.join(scratchDir, profileName, "Network"), { recursive: true });
-
-  const copies = [
-    ["Local State", "Local State"],
-    [path.join(profileName, "Network", "Cookies"), path.join(profileName, "Network", "Cookies")],
-    [path.join(profileName, "Preferences"), path.join(profileName, "Preferences")],
-  ];
-  for (const [from, to] of copies) {
-    const src = path.join(CHROME_PROFILE, from);
-    if (existsSync(src)) copyFileSync(src, path.join(scratchDir, to));
-  }
-  return scratchDir;
+export function harvestChromeProfileDir(job, env = process.env) {
+  const dir = path.join(
+    env.DANYEOWA_CHROME_PROFILE_DIR || path.join(os.homedir(), ".local/share/danyeowa/chrome-profile"),
+    job
+  );
+  mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
 /**
