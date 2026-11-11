@@ -141,9 +141,18 @@ Runs from launchd, not cron — see "Scheduling" below.
 context gets 403 whether headless or headed; borrowing the real Chrome cookies still gets 403;
 adding the automation-marker flags is what finally works.
 
-- the real profile's cookies, copied to a scratch dir so Chrome can stay open
+- a signed-in session from the jobs' own persistent profile (see below)
 - `--disable-blink-features=AutomationControlled`, `ignoreDefaultArgs: ["--enable-automation"]`,
   and `navigator.webdriver` stubbed
+
+### Sign the harvest Chrome in (once)
+
+```bash
+node scripts/chrome-login.mjs   # from repo root; sign in to flightradar24, then close the window
+```
+
+The profile lives at `~/.local/share/danyeowa/chrome-profile` (override: `DANYEOWA_CHROME_PROFILE_DIR`).
+Never delete that dir, it holds the sign-in. The harvest and `refresh-arrivals` share it.
 
 Runs headless, so a cron job throws no windows at you. It only rewrites a time when the drift is
 at least 10 minutes — every flight is a minute or two off its timetable and churning the row for
@@ -203,7 +212,7 @@ silently.
 ```bash
 launchctl list | grep danyeowa          # first column: "-" is healthy, a PID may not be
 ps -p <pid> -o pid,etime,time,%cpu      # days of ELAPSED against seconds of TIME = hung
-pgrep -f danyeowa-chrome-profile        # orphaned scratch Chrome; 0 is healthy
+pgrep -f danyeowa/chrome-profile        # orphaned harvest Chrome; 0 is healthy
 ```
 
 What this looked like on 2026-09-07: `refresh-arrivals` alive **5d17h** on 12.97s of CPU,
@@ -211,13 +220,13 @@ What this looked like on 2026-09-07: `refresh-arrivals` alive **5d17h** on 12.97
 processes in total. No open sockets, empty kqueue — waiting on a browser that never closed.
 Arrival alerts had been firing off the uncorrected timetable the whole time.
 
-To clear one by hand, kill the node parent and then the scratch Chrome tree. **Match on
-`danyeowa-chrome-profile`, never on "Chrome"** — the second one closes the browser you are
+To clear one by hand, kill the node parent and then the harvest Chrome tree. **Match on
+`danyeowa/chrome-profile`, never on "Chrome"** — the second one closes the browser you are
 reading this in:
 
 ```bash
 pkill -f "refresh-arrivals.mjs|fetch-schedules.mjs"
-pgrep -f danyeowa-chrome-profile | grep -x <your-chrome-pid> || pkill -9 -f danyeowa-chrome-profile
+pgrep -f danyeowa/chrome-profile | grep -x <your-chrome-pid> || pkill -9 -f danyeowa/chrome-profile
 launchctl kickstart -k gui/$(id -u)/com.danyeowa.refresh-arrivals
 ```
 

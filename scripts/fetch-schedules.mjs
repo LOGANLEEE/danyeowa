@@ -57,9 +57,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { normaliseFlightNo } from "../shared/src/flight.ts";
-import os from "node:os";
 import { deriveAirports, deriveLegSchedule } from "./lib/fr24-api.mjs";
-import { borrowChromeProfile, fetchAirlineFlightNumbers } from "./lib/fr24-live.mjs";
+import { FR24_LAUNCH_OPTIONS, fetchAirlineFlightNumbers, harvestChromeProfileDir } from "./lib/fr24-live.mjs";
 import { postSchedules } from "./lib/ingest-client.mjs";
 import { expandFlights, parseArgs } from "./lib/harvest-args.mjs";
 import { armWatchdog } from "./lib/watchdog.mjs";
@@ -71,7 +70,6 @@ export { expandFlights, parseArgs };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROGRESS_FILE = path.join(__dirname, ".fetch-progress.json");
-const PROFILE_SCRATCH = path.join(os.tmpdir(), "danyeowa-chrome-profile");
 
 /** One row per IATA across a batch — the same airport shows up on every flight that touches it. */
 function dedupeAirports(airports) {
@@ -79,8 +77,6 @@ function dedupeAirports(airports) {
   for (const a of airports) if (!byIata.has(a.iata)) byIata.set(a.iata, a);
   return [...byIata.values()];
 }
-const UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 // ponytail: fixed context-refresh cadence, not measured against a real block threshold - lower
 // it (or make it adaptive on a blocked/empty response) if a long sweep still gets rate-limited.
 const CONTEXT_REFRESH_EVERY = 25;
@@ -164,23 +160,8 @@ async function fetchFlight(page, flight) {
   }, flight);
 }
 
-/** Launch options that get past fr24's bot check. See scripts/lib/fr24-live.mjs. */
-function contextOptions() {
-  return {
-    headless: true,
-    channel: "chrome",
-    userAgent: UA,
-    locale: "en-GB",
-    args: ["--disable-blink-features=AutomationControlled"],
-    ignoreDefaultArgs: ["--enable-automation"],
-  };
-}
-
 async function newPrimedContext() {
-  const ctx = await chromium.launchPersistentContext(
-    borrowChromeProfile(PROFILE_SCRATCH),
-    contextOptions()
-  );
+  const ctx = await chromium.launchPersistentContext(harvestChromeProfileDir(), FR24_LAUNCH_OPTIONS);
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
   });

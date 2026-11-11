@@ -26,8 +26,7 @@
 import { chromium } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import os from "node:os";
-import { borrowChromeProfile, fetchLiveArrival, isMaterialDrift } from "./lib/fr24-live.mjs";
+import { FR24_LAUNCH_OPTIONS, fetchLiveArrival, harvestChromeProfileDir, isMaterialDrift } from "./lib/fr24-live.mjs";
 import { getUpcomingArrivals, postArrivalCorrections } from "./lib/ingest-client.mjs";
 import { armWatchdog } from "./lib/watchdog.mjs";
 
@@ -36,9 +35,6 @@ const WATCHDOG_MS = 600_000;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..");
-const PROFILE_SCRATCH = path.join(os.tmpdir(), "danyeowa-chrome-profile");
-const UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36";
 
 export function parseArgs(argv) {
   const args = { apply: false, hours: 4 };
@@ -76,16 +72,9 @@ async function main() {
   // Two things are needed to get past the 403 that a plain Playwright context hits, and BOTH
   // were measured — cookies alone still got 403, and automation flags alone were never tried
   // without them:
-  //   - the real Chrome profile's cookies, copied so the browser can stay open
+  //   - a signed-in session from the jobs' own profile
   //   - automation markers off, since navigator.webdriver is what a bot check reads first
-  const ctx = await chromium.launchPersistentContext(borrowChromeProfile(PROFILE_SCRATCH), {
-    headless: true,
-    channel: "chrome",
-    userAgent: UA,
-    locale: "en-GB",
-    args: ["--disable-blink-features=AutomationControlled"],
-    ignoreDefaultArgs: ["--enable-automation"],
-  });
+  const ctx = await chromium.launchPersistentContext(harvestChromeProfileDir(), FR24_LAUNCH_OPTIONS);
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", { get: () => undefined });
   });
